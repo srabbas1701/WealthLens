@@ -1,0 +1,402 @@
+/**
+ * Analytics Overview Page
+ * 
+ * Entry point for advanced exposure analytics.
+ * Explains the difference between ownership and exposure.
+ * Provides quick links to all analytics screens.
+ */
+
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { 
+  ArrowLeftIcon,
+  AlertTriangleIcon,
+  InfoIcon,
+  CheckCircleIcon,
+  ArrowRightIcon,
+} from '@/components/icons';
+import { useAuth } from '@/lib/auth';
+import { AppHeader, useCurrency } from '@/components/AppHeader';
+
+interface PortfolioOwnership {
+  equity: number;
+  mutualFunds: number;
+  fixedDeposits: number;
+  others: number;
+  total: number;
+}
+
+interface ExposureData {
+  equityViaMF: number;
+  debtViaMF: number;
+  otherViaMF: number;
+  totalEquityExposure: number;
+}
+
+export default function AnalyticsOverviewPage() {
+  const router = useRouter();
+  const { user, authStatus } = useAuth();
+  const { formatCurrency } = useCurrency();
+  
+  const [loading, setLoading] = useState(true);
+  const [ownership, setOwnership] = useState<PortfolioOwnership | null>(null);
+  const [exposure, setExposure] = useState<ExposureData | null>(null);
+
+  const fetchData = useCallback(async (userId: string) => {
+    setLoading(true);
+    try {
+      // Fetch portfolio data
+      const params = new URLSearchParams({ user_id: userId });
+      const response = await fetch(`/api/portfolio/data?${params}`);
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          const portfolioData = result.data;
+          
+          // Calculate ownership from allocation
+          // Check for both 'Stocks' and 'Equity' (API may return either)
+          const equityAllocation = portfolioData.allocation.find((a: any) => a.name === 'Stocks' || a.name === 'Equity');
+          const equityOwnership = equityAllocation?.value || 0;
+          const mfOwnership = portfolioData.allocation.find((a: any) => a.name === 'Mutual Funds')?.value || 0;
+          const fdOwnership = portfolioData.allocation.find((a: any) => a.name === 'Fixed Deposit' || a.name === 'Fixed Deposits')?.value || 0;
+          const othersOwnership = portfolioData.allocation
+            .filter((a: any) => !['Stocks', 'Equity', 'Mutual Funds', 'Fixed Deposit', 'Fixed Deposits'].includes(a.name))
+            .reduce((sum: number, a: any) => sum + a.value, 0);
+          
+          setOwnership({
+            equity: equityOwnership,
+            mutualFunds: mfOwnership,
+            fixedDeposits: fdOwnership,
+            others: othersOwnership,
+            total: portfolioData.metrics.netWorth,
+          });
+
+          // Calculate exposure (mock data for now)
+          // In production, this would come from factsheet data
+          const equityViaMF = mfOwnership * 0.85; // Assume 85% equity exposure
+          const debtViaMF = mfOwnership * 0.12; // Assume 12% debt exposure
+          const otherViaMF = mfOwnership * 0.03; // Assume 3% other
+          const totalEquityExposure = equityOwnership + equityViaMF;
+
+          setExposure({
+            equityViaMF,
+            debtViaMF,
+            otherViaMF,
+            totalEquityExposure,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch analytics data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // GUARD: Redirect if not authenticated
+  // RULE: Never redirect while authStatus === 'loading'
+  useEffect(() => {
+    if (authStatus === 'loading') return;
+    if (authStatus === 'unauthenticated') {
+      router.replace('/login?redirect=/analytics/overview');
+    }
+  }, [authStatus, router]);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchData(user.id);
+    }
+  }, [user?.id, fetchData]);
+
+
+  // GUARD: Show loading while auth state is being determined
+  if (authStatus === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // GUARD: Redirect if not authenticated (only after loading is complete)
+  if (authStatus === 'unauthenticated') {
+    return null; // Redirect happens in useEffect
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280]">Loading analytics...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!ownership || !exposure) {
+    return (
+      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-[#475569] mb-4">Failed to load analytics data</p>
+          <button
+            onClick={() => user?.id && fetchData(user.id)}
+            className="px-4 py-2 bg-[#2563EB] text-white rounded-lg text-sm font-medium hover:bg-[#1E40AF]"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F6F8FB]">
+      <AppHeader 
+        showBackButton={true}
+        backHref="/dashboard"
+        backLabel="Back to Dashboard"
+      />
+
+      <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24">
+        {/* Page Title */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-[#0F172A] mb-2">Portfolio Analytics</h1>
+          <p className="text-sm text-[#6B7280]">
+            Advanced exposure insights for your portfolio
+          </p>
+        </div>
+
+        {/* Warning Banner */}
+        <div className="bg-[#FEF3C7] border border-[#F59E0B]/20 rounded-xl p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangleIcon className="w-5 h-5 text-[#F59E0B] flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-[#92400E] mb-1">
+                Analytics View - Exposure Analysis
+              </p>
+              <p className="text-xs text-[#92400E]">
+                This screen shows exposure analysis, not asset ownership. Values here may differ from 
+                dashboard and holdings screens. Dashboard values remain authoritative for portfolio value, 
+                asset allocation, and P&L calculations.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Ownership vs Exposure Explanation */}
+        <section className="bg-white rounded-xl border border-[#E5E7EB] p-8 mb-6">
+          <h2 className="text-lg font-semibold text-[#0F172A] mb-4">Ownership vs Exposure</h2>
+          <p className="text-sm text-[#475569] mb-6">
+            This view helps you understand what you're <strong>EXPOSED TO</strong>, not just what you <strong>OWN</strong>.
+          </p>
+          
+          <div className="bg-[#EFF6FF] rounded-lg border border-[#2563EB]/20 p-4 mb-6">
+            <p className="text-sm text-[#1E40AF] mb-3">
+              <strong>Example:</strong> You own {formatCurrency(ownership.mutualFunds)} in Mutual Funds.
+            </p>
+            <p className="text-sm text-[#1E40AF]">
+              But 85% of that is invested in equity by the fund. So your equity <strong>EXPOSURE</strong> is {formatCurrency(exposure.equityViaMF)}.
+            </p>
+          </div>
+
+          {/* Comparison Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider">
+                    Asset Type
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
+                    What You Own
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
+                    Exposure (via MF)
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
+                    Combined Exposure
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E5E7EB]">
+                <tr>
+                  <td className="px-4 py-3.5">
+                    <div>
+                      <p className="font-semibold text-[#0F172A] text-sm">Stocks</p>
+                      <p className="text-xs text-[#6B7280] mt-0.5">Direct stock holdings</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
+                    {formatCurrency(ownership.equity)}
+                  </td>
+                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] number-emphasis">
+                    {formatCurrency(exposure.equityViaMF)}
+                    <span className="text-xs text-[#6B7280] block mt-0.5">(via MF)</span>
+                  </td>
+                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
+                    {formatCurrency(exposure.totalEquityExposure)}
+                    <span className="text-xs text-[#6B7280] block mt-0.5">(total exposure)</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3.5">
+                    <div>
+                      <p className="font-semibold text-[#0F172A] text-sm">Debt</p>
+                      <p className="text-xs text-[#6B7280] mt-0.5">Fixed income</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] number-emphasis">
+                    —
+                  </td>
+                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] number-emphasis">
+                    {formatCurrency(exposure.debtViaMF)}
+                    <span className="text-xs text-[#6B7280] block mt-0.5">(via MF)</span>
+                  </td>
+                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
+                    {formatCurrency(exposure.debtViaMF)}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3.5">
+                    <div>
+                      <p className="font-semibold text-[#0F172A] text-sm">Mutual Funds</p>
+                      <p className="text-xs text-[#6B7280] mt-0.5">As asset class</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
+                    {formatCurrency(ownership.mutualFunds)}
+                  </td>
+                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280]">
+                    —
+                  </td>
+                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280]">
+                    —
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-6 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB] p-4">
+            <div className="flex items-start gap-3">
+              <InfoIcon className="w-5 h-5 text-[#2563EB] flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-[#0F172A] mb-1">
+                  Important: Analytics are for insights only
+                </p>
+                <p className="text-xs text-[#6B7280]">
+                  Your dashboard shows: Stocks {formatCurrency(ownership.equity)} (direct holdings), 
+                  Mutual Funds {formatCurrency(ownership.mutualFunds)} (total MF value). 
+                  Analytics adds exposure data: Equity Exposure (via MF) {formatCurrency(exposure.equityViaMF)}, 
+                  Debt Exposure (via MF) {formatCurrency(exposure.debtViaMF)}. 
+                  Dashboard values remain unchanged.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Quick Links */}
+        <section className="bg-white rounded-xl border border-[#E5E7EB] p-8">
+          <h2 className="text-lg font-semibold text-[#0F172A] mb-6">Analytics Screens</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* MF Exposure Analytics */}
+            <Link
+              href="/analytics/mutualfund-exposure"
+              className="bg-white rounded-xl border-2 border-[#E5E7EB] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-semibold text-[#0F172A] mb-2">
+                    Mutual Fund Exposure Analytics
+                  </h3>
+                  <p className="text-sm text-[#6B7280]">
+                    Understanding what your mutual funds are invested in
+                  </p>
+                </div>
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+                <CheckCircleIcon className="w-4 h-4" />
+                <span>Equity, Debt, Other exposure breakdown</span>
+              </div>
+            </Link>
+
+            {/* Sector Exposure */}
+            <Link
+              href="/analytics/sector-exposure"
+              className="bg-white rounded-xl border-2 border-[#E5E7EB] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-semibold text-[#0F172A] mb-2">
+                    Sector Exposure Analysis
+                  </h3>
+                  <p className="text-sm text-[#6B7280]">
+                    Which sectors are you exposed to?
+                  </p>
+                </div>
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+                <CheckCircleIcon className="w-4 h-4" />
+                <span>Technology, Banking, FMCG, Pharma, etc.</span>
+              </div>
+            </Link>
+
+            {/* Market Cap Exposure */}
+            <Link
+              href="/analytics/marketcap-exposure"
+              className="bg-white rounded-xl border-2 border-[#E5E7EB] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-semibold text-[#0F172A] mb-2">
+                    Market Cap Exposure
+                  </h3>
+                  <p className="text-sm text-[#6B7280]">
+                    Large cap, mid cap, or small cap exposure?
+                  </p>
+                </div>
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+                <CheckCircleIcon className="w-4 h-4" />
+                <span>Large, Mid, Small cap breakdown</span>
+              </div>
+            </Link>
+
+            {/* Geography Exposure */}
+            <Link
+              href="/analytics/geography-exposure"
+              className="bg-white rounded-xl border-2 border-[#E5E7EB] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-semibold text-[#0F172A] mb-2">
+                    Geography Exposure Analysis
+                  </h3>
+                  <p className="text-sm text-[#6B7280]">
+                    India vs International exposure
+                  </p>
+                </div>
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+                <CheckCircleIcon className="w-4 h-4" />
+                <span>Domestic and international breakdown</span>
+              </div>
+            </Link>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
