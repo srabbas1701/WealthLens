@@ -161,11 +161,11 @@ export default function PortfolioSummaryPage() {
       'Bond': '/portfolio/bonds',
       'ETFs': '/portfolio/etfs',
       'ETF': '/portfolio/etfs',
+      'NPS': '/portfolio/nps',
       'Index Funds': '/portfolio/summary',
       'Gold': '/portfolio/summary',
       'PPF': '/portfolio/summary',
       'EPF': '/portfolio/summary',
-      'NPS': '/portfolio/summary',
       'Other': '/portfolio/summary',
     };
     
@@ -175,8 +175,8 @@ export default function PortfolioSummaryPage() {
   // GUARD: Show loading while auth state is being determined
   if (authStatus === 'loading') {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
       </div>
     );
   }
@@ -188,10 +188,10 @@ export default function PortfolioSummaryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-[#6B7280]">Loading portfolio summary...</p>
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Loading portfolio summary...</p>
         </div>
       </div>
     );
@@ -199,12 +199,12 @@ export default function PortfolioSummaryPage() {
 
   if (!data) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-[#475569] mb-4">Failed to load portfolio data</p>
+          <p className="text-[#475569] dark:text-[#CBD5E1] mb-4">Failed to load portfolio data</p>
           <button
             onClick={() => user?.id && fetchData(user.id)}
-            className="px-4 py-2 bg-[#2563EB] text-white rounded-lg text-sm font-medium hover:bg-[#1E40AF]"
+            className="px-4 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]"
           >
             Retry
           </button>
@@ -214,7 +214,7 @@ export default function PortfolioSummaryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB]">
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
         backHref="/dashboard"
@@ -225,43 +225,43 @@ export default function PortfolioSummaryPage() {
       <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24">
         {/* Page Title */}
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A] mb-2">Portfolio Summary</h1>
-          <p className="text-sm text-[#6B7280]">
+          <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Portfolio Summary</h1>
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             Last updated: {formatDate(data.lastUpdated)}
           </p>
         </div>
 
         {/* Summary Totals */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] p-8 mb-6">
+        <section className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
-              <p className="text-sm text-[#6B7280] font-medium mb-2">Total Portfolio Value</p>
-              <p className="text-3xl font-semibold text-[#0F172A] number-emphasis">
+              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-2">Total Portfolio Value</p>
+              <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                 {formatCurrency(data.totalValue)}
               </p>
             </div>
             <div>
-              <p className="text-sm text-[#6B7280] font-medium mb-2">Total Invested Amount</p>
-              <p className="text-3xl font-semibold text-[#0F172A] number-emphasis">
+              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-2">Total Invested Amount</p>
+              <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                 {formatCurrency(data.totalInvested)}
               </p>
             </div>
             <div>
-              <p className="text-sm text-[#6B7280] font-medium mb-2">Total Unrealized Gain/Loss</p>
+              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-2">Total Unrealized Gain/Loss</p>
               <p className={`text-3xl font-semibold number-emphasis ${
-                data.totalGainLoss >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
+                data.totalGainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'
               }`}>
                 {data.totalGainLoss >= 0 ? '+' : ''}{formatCurrency(data.totalGainLoss)}
               </p>
               <p className={`text-sm font-medium mt-1 ${
-                data.totalGainLoss >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
+                data.totalGainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'
               }`}>
                 ({data.totalGainLoss >= 0 ? '+' : ''}{data.totalGainLossPercent.toFixed(2)}%)
               </p>
             </div>
             <div>
-              <p className="text-sm text-[#6B7280] font-medium mb-2">Number of Holdings</p>
-              <p className="text-3xl font-semibold text-[#0F172A] number-emphasis">
+              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-2">Number of Holdings</p>
+              <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                 {data.totalHoldings}
               </p>
             </div>
@@ -269,45 +269,45 @@ export default function PortfolioSummaryPage() {
         </section>
 
         {/* Asset-wise Breakdown */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
-          <div className="px-6 py-4 border-b border-[#E5E7EB]">
-            <h2 className="text-lg font-semibold text-[#0F172A]">Asset-wise Breakdown</h2>
+        <section className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
+            <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Asset-wise Breakdown</h2>
           </div>
 
-          <div className="divide-y divide-[#E5E7EB]">
+          <div className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
             {data.assetSummaries.map((asset) => (
               <div key={asset.assetType}>
                 {/* Asset Row */}
                 <button
                   onClick={() => toggleAsset(asset.assetType)}
-                  className="w-full px-6 py-5 flex items-center justify-between hover:bg-[#F9FAFB] transition-colors text-left"
+                  className="w-full px-6 py-5 flex items-center justify-between hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors text-left"
                 >
                   <div className="flex items-center gap-4 flex-1">
                     {expandedAssets.has(asset.assetType) ? (
-                      <ChevronDownIcon className="w-5 h-5 text-[#6B7280]" />
+                      <ChevronDownIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
                     ) : (
-                      <ChevronUpIcon className="w-5 h-5 text-[#6B7280] rotate-90" />
+                      <ChevronUpIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] rotate-90" />
                     )}
                     <div>
-                      <h3 className="text-base font-semibold text-[#0F172A]">{asset.assetType}</h3>
-                      <p className="text-sm text-[#6B7280] mt-1">
+                      <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{asset.assetType}</h3>
+                      <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">
                         {asset.holdingsCount} holding{asset.holdingsCount !== 1 ? 's' : ''}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-8">
                     <div className="text-right">
-                      <p className="text-lg font-semibold text-[#0F172A] number-emphasis">
+                      <p className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                         {formatCurrency(asset.totalValue)}
                       </p>
-                      <p className="text-sm text-[#6B7280]">
+                      <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
                         {((asset.totalValue / data.totalValue) * 100).toFixed(1)}%
                       </p>
                     </div>
                     <Link
                       href={getAssetRoute(asset.assetType)}
                       onClick={(e) => e.stopPropagation()}
-                      className="text-[#2563EB] hover:text-[#1E40AF] text-sm font-medium"
+                      className="text-[#2563EB] dark:text-[#3B82F6] hover:text-[#1E40AF] dark:hover:text-[#2563EB] text-sm font-medium"
                     >
                       View Details →
                     </Link>
@@ -316,23 +316,23 @@ export default function PortfolioSummaryPage() {
 
                 {/* Expanded Content */}
                 {expandedAssets.has(asset.assetType) && (
-                  <div className="px-6 py-4 bg-[#F9FAFB] border-t border-[#E5E7EB]">
+                  <div className="px-6 py-4 bg-[#F9FAFB] dark:bg-[#334155] border-t border-[#E5E7EB] dark:border-[#334155]">
                     <div className="grid grid-cols-3 gap-6 mb-4">
                       <div>
-                        <p className="text-xs text-[#6B7280] font-medium mb-1">Invested</p>
-                        <p className="text-sm font-semibold text-[#0F172A] number-emphasis">
+                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] font-medium mb-1">Invested</p>
+                        <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                           {formatCurrency(asset.investedValue)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-[#6B7280] font-medium mb-1">Gain/Loss</p>
+                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] font-medium mb-1">Gain/Loss</p>
                         <p className={`text-sm font-semibold number-emphasis ${
-                          asset.gainLoss >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
+                          asset.gainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'
                         }`}>
                           {asset.gainLoss >= 0 ? '+' : ''}{formatCurrency(asset.gainLoss)}
                         </p>
                         <p className={`text-xs font-medium ${
-                          asset.gainLoss >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
+                          asset.gainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'
                         }`}>
                           ({asset.gainLoss >= 0 ? '+' : ''}{asset.gainLossPercent.toFixed(2)}%)
                         </p>
@@ -341,16 +341,16 @@ export default function PortfolioSummaryPage() {
 
                     {asset.topHoldings.length > 0 && (
                       <>
-                        <p className="text-xs text-[#6B7280] font-medium mb-3">Top {asset.topHoldings.length} Holdings</p>
+                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] font-medium mb-3">Top {asset.topHoldings.length} Holdings</p>
                         <div className="space-y-2">
                           {asset.topHoldings.map((holding, idx) => (
                             <div key={idx} className="flex items-center justify-between py-2">
-                              <span className="text-sm text-[#0F172A]">{holding.name}</span>
+                              <span className="text-sm text-[#0F172A] dark:text-[#F8FAFC]">{holding.name}</span>
                               <div className="flex items-center gap-4">
-                                <span className="text-sm font-medium text-[#0F172A] number-emphasis">
+                                <span className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                                   {formatCurrency(holding.value)}
                                 </span>
-                                <span className="text-sm text-[#6B7280] w-12 text-right">
+                                <span className="text-sm text-[#6B7280] dark:text-[#94A3B8] w-12 text-right">
                                   {holding.percentage.toFixed(1)}%
                                 </span>
                               </div>
@@ -359,7 +359,7 @@ export default function PortfolioSummaryPage() {
                         </div>
                         <Link
                           href={`/portfolio/${asset.assetType.toLowerCase().replace(/\s+/g, '')}`}
-                          className="inline-block mt-3 text-sm text-[#2563EB] hover:text-[#1E40AF] font-medium"
+                          className="inline-block mt-3 text-sm text-[#2563EB] dark:text-[#3B82F6] hover:text-[#1E40AF] dark:hover:text-[#2563EB] font-medium"
                         >
                           View all {asset.holdingsCount} holdings →
                         </Link>
@@ -373,15 +373,15 @@ export default function PortfolioSummaryPage() {
         </section>
 
         {/* Verification Note */}
-        <div className="mt-6 bg-white rounded-xl border border-[#E5E7EB] p-4">
+        <div className="mt-6 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4">
           <div className="flex items-start gap-3">
-            <CheckCircleIcon className="w-5 h-5 text-[#16A34A] flex-shrink-0 mt-0.5" />
+            <CheckCircleIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-[#0F172A]">Data Verified</p>
-              <p className="text-xs text-[#6B7280] mt-1">
+              <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">Data Verified</p>
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                 Total portfolio value matches dashboard: {formatCurrency(data.totalValue)} ✓
               </p>
-              <p className="text-xs text-[#6B7280] mt-1">
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                 All values computed from transaction history and current holdings.
               </p>
             </div>

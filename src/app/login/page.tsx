@@ -36,7 +36,8 @@ import {
   MailIcon, 
   PhoneIcon,
   SmartphoneIcon,
-  ArrowLeftIcon
+  ArrowLeftIcon,
+  ChevronDownIcon
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader } from '@/components/AppHeader';
@@ -386,24 +387,24 @@ export default function LoginPage() {
   // GUARD: Show loading while auth state is being determined
   if (authStatus === 'loading') {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
       </div>
     );
   }
   
   return (
-    <div className="min-h-screen bg-[#F6F8FB]">
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader />
       
       {/* Main Content */}
       <main className="flex items-center justify-center px-6 py-12 pt-24">
         <div className="w-full max-w-md">
           {/* Card */}
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-8">
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8">
             {/* Header */}
             <div className="text-center mb-8">
-              <h1 className="text-2xl font-semibold text-[#0F172A]">
+              <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                 {authMethod === 'mobile' && otpStep === 'otp' 
                   ? 'Enter verification code'
                   : authMethod === 'email' && emailStep === 'sent'
@@ -411,7 +412,7 @@ export default function LoginPage() {
                     : 'Sign in'
                 }
               </h1>
-              <p className="text-[#6B7280] text-sm mt-2">
+              <p className="text-[#6B7280] dark:text-[#94A3B8] text-sm mt-2">
                 {authMethod === 'mobile' && otpStep === 'otp'
                   ? `We sent a 6-digit code to ${countryCode} ${phoneNumber}`
                   : authMethod === 'email' && emailStep === 'sent'
@@ -426,7 +427,7 @@ export default function LoginPage() {
             {/* Auth Method Tabs (only show on initial screen) */}
             {!(authMethod === 'mobile' && otpStep === 'otp') && 
              !(authMethod === 'email' && emailStep === 'sent') && (
-              <div className="flex gap-2 mb-6 p-1 bg-[#F6F8FB] rounded-lg">
+              <div className="flex gap-2 mb-6 p-1 bg-[#F6F8FB] dark:bg-[#334155] rounded-lg">
                 <button
                   type="button"
                   onClick={() => {
@@ -436,8 +437,8 @@ export default function LoginPage() {
                   }}
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
                     authMethod === 'mobile'
-                      ? 'bg-white text-[#0F172A] shadow-sm'
-                      : 'text-[#6B7280] hover:text-[#0F172A]'
+                      ? 'bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] shadow-sm'
+                      : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
                   }`}
                 >
                   <SmartphoneIcon className="w-4 h-4" />
@@ -452,8 +453,8 @@ export default function LoginPage() {
                   }}
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
                     authMethod === 'email'
-                      ? 'bg-white text-[#0F172A] shadow-sm'
-                      : 'text-[#6B7280] hover:text-[#0F172A]'
+                      ? 'bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] shadow-sm'
+                      : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
                   }`}
                 >
                   <MailIcon className="w-4 h-4" />
@@ -464,30 +465,30 @@ export default function LoginPage() {
             
             {/* Error Message */}
             {error && (
-              <div className="mb-6 p-4 bg-[#FEF2F2] border border-[#FEE2E2] rounded-lg">
+              <div className="mb-6 p-4 bg-[#FEF2F2] dark:bg-[#7F1D1D] border border-[#FEE2E2] dark:border-[#991B1B] rounded-lg">
                 <div className="flex items-start gap-3">
-                  <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-[#991B1B]">{error}</p>
+                  <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] dark:text-[#EF4444] flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-[#991B1B] dark:text-[#FCA5A5]">{error}</p>
                 </div>
               </div>
             )}
             
             {/* Logout Confirmation Message */}
             {showLogoutMessage && (
-              <div className="mb-6 p-4 bg-[#F0FDF4] border border-[#D1FAE5] rounded-lg">
+              <div className="mb-6 p-4 bg-[#F0FDF4] dark:bg-[#14532D] border border-[#D1FAE5] dark:border-[#166534] rounded-lg">
                 <div className="flex items-start gap-3">
-                  <CheckCircleIcon className="w-5 h-5 text-[#16A34A] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-[#166534]">You've been logged out safely.</p>
+                  <CheckCircleIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-[#166534] dark:text-[#86EFAC]">You've been logged out safely.</p>
                 </div>
               </div>
             )}
 
             {/* Timeout Message */}
             {showTimeoutMessage && (
-              <div className="mb-6 p-4 bg-[#F0FDF4] border border-[#D1FAE5] rounded-lg">
+              <div className="mb-6 p-4 bg-[#F0FDF4] dark:bg-[#14532D] border border-[#D1FAE5] dark:border-[#166534] rounded-lg">
                 <div className="flex items-start gap-3">
-                  <CheckCircleIcon className="w-5 h-5 text-[#16A34A] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-[#166534]">
+                  <CheckCircleIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-[#166534] dark:text-[#86EFAC]">
                     You were logged out due to inactivity to keep your account secure.
                   </p>
                 </div>
@@ -496,10 +497,10 @@ export default function LoginPage() {
 
             {/* Success Message */}
             {success && (
-              <div className="mb-6 p-4 bg-[#F0FDF4] border border-[#D1FAE5] rounded-lg">
+              <div className="mb-6 p-4 bg-[#F0FDF4] dark:bg-[#14532D] border border-[#D1FAE5] dark:border-[#166534] rounded-lg">
                 <div className="flex items-start gap-3">
-                  <CheckCircleIcon className="w-5 h-5 text-[#16A34A] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-[#166534]">{success}</p>
+                  <CheckCircleIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-[#166534] dark:text-[#86EFAC]">{success}</p>
                 </div>
               </div>
             )}
@@ -511,27 +512,32 @@ export default function LoginPage() {
                   /* Phone Number Input */
                   <form onSubmit={handleSendOtp} className="space-y-5">
                     <div>
-                      <label htmlFor="phone" className="block text-sm font-medium text-[#0F172A] mb-2">
+                      <label htmlFor="phone" className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                         Mobile Number
                       </label>
                       <div className="flex gap-2">
                         {/* Country Code Selector */}
-                        <select
-                          value={countryCode}
-                          onChange={(e) => setCountryCode(e.target.value)}
-                          className="w-28 px-3 py-3 rounded-lg border border-[#E5E7EB] text-[#0F172A] bg-white focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all text-sm"
-                        >
-                          {COUNTRY_CODES.map((cc) => (
-                            <option key={cc.code} value={cc.code}>
-                              {cc.flag} {cc.code}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="relative w-28">
+                          <select
+                            value={countryCode}
+                            onChange={(e) => setCountryCode(e.target.value)}
+                            className="w-full px-3 py-3 pr-8 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all text-sm appearance-none cursor-pointer"
+                          >
+                            {COUNTRY_CODES.map((cc) => (
+                              <option key={cc.code} value={cc.code} className="bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC]">
+                                {cc.flag} {cc.code}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                            <ChevronDownIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8]" />
+                          </div>
+                        </div>
                         
                         {/* Phone Input */}
                         <div className="relative flex-1">
                           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <PhoneIcon className="w-5 h-5 text-[#6B7280]" />
+                            <PhoneIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
                           </div>
                           <input
                             id="phone"
@@ -541,11 +547,11 @@ export default function LoginPage() {
                             placeholder="10-digit number"
                             required
                             maxLength={10}
-                            className="w-full pl-10 pr-4 py-3 rounded-lg border border-[#E5E7EB] text-[#0F172A] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                            className="w-full pl-10 pr-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all"
                           />
                         </div>
                       </div>
-                      <p className="mt-2 text-xs text-[#6B7280]">
+                      <p className="mt-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
                         We'll send a one-time password via SMS
                       </p>
                     </div>
@@ -554,7 +560,7 @@ export default function LoginPage() {
                     <button
                       type="submit"
                       disabled={isLoading || phoneNumber.length < 10}
-                      className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#2563EB] text-white font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isLoading ? (
                         <>
@@ -573,7 +579,7 @@ export default function LoginPage() {
                     <button
                       type="button"
                       onClick={handleBackToPhone}
-                      className="flex items-center gap-1 text-sm text-[#6B7280] hover:text-[#0F172A] transition-colors"
+                      className="flex items-center gap-1 text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
                     >
                       <ArrowLeftIcon className="w-4 h-4" />
                       Change number
@@ -581,7 +587,7 @@ export default function LoginPage() {
                     
                     {/* OTP Input Fields */}
                     <div>
-                      <label className="block text-sm font-medium text-[#0F172A] mb-3 text-center">
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-3 text-center">
                         Enter 6-digit OTP
                       </label>
                       <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
@@ -595,7 +601,7 @@ export default function LoginPage() {
                             value={digit}
                             onChange={(e) => handleOtpChange(index, e.target.value)}
                             onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                            className="w-12 h-14 text-center text-xl font-semibold rounded-lg border border-[#E5E7EB] text-[#0F172A] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                            className="w-12 h-14 text-center text-xl font-semibold rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all"
                           />
                         ))}
                       </div>
@@ -606,7 +612,7 @@ export default function LoginPage() {
                       type="button"
                       onClick={handleVerifyOtp}
                       disabled={isLoading || otp.some(d => d === '')}
-                      className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#2563EB] text-white font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isLoading ? (
                         <>
@@ -620,10 +626,10 @@ export default function LoginPage() {
                     
                     {/* Resend OTP */}
                     <div className="text-center">
-                      <p className="text-sm text-[#6B7280]">
+                      <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
                         Didn't receive the code?{' '}
                         {resendTimer > 0 ? (
-                          <span className="text-[#9CA3AF]">
+                          <span className="text-[#9CA3AF] dark:text-[#64748B]">
                             Resend in {resendTimer}s
                           </span>
                         ) : (
@@ -631,7 +637,7 @@ export default function LoginPage() {
                             type="button"
                             onClick={handleResendOtp}
                             disabled={isLoading}
-                            className="text-[#2563EB] font-medium hover:text-[#1E40AF] disabled:opacity-50"
+                            className="text-[#2563EB] dark:text-[#3B82F6] font-medium hover:text-[#1E40AF] dark:hover:text-[#60A5FA] disabled:opacity-50"
                           >
                             Resend OTP
                           </button>
@@ -650,12 +656,12 @@ export default function LoginPage() {
                   /* Email Input */
                   <form onSubmit={handleEmailSubmit} className="space-y-5">
                     <div>
-                      <label htmlFor="email" className="block text-sm font-medium text-[#0F172A] mb-2">
+                      <label htmlFor="email" className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                         Email Address
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <MailIcon className="w-5 h-5 text-[#6B7280]" />
+                          <MailIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
                         </div>
                         <input
                           id="email"
@@ -676,7 +682,7 @@ export default function LoginPage() {
                     <button
                       type="submit"
                       disabled={isLoading || !email}
-                      className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#2563EB] text-white font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isLoading ? (
                         <>
@@ -695,7 +701,7 @@ export default function LoginPage() {
                     <button
                       type="button"
                       onClick={handleBackToEmail}
-                      className="flex items-center gap-1 text-sm text-[#6B7280] hover:text-[#0F172A] transition-colors"
+                      className="flex items-center gap-1 text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
                     >
                       <ArrowLeftIcon className="w-4 h-4" />
                       Use different email
@@ -703,28 +709,28 @@ export default function LoginPage() {
                     
                     {/* Email Sent Message */}
                     <div className="text-center py-4">
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#EFF6FF] flex items-center justify-center">
-                        <MailIcon className="w-8 h-8 text-[#2563EB]" />
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#EFF6FF] dark:bg-[#1E3A8A] flex items-center justify-center">
+                        <MailIcon className="w-8 h-8 text-[#2563EB] dark:text-[#3B82F6]" />
                       </div>
-                      <p className="text-[#6B7280] text-sm">
+                      <p className="text-[#6B7280] dark:text-[#94A3B8] text-sm">
                         Click the link in your email to sign in. The link expires in 1 hour.
                       </p>
                     </div>
                     
                     {/* Resend Link */}
                     <div className="text-center">
-                      <p className="text-sm text-[#6B7280]">
+                      <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
                         Didn't receive the email?{' '}
                         <button
                           type="button"
                           onClick={handleResendMagicLink}
                           disabled={isLoading}
-                          className="text-[#2563EB] font-medium hover:text-[#1E40AF] disabled:opacity-50"
+                          className="text-[#2563EB] dark:text-[#3B82F6] font-medium hover:text-[#1E40AF] dark:hover:text-[#60A5FA] disabled:opacity-50"
                         >
                           Resend link
                         </button>
                       </p>
-                      <p className="text-xs text-[#9CA3AF] mt-2">
+                      <p className="text-xs text-[#9CA3AF] dark:text-[#64748B] mt-2">
                         Check your spam folder if you don't see it
                       </p>
                     </div>
@@ -735,12 +741,12 @@ export default function LoginPage() {
           </div>
           
           {/* Trust Message */}
-          <div className="mt-6 p-4 bg-[#F6F8FB] rounded-lg border border-[#E5E7EB]">
+          <div className="mt-6 p-4 bg-[#F6F8FB] dark:bg-[#334155] rounded-lg border border-[#E5E7EB] dark:border-[#334155]">
             <div className="flex items-start gap-3">
-              <LockIcon className="w-5 h-5 text-[#6B7280] flex-shrink-0 mt-0.5" />
+              <LockIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-[#0F172A]">Your data is secure</p>
-                <p className="text-sm text-[#6B7280] mt-1">
+                <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">Your data is secure</p>
+                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">
                   We use bank-grade encryption and never share your data. No trading, no tips, just clarity.
                 </p>
               </div>

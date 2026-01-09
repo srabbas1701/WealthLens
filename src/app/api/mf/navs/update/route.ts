@@ -48,11 +48,21 @@ interface UpdateNavsResponse {
     error?: string;
   }>;
   error?: string;
+  debug?: {
+    schemeCodesRequested: number;
+    schemeCodesMapped: string[];
+    amfiRecordsParsed?: number;
+    amfiRecordsMatched?: number;
+    sampleParsedDates?: string[];
+    sampleRequestedCodes?: string[];
+    sampleFoundCodes?: string[];
+  };
 }
 
 export async function POST(request: NextRequest) {
   try {
     const navDate = getPreviousTradingDay();
+    console.log(`[MF NAV Update API] Target NAV date (IST): ${navDate}`);
     
     // First, ensure scheme master is up to date (this populates ISIN ↔ scheme_code mappings)
     // Check if scheme master was updated recently (within last 7 days) to avoid unnecessary updates
@@ -66,7 +76,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       
       const shouldUpdateSchemeMaster = !recentUpdate || 
-        (new Date().getTime() - new Date(recentUpdate.last_updated).getTime()) > 7 * 24 * 60 * 60 * 1000; // 7 days
+        (new Date().getTime() - new Date((recentUpdate as any).last_updated).getTime()) > 7 * 24 * 60 * 60 * 1000; // 7 days
       
       if (shouldUpdateSchemeMaster) {
         await updateSchemeMaster();
@@ -90,6 +100,8 @@ export async function POST(request: NextRequest) {
     if (schemeCodesToUpdate.length === 0) {
       const supabase = createAdminClient();
       
+      console.log('[MF NAV Update API] Fetching holdings with ISINs...');
+      
       // Get all mutual fund holdings with ISINs
       const { data: holdings, error } = await supabase
         .from('holdings')
@@ -104,7 +116,17 @@ export async function POST(request: NextRequest) {
       
       if (error) {
         console.error('[MF NAV Update API] Error fetching ISINs:', error);
+        return NextResponse.json<UpdateNavsResponse>({
+          success: false,
+          navDate,
+          updated: 0,
+          failed: 0,
+          results: [],
+          error: `Failed to fetch holdings: ${error.message}`,
+        }, { status: 500 });
       } else if (holdings) {
+        console.log(`[MF NAV Update API] Found ${holdings.length} holdings with ISINs`);
+        
         // Extract unique ISINs and map to scheme codes
         const isinSet = new Set<string>();
         holdings.forEach((h: any) => {
@@ -115,6 +137,7 @@ export async function POST(request: NextRequest) {
         });
         
         const isins = Array.from(isinSet);
+        console.log(`[MF NAV Update API] Found ${isins.length} unique ISINs:`, isins.slice(0, 5));
         
         // Map ISINs to scheme codes using scheme master (cache results in memory per request)
         const schemeCodeSet = new Set<string>();
@@ -130,34 +153,69 @@ export async function POST(request: NextRequest) {
           
           if (schemeCode) {
             schemeCodeSet.add(schemeCode);
+            console.log(`[MF NAV Update API] Mapped ${isin} → ${schemeCode}`);
           } else {
             // Log only missing ISINs (mapping failures)
-            console.warn(`[MF NAV Update API] No scheme_code found for ISIN: ${isin}`);
+            console.warn(`[MF NAV Update API] ❌ No scheme_code found for ISIN: ${isin}`);
           }
         }
         
         schemeCodesToUpdate = Array.from(schemeCodeSet);
+        console.log(`[MF NAV Update API] Mapped to ${schemeCodesToUpdate.length} scheme codes:`, schemeCodesToUpdate);
+      } else {
+        console.warn('[MF NAV Update API] No holdings found');
       }
     }
     
     if (schemeCodesToUpdate.length === 0) {
+      console.warn('[MF NAV Update API] ⚠️ No scheme codes to update! Check if:');
+      console.warn('[MF NAV Update API]   1. Holdings have ISINs');
+      console.warn('[MF NAV Update API]   2. ISINs map to scheme codes in mf_scheme_master');
+      console.warn('[MF NAV Update API]   3. Scheme master is populated');
+      
       return NextResponse.json<UpdateNavsResponse>({
         success: true,
         navDate,
         updated: 0,
         failed: 0,
         results: [],
+        error: 'No scheme codes found to update. Check holdings ISINs and scheme master mapping.',
       });
     }
     
     // Update NAVs
+    console.log(`[MF NAV Update API] Updating NAVs for ${schemeCodesToUpdate.length} schemes`);
     const results = await updateMFNavs(schemeCodesToUpdate);
     
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;
     
+    console.log(`[MF NAV Update API] Updated ${successCount} NAVs, ${failureCount} failed`);
+    
+    // Log failures for debugging
+    if (failureCount > 0) {
+      const failures = results.filter(r => !r.success);
+      console.error(`[MF NAV Update API] Failed NAVs:`, failures.slice(0, 5).map(r => ({
+        schemeCode: r.schemeCode,
+        error: r.error,
+      })));
+    }
+    
+    // Collect debug info if update failed
+    const debugInfo: UpdateNavsResponse['debug'] = successCount === 0 && schemeCodesToUpdate.length > 0 ? {
+      schemeCodesRequested: schemeCodesToUpdate.length,
+      schemeCodesMapped: schemeCodesToUpdate.slice(0, 10),
+    } : undefined;
+    
+    // Return success: false if we expected to update NAVs but none were updated
+    const overallSuccess = successCount > 0 || schemeCodesToUpdate.length === 0;
+    
+    if (!overallSuccess && schemeCodesToUpdate.length > 0) {
+      console.error(`[MF NAV Update API] ❌ Failed to update any NAVs out of ${schemeCodesToUpdate.length} requested`);
+    }
+    
     return NextResponse.json<UpdateNavsResponse>({
-      success: true,
+      success: overallSuccess,
       navDate,
       updated: successCount,
       failed: failureCount,
@@ -168,6 +226,10 @@ export async function POST(request: NextRequest) {
         navDate: r.navDate,
         error: r.error,
       })),
+      debug: debugInfo,
+      error: !overallSuccess && schemeCodesToUpdate.length > 0 
+        ? `Failed to update any NAVs. ${failureCount} failed out of ${schemeCodesToUpdate.length} requested.`
+        : undefined,
     });
     
   } catch (error) {
@@ -214,7 +276,7 @@ export async function GET(request: NextRequest) {
       success: true,
       navDate,
       navsCount: count || 0,
-      lastUpdated: latest?.last_updated || null,
+      lastUpdated: (latest as any)?.last_updated || null,
     });
     
   } catch (error) {

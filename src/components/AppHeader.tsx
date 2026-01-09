@@ -8,6 +8,7 @@ import { useAuthSession, useAuthAppData } from '@/lib/auth';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
 import { type CurrencyFormat } from '@/lib/currency/formatCurrency';
 import { useCurrency } from '@/lib/currency/useCurrency';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface CurrencyContextType {
   format: CurrencyFormat;
@@ -122,7 +123,7 @@ export function AppHeader({
 
     // Return landing/demo header (no portfolio dependencies)
     return (
-      <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-[#E5E7EB]">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]">
         <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
           {/* Left: Logo */}
           <div className="flex items-center gap-4">
@@ -130,13 +131,13 @@ export function AppHeader({
               <div className="w-8 h-8 rounded-lg bg-[#0A2540] flex items-center justify-center">
                 <WalletIcon className="w-5 h-5 text-white" />
               </div>
-              <span className="text-lg font-semibold text-[#0F172A]">WealthLens</span>
+              <span className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">WealthLens</span>
             </Link>
           </div>
 
           {/* Center: Navigation Links */}
           <nav className="hidden md:flex items-center gap-6">
-            <a href="#features" className="text-sm text-[#6B7280] hover:text-[#0F172A] transition-colors font-medium">
+            <a href="#features" className="text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
               Features
             </a>
             <a href="#trust" className="text-sm text-[#6B7280] hover:text-[#0F172A] transition-colors font-medium">
@@ -149,12 +150,15 @@ export function AppHeader({
 
           {/* Right: Navigation and Actions */}
           <div className="flex items-center gap-3">
+            {/* Theme Toggle */}
+            <ThemeToggle />
+            
             {/* Show Account menu only when authenticated (not in demo mode) */}
             {!isInDemoMode && authStatus === 'authenticated' && user ? (
               <>
                 <Link
                   href="/dashboard"
-                  className="px-4 py-2 rounded-lg text-[#6B7280] text-sm font-medium hover:text-[#0F172A] transition-colors"
+                  className="px-4 py-2 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-sm font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
                 >
                   Dashboard
                 </Link>
@@ -163,7 +167,7 @@ export function AppHeader({
                 <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setShowUserMenu(!showUserMenu)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] text-white text-sm font-medium hover:bg-[#1E40AF] transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] dark:bg-[#EFF6FF] text-white dark:text-[#1E3A8A] text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#DBEAFE] transition-colors"
                   >
                     <UserIcon className="w-4 h-4" />
                     <span>Account</span>
@@ -172,19 +176,19 @@ export function AppHeader({
 
                   {/* Dropdown Menu */}
                   {showUserMenu && (
-                    <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg border border-[#E5E7EB] shadow-lg py-1 z-50">
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155] shadow-lg py-1 z-50">
                       <Link
                         href="/account"
                         onClick={() => setShowUserMenu(false)}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] hover:bg-[#F6F8FB] transition-colors text-left"
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left"
                       >
-                        <UserIcon className="w-4 h-4 text-[#6B7280]" />
+                        <UserIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8]" />
                         <span>Account Settings</span>
                       </Link>
                       <Link
                         href="/security"
                         onClick={() => setShowUserMenu(false)}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] hover:bg-[#F6F8FB] transition-colors text-left"
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left"
                       >
                         <ShieldCheckIcon className="w-4 h-4 text-[#6B7280]" />
                         <span>Security</span>
@@ -194,7 +198,7 @@ export function AppHeader({
                           setShowLogoutModal(true);
                           setShowUserMenu(false);
                         }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] hover:bg-[#F6F8FB] transition-colors text-left"
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left"
                       >
                         <LogOutIcon className="w-4 h-4 text-[#6B7280]" />
                         <span>Logout</span>
@@ -207,13 +211,13 @@ export function AppHeader({
               <>
                 <Link
                   href="/login"
-                  className="px-4 py-2 rounded-lg text-[#6B7280] text-sm font-medium hover:text-[#0F172A] transition-colors"
+                  className="px-4 py-2 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-sm font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
                 >
                   Sign In
                 </Link>
                 <Link
                   href="/login"
-                  className="px-5 py-2 rounded-lg bg-[#2563EB] text-white text-sm font-medium hover:bg-[#1E40AF] transition-colors"
+                  className="px-5 py-2 rounded-lg bg-[#2563EB] dark:bg-[#EFF6FF] text-white dark:text-[#1E3A8A] text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#DBEAFE] transition-colors"
                 >
                   Get Started
                 </Link>
@@ -249,7 +253,7 @@ export function AppHeader({
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-[#E5E7EB]">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]">
       <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
         {/* Left: Logo and Back Button */}
         <div className="flex items-center gap-4">
@@ -257,13 +261,13 @@ export function AppHeader({
             <div className="w-8 h-8 rounded-lg bg-[#0A2540] flex items-center justify-center">
               <WalletIcon className="w-5 h-5 text-white" />
             </div>
-            <span className="text-lg font-semibold text-[#0F172A]">WealthLens</span>
+            <span className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">WealthLens</span>
           </Link>
           
           {showBackButton && (
             <Link 
               href={backHref}
-              className="flex items-center gap-2 text-[#6B7280] hover:text-[#0F172A] transition-colors ml-4 pl-4 border-l border-[#E5E7EB]"
+              className="flex items-center gap-2 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors ml-4 pl-4 border-l border-[#E5E7EB] dark:border-[#334155]"
             >
               <span className="text-sm font-medium">{backLabel}</span>
             </Link>
@@ -272,13 +276,13 @@ export function AppHeader({
 
         {/* Center: Currency Format Selector (only show on app routes when authenticated and has portfolio) */}
         {isAppRoute && authStatus === 'authenticated' && user && hasPortfolio && (
-          <div className="flex items-center gap-2 bg-[#F6F8FB] rounded-lg p-1">
+          <div className="flex items-center gap-2 bg-[#F6F8FB] dark:bg-[#1E293B] rounded-lg p-1">
             <button
               onClick={() => setFormat('raw')}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 format === 'raw'
-                  ? 'bg-white text-[#2563EB] shadow-sm'
-                  : 'text-[#6B7280] hover:text-[#0F172A]'
+                  ? 'bg-white dark:bg-[#334155] text-[#2563EB] dark:text-[#60A5FA] shadow-sm'
+                  : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
               }`}
             >
               Raw
@@ -308,10 +312,13 @@ export function AppHeader({
 
         {/* Right: Navigation and Actions */}
         <div className="flex items-center gap-3">
+          {/* Theme Toggle */}
+          <ThemeToggle />
+          
           {showDownload && (
             <button
               onClick={onDownload || (() => {})}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#0F172A] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F6F8FB] transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
             >
               <FileIcon className="w-4 h-4" />
               Download
@@ -323,7 +330,7 @@ export function AppHeader({
             <>
               <Link
                 href="/dashboard"
-                className="px-4 py-2 rounded-lg text-[#6B7280] text-sm font-medium hover:text-[#0F172A] transition-colors"
+                className="px-4 py-2 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-sm font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
               >
                 Dashboard
               </Link>
@@ -332,7 +339,7 @@ export function AppHeader({
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] text-white text-sm font-medium hover:bg-[#1E40AF] transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
                 >
                   <UserIcon className="w-4 h-4" />
                   <span>Account</span>
@@ -341,21 +348,21 @@ export function AppHeader({
 
                 {/* Dropdown Menu */}
                 {showUserMenu && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg border border-[#E5E7EB] shadow-lg py-1 z-50">
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155] shadow-lg py-1 z-50">
                     <Link
                       href="/account"
                       onClick={() => setShowUserMenu(false)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] hover:bg-[#F6F8FB] transition-colors text-left"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left"
                     >
-                      <UserIcon className="w-4 h-4 text-[#6B7280]" />
+                      <UserIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8]" />
                       <span>Account Settings</span>
                     </Link>
                     <Link
                       href="/security"
                       onClick={() => setShowUserMenu(false)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] hover:bg-[#F6F8FB] transition-colors text-left"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left"
                     >
-                      <ShieldCheckIcon className="w-4 h-4 text-[#6B7280]" />
+                      <ShieldCheckIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8]" />
                       <span>Security</span>
                     </Link>
                     <button
@@ -363,9 +370,9 @@ export function AppHeader({
                         setShowLogoutModal(true);
                         setShowUserMenu(false);
                       }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] hover:bg-[#F6F8FB] transition-colors text-left"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left"
                     >
-                      <LogOutIcon className="w-4 h-4 text-[#6B7280]" />
+                      <LogOutIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8]" />
                       <span>Logout</span>
                     </button>
                   </div>
@@ -376,13 +383,13 @@ export function AppHeader({
             <>
               <Link
                 href="/login"
-                className="px-4 py-2 rounded-lg text-[#6B7280] text-sm font-medium hover:text-[#0F172A] transition-colors"
+                className="px-4 py-2 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-sm font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
               >
                 Sign In
               </Link>
               <Link
                 href="/login"
-                className="px-5 py-2 rounded-lg bg-[#2563EB] text-white text-sm font-medium hover:bg-[#1E40AF] transition-colors"
+                className="px-5 py-2 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
               >
                 Get Started
               </Link>

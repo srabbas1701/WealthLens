@@ -28,20 +28,20 @@ export default function InsightsLimitBanner({
   }
 
   return (
-    <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 mt-2">
+    <div className="bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155] p-4 mt-2">
       <div className="flex items-start gap-3">
-        <InfoIcon className="w-5 h-5 text-[#6B7280] flex-shrink-0 mt-0.5" />
+        <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 mt-0.5" />
         <div className="flex-1">
-          <p className="text-sm font-medium text-[#0F172A] mb-1">
+          <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-1">
             You have {remaining} more insight{remaining !== 1 ? 's' : ''} available
           </p>
-          <p className="text-sm text-[#6B7280] mb-3">
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-3">
             Upgrade to Premium to see all insights, including concentration risk analysis, 
             diversification recommendations, and tax optimization insights.
           </p>
           <Link
             href="/upgrade"
-            className="inline-flex items-center gap-2 text-sm font-medium text-[#2563EB] hover:text-[#1E40AF] transition-colors"
+            className="inline-flex items-center gap-2 text-sm font-medium text-[#2563EB] dark:text-[#3B82F6] hover:text-[#1E40AF] dark:hover:text-[#2563EB] transition-colors"
           >
             View All Insights
             <ArrowRightIcon className="w-4 h-4" />
@@ -51,6 +51,7 @@ export default function InsightsLimitBanner({
     </div>
   );
 }
+
 
 
 

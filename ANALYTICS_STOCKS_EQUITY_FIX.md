@@ -96,3 +96,4 @@ const fdOwnership = portfolioData.allocation.find((a: any) => a.name === 'Fixed 
 
 
 
+

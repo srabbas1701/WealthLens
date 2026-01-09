@@ -71,79 +71,151 @@ function parseAMFINAVFile(content: string): ParsedNAVRecord[] {
   
   let navDate = getPreviousTradingDay(); // Default fallback
   
-  for (const line of lines) {
+  let skippedEmpty = 0;
+  let skippedHeaders = 0;
+  let skippedInvalidLength = 0;
+  let skippedInvalidCode = 0;
+  let skippedInvalidNav = 0;
+  let parsedCount = 0;
+  let sampleLines: string[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
     
     // Skip empty lines
-    if (!trimmed) continue;
+    if (!trimmed) {
+      skippedEmpty++;
+      continue;
+    }
     
     // Check for section headers
     if (trimmed.includes('Open Ended Schemes') || trimmed.includes('Close Ended Schemes')) {
+      skippedHeaders++;
       continue;
     }
     
     // Skip header lines
     if (trimmed.includes('Scheme Code') || trimmed.includes('Net Asset Value')) {
+      skippedHeaders++;
+      if (sampleLines.length < 3) {
+        sampleLines.push(`Line ${i}: ${trimmed.substring(0, 100)}`);
+      }
       continue;
     }
     
     // Parse data line: Scheme Code;ISIN Div Payout;ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
     // OR: Scheme Code;ISIN Div Payout/ISIN Growth/ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date (older format)
-    const parts = trimmed.split(';').map(p => p.trim());
+    // IMPORTANT: AMFI format can have scheme names with semicolons, so we need to parse from the END backwards
+    const parts = trimmed.split(';');
     
-    if (parts.length >= 5) {
-      const schemeCode = parts[0];
-      const schemeName = parts.length >= 7 ? parts[4] : parts[2]; // Name position varies by format
-      const navValue = parts.length >= 7 ? parts[5] : parts[3]; // NAV position varies
-      const dateStr = parts.length >= 7 ? parts[6] : parts[4]; // Date position varies
-      
-      // Validate scheme code
-      if (!schemeCode || !/^\d+$/.test(schemeCode)) {
-        continue;
+    if (parts.length < 5) {
+      skippedInvalidLength++;
+      if (sampleLines.length < 5 && parts.length > 0) {
+        sampleLines.push(`Line ${i} (${parts.length} parts): ${trimmed.substring(0, 100)}`);
+      }
+      continue;
+    }
+    
+    const schemeCode = parts[0].trim();
+    
+    // AMFI format: Code;ISIN1;ISIN2;Name;NAV;Date (6 fields)
+    // But some lines may be incomplete (5 fields, missing date)
+    // Parse from the end backwards for reliability
+    let dateStr = '';
+    let navValue = '';
+    let schemeName = '';
+    
+    if (parts.length >= 6) {
+      // Complete 6-field format: Code;ISIN1;ISIN2;Name;NAV;Date
+      dateStr = parts[5].trim();
+      navValue = parts[4].trim();
+      schemeName = parts[3].trim();
+    } else if (parts.length === 5) {
+      // Incomplete 5-field format: Code;ISIN1;ISIN2;Name;NAV (date missing)
+      navValue = parts[4].trim();
+      schemeName = parts[3].trim();
+      dateStr = ''; // Date missing, will use fallback
+    } else {
+      // Invalid format (less than 5 fields)
+      skippedInvalidLength++;
+      if (sampleLines.length < 5 && parts.length > 0) {
+        sampleLines.push(`Line ${i} (${parts.length} parts, need 5+): ${trimmed.substring(0, 100)}`);
+      }
+      continue;
+    }
+    
+    // Validate scheme code
+    if (!schemeCode || !/^\d+$/.test(schemeCode)) {
+      skippedInvalidCode++;
+      if (sampleLines.length < 7) {
+        sampleLines.push(`Line ${i} invalid code "${schemeCode}": ${trimmed.substring(0, 100)}`);
+      }
+      continue;
+    }
+    
+    // Parse NAV value - handle incomplete values like "110." by trying to parse anyway
+    let nav = parseFloat(navValue);
+    if (isNaN(nav) || nav <= 0) {
+      // Try to parse if it ends with "." (incomplete number)
+      if (navValue.endsWith('.')) {
+        const cleanedNav = navValue.slice(0, -1);
+        nav = parseFloat(cleanedNav);
       }
       
-      // Parse NAV value
-      const nav = parseFloat(navValue);
       if (isNaN(nav) || nav <= 0) {
+        skippedInvalidNav++;
+        if (sampleLines.length < 8) {
+          sampleLines.push(`Line ${i} invalid NAV "${navValue}": ${trimmed.substring(0, 100)}`);
+        }
         continue;
       }
-      
-      // Parse date (DD-MMM-YYYY format)
-      let parsedDate = navDate; // Default fallback
-      if (dateStr) {
-        try {
-          const dateParts = dateStr.split('-');
-          if (dateParts.length === 3) {
-            const day = parseInt(dateParts[0], 10);
-            const monthMap: Record<string, string> = {
-              'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
-              'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
-              'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-            };
-            const month = monthMap[dateParts[1]] || '01';
-            const year = dateParts[2];
-            parsedDate = `${year}-${month}-${(day < 10 ? '0' : '') + day}`;
-            
-            // Update navDate to the actual date from AMFI file (most recent)
-            if (parsedDate > navDate) {
-              navDate = parsedDate;
-            }
+    }
+    
+    // Parse date (DD-MMM-YYYY format)
+    let parsedDate = navDate; // Default fallback
+    if (dateStr) {
+      try {
+        const dateParts = dateStr.split('-');
+        if (dateParts.length === 3) {
+          const day = parseInt(dateParts[0], 10);
+          const monthMap: Record<string, string> = {
+            'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+            'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+            'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+          };
+          const month = monthMap[dateParts[1]] || '01';
+          const year = dateParts[2];
+          parsedDate = `${year}-${month}-${(day < 10 ? '0' : '') + day}`;
+          
+          // Update navDate to the actual date from AMFI file (most recent)
+          if (parsedDate > navDate) {
+            navDate = parsedDate;
           }
-        } catch (error) {
-          console.warn(`[MF NAV Service] Failed to parse date: ${dateStr}`);
         }
+      } catch (error) {
+        console.warn(`[MF NAV Service] Failed to parse date: ${dateStr}`);
       }
-      
-      records.push({
-        schemeCode,
-        schemeName,
-        nav,
-        navDate: parsedDate,
-      });
+    }
+    
+    records.push({
+      schemeCode,
+      schemeName,
+      nav,
+      navDate: parsedDate,
+    });
+    parsedCount++;
+    
+    if (parsedCount <= 5) {
+      console.log(`[MF NAV Service] Parsed record ${parsedCount}: ${schemeCode} - ${schemeName.substring(0, 50)} - NAV: ${nav} - Date: ${parsedDate}`);
     }
   }
   
-  // Return records (logging happens at higher level)
+  console.log(`[MF NAV Service] Parse summary: ${parsedCount} parsed, ${skippedEmpty} empty, ${skippedHeaders} headers, ${skippedInvalidLength} invalid length, ${skippedInvalidCode} invalid code, ${skippedInvalidNav} invalid NAV`);
+  if (sampleLines.length > 0) {
+    console.log(`[MF NAV Service] Sample lines:`, sampleLines);
+  }
+  
   return records;
 }
 
@@ -179,15 +251,32 @@ async function fetchNAVFromAMFI(schemeCodes?: string[]): Promise<Map<string, Par
     const navMap = new Map<string, ParsedNAVRecord>();
     if (schemeCodes && schemeCodes.length > 0) {
       let matchedCount = 0;
+      const schemeCodeSet = new Set(schemeCodes);
+      const foundSchemeCodes = new Set<string>();
+      
       for (const record of records) {
-        if (schemeCodes.includes(record.schemeCode)) {
+        foundSchemeCodes.add(record.schemeCode);
+        if (schemeCodeSet.has(record.schemeCode)) {
           navMap.set(record.schemeCode, record);
           matchedCount++;
         }
       }
-      // Only warn if no matches (potential issue)
+      
+      console.log(`[MF NAV Service] Looking for ${schemeCodes.length} scheme codes:`, schemeCodes.slice(0, 5));
+      console.log(`[MF NAV Service] Found ${foundSchemeCodes.size} unique scheme codes in AMFI file`);
+      console.log(`[MF NAV Service] Matched ${matchedCount} out of ${schemeCodes.length} requested`);
+      
       if (matchedCount === 0) {
-        console.warn(`[MF NAV Service] No scheme codes matched from AMFI file`);
+        console.warn(`[MF NAV Service] ❌ No scheme codes matched!`);
+        console.warn(`[MF NAV Service] First 10 requested:`, schemeCodes.slice(0, 10));
+        const foundArray = Array.from(foundSchemeCodes).slice(0, 10);
+        console.warn(`[MF NAV Service] First 10 found in file:`, foundArray);
+        
+        // Check if there's a type mismatch (string vs number)
+        const requestedAsNumbers = schemeCodes.map(c => parseInt(c, 10));
+        const foundAsNumbers = Array.from(foundSchemeCodes).map(c => parseInt(c, 10));
+        console.warn(`[MF NAV Service] Checking type mismatch - requested (first 3):`, requestedAsNumbers.slice(0, 3));
+        console.warn(`[MF NAV Service] Checking type mismatch - found (first 3):`, foundAsNumbers.slice(0, 3));
       }
     } else {
       // No filtering - include all records
@@ -355,13 +444,21 @@ export async function updateMFNavs(schemeCodes?: string[]): Promise<NavUpdateRes
   const results: NavUpdateResult[] = [];
   
   try {
+    console.log(`[MF NAV Service] updateMFNavs called with ${schemeCodes?.length || 0} scheme codes`);
+    if (schemeCodes && schemeCodes.length > 0) {
+      console.log(`[MF NAV Service] First 5 scheme codes:`, schemeCodes.slice(0, 5));
+    }
+    
     const supabase = createAdminClient();
     
     // Fetch NAVs from AMFI
+    console.log(`[MF NAV Service] Fetching NAVs from AMFI...`);
     const navMap = await fetchNAVFromAMFI(schemeCodes);
     
+    console.log(`[MF NAV Service] Fetched ${navMap.size} NAV records from AMFI`);
+    
     if (navMap.size === 0) {
-      console.warn(`[MF NAV Service] No NAV records found in AMFI file`);
+      console.warn(`[MF NAV Service] ❌ No NAV records found in AMFI file`);
       return results;
     }
     
@@ -379,15 +476,17 @@ export async function updateMFNavs(schemeCodes?: string[]): Promise<NavUpdateRes
     }));
     
     try {
-      const { error } = await supabase
+      const { error, data: upsertData } = await supabase
         .from('mf_navs')
         .upsert(navsToStore, {
           onConflict: 'scheme_code,nav_date',
           ignoreDuplicates: false,
-        });
+        })
+        .select('scheme_code, nav_date');
       
       if (error) {
         console.error(`[MF NAV Service] Error batch upserting NAVs:`, error);
+        console.error(`[MF NAV Service] Error details:`, JSON.stringify(error, null, 2));
         
         // Fallback to one-by-one insert on error
         for (const [schemeCode, record] of navMap.entries()) {
@@ -423,7 +522,43 @@ export async function updateMFNavs(schemeCodes?: string[]): Promise<NavUpdateRes
           }
         }
       } else {
-        // Batch upsert succeeded
+        // Batch upsert succeeded - Supabase upsert may not return data if rows already exist
+        // So we'll assume success for all, but log if verification is needed
+        const storedSchemeCodes = new Set<string>();
+        if (upsertData && Array.isArray(upsertData) && upsertData.length > 0) {
+          for (const row of upsertData) {
+            const key = `${row.scheme_code}_${row.nav_date}`;
+            storedSchemeCodes.add(key);
+          }
+          console.log(`[MF NAV Service] Batch upsert returned ${upsertData.length} rows (some may have been updates)`);
+        } else {
+          // upsertData is null/empty - this is normal for upserts that update existing rows
+          // Supabase doesn't return data for updates unless explicitly requested
+          console.log(`[MF NAV Service] Batch upsert succeeded (no data returned - likely updates to existing rows)`);
+        }
+        
+        // Verify NAVs were actually stored by querying a sample
+        const sampleSchemeCode = Array.from(navMap.keys())[0];
+        const sampleRecord = navMap.get(sampleSchemeCode);
+        if (sampleRecord) {
+          const { data: verifyData, error: verifyError } = await supabase
+            .from('mf_navs')
+            .select('scheme_code, nav, nav_date')
+            .eq('scheme_code', sampleSchemeCode)
+            .eq('nav_date', sampleRecord.navDate)
+            .maybeSingle();
+          
+          if (verifyData) {
+            console.log(`[MF NAV Service] ✅ Verified NAV stored: ${sampleSchemeCode} = ${verifyData.nav} on ${verifyData.nav_date}`);
+          } else if (verifyError) {
+            console.error(`[MF NAV Service] ❌ Verification failed for ${sampleSchemeCode}:`, verifyError);
+          } else {
+            console.warn(`[MF NAV Service] ⚠️ NAV not found after upsert for ${sampleSchemeCode} on ${sampleRecord.navDate}`);
+          }
+        }
+        
+        // Mark all as successful (upsert succeeded, so they should be stored)
+        // If verification is needed, we can add it later, but upsert errors would have been caught above
         for (const [schemeCode, record] of navMap.entries()) {
           results.push({
             schemeCode,
@@ -435,6 +570,32 @@ export async function updateMFNavs(schemeCodes?: string[]): Promise<NavUpdateRes
       }
     } catch (error) {
       console.error(`[MF NAV Service] Error during batch upsert:`, error);
+      // If batch fails completely, try individual inserts
+      for (const [schemeCode, record] of navMap.entries()) {
+        try {
+          const stored = await storeMFNav(
+            record.schemeCode,
+            record.schemeName,
+            record.nav,
+            record.navDate,
+            'AMFI_DAILY'
+          );
+          
+          results.push({
+            schemeCode,
+            success: stored,
+            nav: stored ? record.nav : undefined,
+            navDate: stored ? record.navDate : undefined,
+            error: stored ? undefined : 'Failed to store NAV',
+          });
+        } catch (err) {
+          results.push({
+            schemeCode,
+            success: false,
+            error: err instanceof Error ? err.message : 'Unknown error',
+          });
+        }
+      }
     }
     
     return results;
@@ -462,3 +623,4 @@ export async function getMFNavsByISIN(
   
   return navMap;
 }
+

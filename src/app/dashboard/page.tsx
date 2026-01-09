@@ -51,6 +51,9 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ArrowRightIcon,
+  PlusIcon,
+  UploadIcon,
+  EditIcon,
 } from '@/components/icons';
 import FloatingCopilot from '@/components/FloatingCopilot';
 import PortfolioUploadModal from '@/components/PortfolioUploadModal';
@@ -64,6 +67,7 @@ import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { aggregatePortfolioData, validatePortfolioData } from '@/lib/portfolio-aggregation';
 import type { DailySummaryResponse, WeeklySummaryResponse, Status, RiskAlignmentStatus } from '@/types/copilot';
+import { calculateXIRRFromHoldings, formatXIRR } from '@/lib/xirr-calculator';
 
 // ============================================================================
 // TYPES
@@ -108,6 +112,7 @@ interface PortfolioData {
     totalAssetTypes: number;
     largestHoldingPct: number;
     lastUpdated: string | null;
+    createdAt: string | null;
   };
 }
 
@@ -121,23 +126,23 @@ type GroupByOption = 'none' | 'assetType' | 'sector';
 function StatusBadge({ status }: { status: Status }) {
   const config = {
     no_action_required: {
-      bg: 'bg-[#DCFCE7]',
-      border: 'border-[#16A34A]',
-      text: 'text-[#166534]',
+      bg: 'bg-[#DCFCE7] dark:bg-[#14532D]',
+      border: 'border-[#16A34A] dark:border-[#22C55E]',
+      text: 'text-[#166534] dark:text-[#86EFAC]',
       icon: <CheckCircleIcon className="w-4 h-4" />,
       label: 'No action needed',
     },
     monitor: {
-      bg: 'bg-[#EFF6FF]',
-      border: 'border-[#2563EB]',
-      text: 'text-[#1E40AF]',
+      bg: 'bg-[#EFF6FF] dark:bg-[#1E3A8A]',
+      border: 'border-[#2563EB] dark:border-[#3B82F6]',
+      text: 'text-[#1E40AF] dark:text-[#93C5FD]',
       icon: <AlertTriangleIcon className="w-4 h-4" />,
       label: 'Worth monitoring',
     },
     attention_required: {
-      bg: 'bg-[#FEF3C7]',
-      border: 'border-[#F59E0B]',
-      text: 'text-[#92400E]',
+      bg: 'bg-[#FEF3C7] dark:bg-[#78350F]',
+      border: 'border-[#F59E0B] dark:border-[#FBBF24]',
+      text: 'text-[#92400E] dark:text-[#FCD34D]',
       icon: <AlertTriangleIcon className="w-4 h-4" />,
       label: 'Review suggested',
     },
@@ -147,8 +152,10 @@ function StatusBadge({ status }: { status: Status }) {
   
   return (
     <div className={`flex items-center gap-2 px-3 py-1.5 ${bg} ${border} ${text} rounded-lg border`}>
-      {icon}
-      <span className="text-sm font-medium">{label}</span>
+      <div className={text}>
+        {icon}
+      </div>
+      <span className={`text-sm font-medium ${text}`}>{label}</span>
     </div>
   );
 }
@@ -177,6 +184,7 @@ const EMPTY_PORTFOLIO: PortfolioData = {
     totalAssetTypes: 0,
     largestHoldingPct: 0,
     lastUpdated: null,
+    createdAt: null,
   },
 };
 
@@ -216,6 +224,9 @@ export default function DashboardPage() {
   
   // User dropdown state
   const [showUserMenu, setShowUserMenu] = useState(false);
+  
+  // Portfolio Allocation chart hover state
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   
   // All Investments section state
   const [showAllInvestments, setShowAllInvestments] = useState(false);
@@ -487,10 +498,10 @@ export default function DashboardPage() {
   // GUARD: Show loading while auth state is being determined
   if (authStatus === 'loading') {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-[#6B7280]">Loading...</p>
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Loading...</p>
         </div>
       </div>
     );
@@ -500,10 +511,10 @@ export default function DashboardPage() {
   if (authStatus === 'unauthenticated') {
     // Redirect happens in useEffect above, just show message briefly
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-[#6B7280]">Redirecting to login...</p>
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Redirecting to login...</p>
         </div>
       </div>
     );
@@ -512,20 +523,20 @@ export default function DashboardPage() {
   // GUARD: Redirect if no portfolio (only after portfolio check has completed)
   if (authStatus === 'authenticated' && user && portfolioCheckComplete && !hasPortfolio) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-[#6B7280]">Redirecting to onboarding...</p>
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Redirecting to onboarding...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB]">
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader />
 
-      <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24">
+      <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24 bg-[#F6F8FB] dark:bg-[#0F172A]">
         {/* Verification Banner (non-blocking) */}
         <VerificationBanner className="mb-8" />
         
@@ -537,13 +548,57 @@ export default function DashboardPage() {
         {/* ============================================================================ */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-[#0F172A]">Dashboard</h1>
-            <p className="text-sm text-[#6B7280] mt-1">{greeting}, {userName}</p>
+            <h1 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Dashboard</h1>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">{greeting}, {userName}</p>
           </div>
-          <div className="text-sm text-[#6B7280]">
+          <div className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             Last 12 months
           </div>
         </div>
+
+        {/* ============================================================================ */}
+        {/* QUICK ACTIONS - Add/Upload Investments */}
+        {/* ============================================================================ */}
+        <section className="mb-8">
+          <div className="bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-[#0F172A] dark:to-[#0F172A] dark:bg-[#0F172A] dark:[background:var(--background)] rounded-xl border border-emerald-200 dark:border-[#334155] p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Manage Your Portfolio</h2>
+                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                  Add new investments or update existing holdings anytime
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => setIsUploadModalOpen(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 dark:bg-emerald-500 text-white font-medium rounded-lg hover:bg-emerald-700 dark:hover:bg-emerald-600 transition-colors shadow-sm hover:shadow-md"
+                >
+                  <UploadIcon className="w-5 h-5 text-white" />
+                  Upload Documents
+                </button>
+                <button
+                  onClick={() => setIsManualModalOpen(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-[#1E293B] text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  Add Manually
+                </button>
+              </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-800">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                <div className="flex items-start gap-2">
+                  <UploadIcon className="w-4 h-4 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                  <span><strong>Upload:</strong> CAS statements, broker statements (CSV/Excel)</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <PlusIcon className="w-4 h-4 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                  <span><strong>Add:</strong> FD, EPF, PPF, NPS, Gold, Bonds, and more</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* ============================================================================ */}
         {/* ZONE 2: NET WORTH HERO (Above the Fold) */}
@@ -554,21 +609,21 @@ export default function DashboardPage() {
           position="bottom"
         >
           <section className="mb-6">
-            <div className="bg-white rounded-xl border border-[#E5E7EB] p-10">
-              <p className="text-sm text-[#6B7280] font-medium mb-4">Total Portfolio Value</p>
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-10">
+              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-4">Total Portfolio Value</p>
               {portfolioLoading ? (
-                <div className="h-16 w-64 bg-[#F6F8FB] rounded animate-pulse mb-4" />
+                <div className="h-16 w-64 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-4" />
               ) : !isDataConsistent ? (
                 <DataConsolidationMessage className="mb-4" />
               ) : (
                 <>
-                  <h2 className="text-6xl font-semibold text-[#0A2540] number-emphasis mb-4">{formatCurrency(portfolio.metrics.netWorth)}</h2>
+                  <h2 className="text-6xl font-semibold text-[#0A2540] dark:text-[#F8FAFC] number-emphasis mb-4">{formatCurrency(portfolio.metrics.netWorth)}</h2>
                   {portfolio.metrics.netWorthChange !== 0 && (
                     <div className="flex items-center gap-2.5">
-                      <TrendingUpIcon className="w-5 h-5 text-[#16A34A]" />
-                      <span className="text-lg text-[#16A34A] font-semibold number-emphasis">+₹{(portfolio.metrics.netWorth * portfolio.metrics.netWorthChange / 100).toLocaleString('en-IN', {maximumFractionDigits: 0})}</span>
-                      <span className="text-lg text-[#16A34A] font-semibold">(+{portfolio.metrics.netWorthChange}%)</span>
-                      <span className="text-sm text-[#6B7280] ml-1">Last 12 months</span>
+                      <TrendingUpIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E]" />
+                      <span className="text-lg text-[#16A34A] dark:text-[#22C55E] font-semibold number-emphasis">+₹{(portfolio.metrics.netWorth * portfolio.metrics.netWorthChange / 100).toLocaleString('en-IN', {maximumFractionDigits: 0})}</span>
+                      <span className="text-lg text-[#16A34A] dark:text-[#22C55E] font-semibold">(+{portfolio.metrics.netWorthChange}%)</span>
+                      <span className="text-sm text-[#6B7280] dark:text-[#94A3B8] ml-1">Last 12 months</span>
                     </div>
                   )}
                 </>
@@ -585,17 +640,17 @@ export default function DashboardPage() {
           {/* Mutual Funds Tile */}
           <Link 
             href="/portfolio/mutualfunds"
-            className="bg-white rounded-xl border border-[#E5E7EB] p-6 text-left hover:border-[#2563EB] hover:shadow-sm transition-all block"
+            className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
           >
-            <p className="text-sm font-medium text-[#6B7280] mb-6">Mutual Funds</p>
+            <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6">Mutual Funds</p>
             {portfolioLoading ? (
-              <div className="h-10 w-24 bg-[#F6F8FB] rounded animate-pulse mb-2" />
+              <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
             ) : (
               <>
-                <p className="text-3xl font-semibold text-[#0F172A] number-emphasis mb-2">
+                <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
                   {formatCurrency(portfolio.allocation.find(a => a.name === 'Mutual Funds')?.value || 0)}
                 </p>
-                <p className="text-base font-medium text-[#6B7280]">
+                <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
                   {portfolio.allocation.find(a => a.name === 'Mutual Funds')?.percentage.toFixed(0) || '0'}%
                 </p>
               </>
@@ -605,19 +660,19 @@ export default function DashboardPage() {
           {/* Stocks Tile */}
           <Link 
             href="/portfolio/equity"
-            className="bg-white rounded-xl border border-[#E5E7EB] p-6 text-left hover:border-[#2563EB] hover:shadow-sm transition-all block"
+            className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
           >
-            <p className="text-sm font-medium text-[#6B7280] mb-6">Stocks</p>
+            <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6">Stocks</p>
             {portfolioLoading ? (
-              <div className="h-10 w-24 bg-[#F6F8FB] rounded animate-pulse mb-2" />
+              <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
             ) : (
               <>
-                <p className="text-3xl font-semibold text-[#0F172A] number-emphasis mb-2">
+                <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
                   {formatCurrency(
                     portfolio.allocation.find(a => a.name === 'Equity' || a.name === 'Stocks')?.value || 0
                   )}
                 </p>
-                <p className="text-base font-medium text-[#6B7280]">
+                <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
                   {portfolio.allocation.find(a => a.name === 'Equity' || a.name === 'Stocks')?.percentage.toFixed(0) || '0'}%
                 </p>
               </>
@@ -627,17 +682,17 @@ export default function DashboardPage() {
           {/* Fixed Deposits Tile */}
           <Link 
             href="/portfolio/fixeddeposits"
-            className="bg-white rounded-xl border border-[#E5E7EB] p-6 text-left hover:border-[#2563EB] hover:shadow-sm transition-all block"
+            className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
           >
-            <p className="text-sm font-medium text-[#6B7280] mb-6">Fixed Deposits</p>
+            <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6">Fixed Deposits</p>
             {portfolioLoading ? (
-              <div className="h-10 w-24 bg-[#F6F8FB] rounded animate-pulse mb-2" />
+              <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
             ) : (
               <>
-                <p className="text-3xl font-semibold text-[#0F172A] number-emphasis mb-2">
+                <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
                   {formatCurrency(portfolio.allocation.find(a => a.name === 'Fixed Deposit' || a.name === 'Fixed Deposits')?.value || 0)}
                 </p>
-                <p className="text-base font-medium text-[#6B7280]">
+                <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
                   {portfolio.allocation.find(a => a.name === 'Fixed Deposit' || a.name === 'Fixed Deposits')?.percentage.toFixed(0) || '0'}%
                 </p>
               </>
@@ -647,17 +702,17 @@ export default function DashboardPage() {
           {/* Others Tile */}
           <Link 
             href="/portfolio/summary"
-            className="bg-white rounded-xl border border-[#E5E7EB] p-6 text-left hover:border-[#2563EB] hover:shadow-sm transition-all block"
+            className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
           >
-            <p className="text-sm font-medium text-[#6B7280] mb-6">Others</p>
+            <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6">Others</p>
             {portfolioLoading ? (
-              <div className="h-10 w-24 bg-[#F6F8FB] rounded animate-pulse mb-2" />
+              <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
             ) : (
               <>
-                <p className="text-3xl font-semibold text-[#0F172A] number-emphasis mb-2">
+                <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
                   {formatCurrency(portfolio.allocation.filter(a => !['Mutual Funds', 'Equity', 'Stocks', 'Fixed Deposit', 'Fixed Deposits'].includes(a.name)).reduce((sum, a) => sum + a.value, 0))}
                 </p>
-                <p className="text-base font-medium text-[#6B7280]">
+                <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
                   {portfolio.allocation.filter(a => !['Mutual Funds', 'Equity', 'Stocks', 'Fixed Deposit', 'Fixed Deposits'].includes(a.name)).reduce((sum, a) => sum + a.percentage, 0).toFixed(0)}%
                 </p>
               </>
@@ -674,55 +729,116 @@ export default function DashboardPage() {
         {/* ZONE 4: PORTFOLIO ALLOCATION (Below the Fold) */}
         {/* ============================================================================ */}
         {isDataConsistent && (
-        <section className="mb-8 bg-white rounded-xl border border-[#E5E7EB] p-8">
-          <h2 className="text-lg font-semibold text-[#0F172A] mb-8">Portfolio Allocation</h2>
+        <section className="mb-8 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8">
+          <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-8">Portfolio Allocation</h2>
           
           {portfolio.allocation.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-[#475569] mb-2">No allocation data</p>
-              <p className="text-sm text-[#6B7280]">Upload your portfolio to see asset breakdown</p>
+              <p className="text-[#475569] dark:text-[#CBD5E1] mb-2">No allocation data</p>
+              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Upload your portfolio to see asset breakdown</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              {/* Left: Donut Chart (5 cols) */}
+              {/* Left: Interactive Pie Chart (5 cols) */}
               <div className="lg:col-span-5 flex items-center justify-center">
-                <div className="relative w-72 h-72">
-                  <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                    {portfolio.allocation.reduce((acc, item, index) => {
-                      const offset = acc.offset;
-                      const circumference = 2 * Math.PI * 38;
-                      const strokeDasharray = (item.percentage / 100) * circumference;
-                      acc.elements.push(
-                        <circle
-                          key={index}
-                          cx="50"
-                          cy="50"
-                          r="38"
-                          fill="none"
-                          stroke={item.color}
-                          strokeWidth="8"
-                          strokeDasharray={`${strokeDasharray} ${circumference}`}
-                          strokeDashoffset={-offset}
-                          className="transition-all duration-500"
-                        />
-                      );
-                      acc.offset += strokeDasharray;
-                      return acc;
-                    }, { elements: [] as React.ReactElement[], offset: 0 }).elements}
+                <div className="relative w-[331px] h-[331px]">
+                  <svg viewBox="0 0 200 200" className="w-full h-full">
+                    {(() => {
+                      const centerX = 100;
+                      const centerY = 100;
+                      const radius = 92;
+                      let startAngle = -90; // Start from top
+
+                      return portfolio.allocation.map((item, index) => {
+                        const angle = (item.percentage / 100) * 360;
+                        const endAngle = startAngle + angle;
+                        
+                        // Convert angles to radians
+                        const startRad = (startAngle * Math.PI) / 180;
+                        const endRad = (endAngle * Math.PI) / 180;
+                        
+                        // Calculate path points
+                        const x1 = centerX + radius * Math.cos(startRad);
+                        const y1 = centerY + radius * Math.sin(startRad);
+                        const x2 = centerX + radius * Math.cos(endRad);
+                        const y2 = centerY + radius * Math.sin(endRad);
+                        
+                        // Determine if we need a large arc
+                        const largeArcFlag = angle > 180 ? 1 : 0;
+                        
+                        // Create SVG path
+                        const pathData = [
+                          `M ${centerX} ${centerY}`,
+                          `L ${x1} ${y1}`,
+                          `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+                          'Z'
+                        ].join(' ');
+                        
+                        const slice = (
+                          <path
+                            key={index}
+                            d={pathData}
+                            fill={item.color}
+                            className={`transition-all duration-300 cursor-pointer ${
+                              hoveredIndex === index 
+                                ? 'opacity-100 scale-110' 
+                                : hoveredIndex === null 
+                                  ? 'opacity-100' 
+                                  : 'opacity-30 blur-[2px]'
+                            }`}
+                            style={{
+                              transformOrigin: '100px 100px',
+                              filter: hoveredIndex === index ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))' : 'none'
+                            }}
+                            onMouseEnter={() => setHoveredIndex(index)}
+                            onMouseLeave={() => setHoveredIndex(null)}
+                          />
+                        );
+                        
+                        startAngle = endAngle;
+                        return slice;
+                      });
+                    })()}
                   </svg>
                 </div>
               </div>
 
-              {/* Right: Textual Breakdown (7 cols) */}
+              {/* Right: Interactive Legend (7 cols) */}
               <div className="lg:col-span-7 flex flex-col justify-center">
                 <div className="space-y-5">
                   {portfolio.allocation.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between py-3">
+                    <div 
+                      key={i} 
+                      className={`flex items-center justify-between py-3 px-4 rounded-lg transition-all duration-300 cursor-pointer ${
+                        hoveredIndex === i 
+                          ? 'bg-[#F6F8FB] dark:bg-[#334155] scale-105 shadow-sm' 
+                          : 'hover:bg-[#F9FAFB] dark:hover:bg-[#334155]'
+                      }`}
+                      onMouseEnter={() => setHoveredIndex(i)}
+                      onMouseLeave={() => setHoveredIndex(null)}
+                    >
                       <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="text-base font-medium text-[#0F172A]">{item.name}</span>
+                        <div 
+                          className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                            hoveredIndex === i ? 'scale-150 shadow-md' : ''
+                          }`}
+                          style={{ backgroundColor: item.color }} 
+                        />
+                        <span className={`text-base font-medium transition-all duration-300 ${
+                          hoveredIndex === i 
+                            ? 'text-[#0F172A] dark:text-[#F8FAFC] font-semibold' 
+                            : 'text-[#0F172A] dark:text-[#F8FAFC]'
+                        }`}>
+                          {item.name}
+                        </span>
                       </div>
-                      <span className="text-lg font-semibold text-[#0F172A] number-emphasis">{item.percentage.toFixed(0)}%</span>
+                      <span className={`text-lg font-semibold number-emphasis transition-all duration-300 ${
+                        hoveredIndex === i 
+                          ? 'text-[#0F172A] dark:text-[#F8FAFC] scale-110' 
+                          : 'text-[#0F172A] dark:text-[#F8FAFC]'
+                      }`}>
+                        {item.percentage.toFixed(0)}%
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -735,10 +851,45 @@ export default function DashboardPage() {
         {/* ============================================================================ */}
         {/* ZONE 5: PERFORMANCE SNAPSHOT (Below the Fold) */}
         {/* ============================================================================ */}
-        <section className="mb-8 bg-white rounded-xl border border-[#E5E7EB] p-6">
+        <section className="mb-8 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
           <div className="text-center">
-            <p className="text-2xl font-semibold text-[#0F172A] number-emphasis">Portfolio XIRR: 12.5%</p>
-            <p className="text-sm text-[#6B7280] mt-2">Since inception • All asset classes</p>
+            {(() => {
+              // Calculate XIRR from portfolio data
+              // Use createdAt (portfolio creation date) as start date, or 1 year ago as fallback
+              const startDate = portfolioData.summary.createdAt 
+                ? new Date(portfolioData.summary.createdAt)
+                : portfolioData.summary.lastUpdated
+                  ? new Date(portfolioData.summary.lastUpdated)
+                  : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000); // 1 year ago as default
+              
+              const xirr = calculateXIRRFromHoldings(
+                portfolioData.holdings.map(h => ({
+                  investedValue: h.investedValue,
+                  currentValue: h.currentValue,
+                })),
+                startDate
+              );
+              
+              return (
+                <>
+                  <p className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
+                    Portfolio XIRR: {xirr !== null ? formatXIRR(xirr, false) : 'N/A'}
+                  </p>
+                  <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-2">
+                    {xirr !== null 
+                      ? (portfolioData.summary.createdAt 
+                          ? `Since ${new Date(portfolioData.summary.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })} • All asset classes`
+                          : portfolioData.summary.lastUpdated
+                            ? `Since ${new Date(portfolioData.summary.lastUpdated).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })} • All asset classes`
+                            : 'Since inception • All asset classes')
+                      : portfolioData.holdings.length === 0
+                        ? 'Add holdings to calculate XIRR'
+                        : 'Requires at least 30 days of data • All asset classes'
+                    }
+                  </p>
+                </>
+              );
+            })()}
           </div>
         </section>
 
@@ -750,56 +901,56 @@ export default function DashboardPage() {
           message="Portfolio insights are generated based on your holdings. More complete data leads to more accurate insights."
           position="top"
         >
-          <section className="mb-16 bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
-            <div className="px-6 py-4 border-b border-[#E5E7EB]">
-              <h2 className="text-lg font-semibold text-[#0F172A]">Insights & Alerts</h2>
+          <section className="mb-16 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
+              <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Insights & Alerts</h2>
             </div>
           
-          <div className="divide-y divide-[#E5E7EB]">
+          <div className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
             {portfolio.insights.slice(0, 3).map((insight) => {
               const isExpanded = expandedInsightId === insight.id;
               return (
                 <div key={insight.id}>
                   <button
                     onClick={() => setExpandedInsightId(isExpanded ? null : insight.id)}
-                    className="w-full px-6 py-5 flex items-center justify-between hover:bg-[#F6F8FB] transition-colors text-left cursor-pointer"
+                    className="w-full px-6 py-5 flex items-center justify-between hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left cursor-pointer"
                   >
                     <div className="flex items-center gap-4">
                       {insight.type === 'opportunity' ? (
-                        <AlertTriangleIcon className="w-5 h-5 text-[#F59E0B] flex-shrink-0" />
+                        <AlertTriangleIcon className="w-5 h-5 text-[#F59E0B] dark:text-[#FBBF24] flex-shrink-0" />
                       ) : (
-                        <InfoIcon className="w-5 h-5 text-[#6B7280] flex-shrink-0" />
+                        <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0" />
                       )}
                       <div>
-                        <p className="text-sm font-medium text-[#0F172A]">{insight.title}</p>
-                        <p className="text-xs text-[#6B7280] mt-1">{insight.description}</p>
+                        <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{insight.title}</p>
+                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">{insight.description}</p>
                       </div>
                     </div>
                     <ChevronDownIcon 
-                      className={`w-5 h-5 text-[#6B7280] flex-shrink-0 transition-transform ${
+                      className={`w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 transition-transform ${
                         isExpanded ? 'rotate-0' : 'rotate-[-90deg]'
                       }`} 
                     />
                   </button>
                   {isExpanded && (
-                    <div className="px-6 py-4 bg-[#F6F8FB] border-t border-[#E5E7EB]">
-                      <div className="text-sm text-[#475569] leading-relaxed">
+                    <div className="px-6 py-4 bg-[#F6F8FB] dark:bg-[#334155] border-t border-[#E5E7EB] dark:border-[#334155]">
+                      <div className="text-sm text-[#475569] dark:text-[#CBD5E1] leading-relaxed">
                         <p className="mb-2">
-                          <strong className="text-[#0F172A]">Details:</strong>
+                          <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Details:</strong>
                         </p>
-                        <p className="text-[#475569]">
+                        <p className="text-[#475569] dark:text-[#CBD5E1]">
                           {insight.description}
                         </p>
                         {insight.type === 'warning' && (
-                          <div className="mt-3 p-3 bg-[#FEF3C7] border border-[#F59E0B]/20 rounded-lg">
-                            <p className="text-xs text-[#92400E]">
+                          <div className="mt-3 p-3 bg-[#FEF3C7] dark:bg-[#78350F] border border-[#F59E0B]/20 dark:border-[#FBBF24]/20 rounded-lg">
+                            <p className="text-xs text-[#92400E] dark:text-[#FCD34D]">
                               This insight requires attention. Consider reviewing your portfolio allocation.
                             </p>
                           </div>
                         )}
                         {insight.type === 'opportunity' && (
-                          <div className="mt-3 p-3 bg-[#D1FAE5] border border-[#16A34A]/20 rounded-lg">
-                            <p className="text-xs text-[#065F46]">
+                          <div className="mt-3 p-3 bg-[#D1FAE5] dark:bg-[#14532D] border border-[#16A34A]/20 dark:border-[#22C55E]/20 rounded-lg">
+                            <p className="text-xs text-[#065F46] dark:text-[#86EFAC]">
                               This is an opportunity to optimize your portfolio.
                             </p>
                           </div>
@@ -814,7 +965,7 @@ export default function DashboardPage() {
           
           {/* Show upsell banner if more insights available */}
           {portfolio.insights.length > 3 && (
-            <div className="px-6 py-4 border-t border-[#E5E7EB]">
+            <div className="px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155]">
               <InsightsLimitBanner
                 totalInsights={portfolio.insights.length}
                 shownInsights={3}
@@ -830,13 +981,13 @@ export default function DashboardPage() {
         <section className="mb-16">
           <Link
             href="/analytics/overview"
-            className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-[#2563EB] bg-white border border-[#2563EB] rounded-lg hover:bg-[#EFF6FF] transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-[#2563EB] dark:text-[#3B82F6] bg-white dark:bg-[#1E293B] border border-[#2563EB] dark:border-[#3B82F6] rounded-lg hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A8A] transition-colors"
           >
-            <InfoIcon className="w-4 h-4" />
+            <InfoIcon className="w-4 h-4 text-[#2563EB] dark:text-[#3B82F6]" />
             View Advanced Analytics
-            <ArrowRightIcon className="w-4 h-4" />
+            <ArrowRightIcon className="w-4 h-4 text-[#2563EB] dark:text-[#3B82F6]" />
           </Link>
-          <p className="text-xs text-[#6B7280] mt-2 ml-1">
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-2 ml-1">
             Explore exposure analytics: sector, market cap, and geography breakdowns
           </p>
         </section>
@@ -872,6 +1023,7 @@ export default function DashboardPage() {
         isOpen={isManualModalOpen}
         onClose={() => setIsManualModalOpen(false)}
         userId={user?.id || ''}
+        source="dashboard"
         onSuccess={handleUploadSuccess}
       />
     </div>

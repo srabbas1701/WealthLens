@@ -182,18 +182,18 @@ export default function OnboardingChecklist({ onDismiss }: OnboardingChecklistPr
   const allCompleted = completedCount === totalSteps;
 
   return (
-    <div className="bg-white rounded-xl border border-[#E5E7EB] shadow-sm mb-6">
+    <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-sm mb-6">
       {/* Header - Always visible */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB]">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-[#0F172A]">Getting Started</h3>
+            <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Getting Started</h3>
             {allCompleted && (
-              <span className="text-xs text-[#16A34A] font-medium">Complete</span>
+              <span className="text-xs text-[#16A34A] dark:text-[#22C55E] font-medium">Complete</span>
             )}
           </div>
           {!allCompleted && (
-            <span className="text-xs text-[#6B7280]">
+            <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
               {completedCount} of {totalSteps} completed
             </span>
           )}
@@ -201,21 +201,21 @@ export default function OnboardingChecklist({ onDismiss }: OnboardingChecklistPr
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="p-2 rounded-lg hover:bg-[#F6F8FB] transition-colors"
+            className="p-2 rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
             aria-label={isExpanded ? 'Collapse' : 'Expand'}
           >
             {isExpanded ? (
-              <ChevronUpIcon className="w-5 h-5 text-[#6B7280]" />
+              <ChevronUpIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
             ) : (
-              <ChevronDownIcon className="w-5 h-5 text-[#6B7280]" />
+              <ChevronDownIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
             )}
           </button>
           <button
             onClick={handleDismiss}
-            className="p-2 rounded-lg hover:bg-[#F6F8FB] transition-colors"
+            className="p-2 rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
             aria-label="Dismiss"
           >
-            <XIcon className="w-5 h-5 text-[#6B7280]" />
+            <XIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
           </button>
         </div>
       </div>
@@ -228,12 +228,12 @@ export default function OnboardingChecklist({ onDismiss }: OnboardingChecklistPr
               key={step.id}
               className={`flex items-start gap-4 p-4 rounded-lg border transition-colors ${
                 step.completed
-                  ? 'bg-[#F0FDF4] border-[#D1FAE5]'
-                  : 'bg-[#F6F8FB] border-[#E5E7EB] hover:bg-[#F9FAFB]'
+                  ? 'bg-[#F0FDF4] dark:bg-[#166534]/20 border-[#D1FAE5] dark:border-[#22C55E]/30'
+                  : 'bg-[#F6F8FB] dark:bg-[#334155] border-[#E5E7EB] dark:border-[#334155] hover:bg-[#F9FAFB] dark:hover:bg-[#475569]'
               }`}
             >
               <div className={`flex-shrink-0 mt-0.5 ${
-                step.completed ? 'text-[#16A34A]' : 'text-[#6B7280]'
+                step.completed ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#6B7280] dark:text-[#94A3B8]'
               }`}>
                 {step.completed ? (
                   <CheckCircleIcon className="w-6 h-6" />
@@ -248,19 +248,19 @@ export default function OnboardingChecklist({ onDismiss }: OnboardingChecklistPr
                     {step.icon}
                   </div>
                   <h4 className={`text-sm font-medium ${
-                    step.completed ? 'text-[#166534]' : 'text-[#0F172A]'
+                    step.completed ? 'text-[#166534] dark:text-[#22C55E]' : 'text-[#0F172A] dark:text-[#F8FAFC]'
                   }`}>
                     {step.title}
                   </h4>
                 </div>
-                <p className="text-sm text-[#6B7280] mb-3">
+                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-3">
                   {step.description}
                 </p>
                 {step.actionLabel && step.actionHref && !step.completed && (
                   <Link
                     href={step.actionHref}
                     onClick={() => handleStepClick(step.id, step.actionHref)}
-                    className="inline-flex items-center gap-2 text-sm text-[#2563EB] font-medium hover:text-[#1E40AF] transition-colors"
+                    className="inline-flex items-center gap-2 text-sm text-[#2563EB] dark:text-[#3B82F6] font-medium hover:text-[#1E40AF] dark:hover:text-[#2563EB] transition-colors"
                   >
                     {step.actionLabel}
                     <ArrowRightIcon className="w-4 h-4" />
@@ -272,8 +272,8 @@ export default function OnboardingChecklist({ onDismiss }: OnboardingChecklistPr
 
           {/* Completion Message */}
           {allCompleted && (
-            <div className="mt-4 p-4 bg-[#F0FDF4] border border-[#D1FAE5] rounded-lg">
-              <p className="text-sm text-[#166534] text-center">
+            <div className="mt-4 p-4 bg-[#F0FDF4] dark:bg-[#166534]/20 border border-[#D1FAE5] dark:border-[#22C55E]/30 rounded-lg">
+              <p className="text-sm text-[#166534] dark:text-[#22C55E] text-center">
                 Great! You're all set. Explore your portfolio and insights to get the most out of WealthLens.
               </p>
             </div>

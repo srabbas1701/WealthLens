@@ -115,6 +115,14 @@ export interface ConfirmUploadRequest {
 }
 
 /**
+ * Unresolved scheme (MF asset that couldn't be identified)
+ */
+export interface UnresolvedScheme {
+  name: string;
+  reason: string;
+}
+
+/**
  * Confirm upload response
  */
 export interface ConfirmUploadResponse {
@@ -131,6 +139,12 @@ export interface ConfirmUploadResponse {
   
   // Error details if failed
   error?: string;
+  
+  // Warnings (non-blocking issues like unresolved ISINs)
+  warnings?: string[];
+  
+  // Unresolved MF schemes (deprecated - use warnings instead)
+  unresolvedSchemes?: UnresolvedScheme[];
 }
 
 /**

@@ -52,22 +52,69 @@ export interface PriceUpdateResult {
 // ============================================================================
 
 /**
- * Get previous trading day date
+ * Get previous trading day date (in IST timezone)
  * 
  * Returns the most recent trading day (excludes weekends).
- * For MVP, we'll use yesterday if it's a weekday, otherwise go back to Friday.
+ * Uses IST timezone (GMT+5:30) to determine the current date.
  */
 export function getPreviousTradingDay(): string {
-  const today = new Date();
-  let date = new Date(today);
-  date.setDate(date.getDate() - 1);
+  // Get current UTC time
+  const now = new Date();
   
-  // If yesterday was Sunday (0) or Saturday (6), go back to Friday
-  while (date.getDay() === 0 || date.getDay() === 6) {
-    date.setDate(date.getDate() - 1);
+  // Convert UTC to IST (GMT+5:30)
+  // IST is UTC+5:30, so we add 5 hours 30 minutes to get IST time
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const istTimeMs = now.getTime() + istOffsetMs;
+  const istDate = new Date(istTimeMs);
+  
+  // Extract IST date components (using UTC methods because we already added offset)
+  const istYear = istDate.getUTCFullYear();
+  const istMonth = istDate.getUTCMonth();
+  const istDay = istDate.getUTCDate();
+  const istHours = istDate.getUTCHours();
+  const istMinutes = istDate.getUTCMinutes();
+  
+  // Start with yesterday in IST
+  let targetYear = istYear;
+  let targetMonth = istMonth;
+  let targetDay = istDay - 1;
+  
+  // Handle month/year boundaries
+  if (targetDay < 1) {
+    targetMonth -= 1;
+    if (targetMonth < 0) {
+      targetMonth = 11;
+      targetYear -= 1;
+    }
+    // Get last day of previous month
+    const daysInPrevMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+    targetDay = daysInPrevMonth;
   }
   
-  return date.toISOString().split('T')[0]; // YYYY-MM-DD
+  // Create a date object for this date (day of week is same everywhere)
+  // Use noon UTC to avoid timezone edge cases
+  let checkDate = new Date(Date.UTC(targetYear, targetMonth, targetDay, 12, 0, 0));
+  let dayOfWeek = checkDate.getUTCDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+  
+  // Keep going back until we find a weekday (Mon-Fri)
+  while (dayOfWeek === 0 || dayOfWeek === 6) {
+    targetDay -= 1;
+    if (targetDay < 1) {
+      targetMonth -= 1;
+      if (targetMonth < 0) {
+        targetMonth = 11;
+        targetYear -= 1;
+      }
+      const daysInPrevMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+      targetDay = daysInPrevMonth;
+    }
+    checkDate = new Date(Date.UTC(targetYear, targetMonth, targetDay, 12, 0, 0));
+    dayOfWeek = checkDate.getUTCDay();
+  }
+  
+  const result = `${targetYear}-${String(targetMonth+1).padStart(2,'0')}-${String(targetDay).padStart(2,'0')}`;
+  
+  return result;
 }
 
 /**
@@ -396,7 +443,7 @@ export async function updateStockPrices(symbols: string[]): Promise<PriceUpdateR
 }
 
 /**
- * Get stock prices for multiple symbols
+ * Get stock prices for multiple symbols (OPTIMIZED: Batch query)
  * 
  * @param symbols - Array of NSE stock symbols
  * @returns Map of symbol to price (or null if not found)
@@ -406,11 +453,78 @@ export async function getStockPrices(
 ): Promise<Map<string, StockPrice | null>> {
   const prices = new Map<string, StockPrice | null>();
   
-  for (const symbol of symbols) {
-    const price = await getStockPrice(symbol);
-    prices.set(symbol.toUpperCase(), price);
+  if (symbols.length === 0) {
+    return prices;
   }
   
-  return prices;
+  try {
+    const supabase = createAdminClient();
+    const targetDate = getPreviousTradingDay();
+    const upperSymbols = symbols.map(s => s.toUpperCase());
+    
+    // Batch query: Get prices for all symbols at once for the target date
+    const { data: priceData, error } = await supabase
+      .from('stock_prices')
+      .select('symbol, closing_price, price_date, last_updated, price_source')
+      .in('symbol', upperSymbols)
+      .eq('price_date', targetDate);
+    
+    // Create a map of found prices
+    const foundPrices = new Map<string, StockPrice>();
+    if (priceData && !error) {
+      for (const row of priceData) {
+        foundPrices.set(row.symbol.toUpperCase(), {
+          symbol: row.symbol,
+          price: row.closing_price,
+          priceDate: row.price_date,
+          lastUpdated: row.last_updated,
+        });
+      }
+    }
+    
+    // For symbols not found for target date, get latest prices in batch
+    const missingSymbols = upperSymbols.filter(s => !foundPrices.has(s));
+    if (missingSymbols.length > 0) {
+      // Get latest price for each missing symbol using a more efficient query
+      // We'll use a subquery approach: get the latest price_date per symbol, then join
+      const { data: latestPrices, error: latestError } = await supabase
+        .from('stock_prices')
+        .select('symbol, closing_price, price_date, last_updated, price_source')
+        .in('symbol', missingSymbols)
+        .order('price_date', { ascending: false });
+      
+      if (latestPrices && !latestError) {
+        // Group by symbol and take the first (most recent) for each
+        const latestBySymbol = new Map<string, StockPrice>();
+        for (const row of latestPrices) {
+          const symbol = row.symbol.toUpperCase();
+          if (!latestBySymbol.has(symbol)) {
+            latestBySymbol.set(symbol, {
+              symbol: row.symbol,
+              price: row.closing_price,
+              priceDate: row.price_date,
+              lastUpdated: row.last_updated,
+            });
+          }
+        }
+        
+        // Add latest prices to found prices
+        for (const [symbol, price] of latestBySymbol) {
+          foundPrices.set(symbol, price);
+        }
+      }
+    }
+    
+    // Build result map (include null for symbols not found)
+    for (const symbol of upperSymbols) {
+      prices.set(symbol, foundPrices.get(symbol) || null);
+    }
+    
+    return prices;
+  } catch (error) {
+    console.error(`[Stock Price Service] Error getting batch prices:`, error);
+    // Fallback: return empty map (will use invested_value as fallback)
+    return prices;
+  }
 }
 

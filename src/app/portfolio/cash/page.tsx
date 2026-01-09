@@ -233,7 +233,7 @@ export default function CashHoldingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB]">
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
         backHref="/dashboard"
@@ -244,21 +244,21 @@ export default function CashHoldingsPage() {
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
         {/* Page Title */}
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A] mb-2">Cash Holdings</h1>
-          <p className="text-sm text-[#6B7280]">
+          <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Cash Holdings</h1>
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             {holdings.length} account{holdings.length !== 1 ? 's' : ''} • Total Balance: {formatCurrency(totalBalance)} • {portfolioPercentage.toFixed(1)}% of portfolio
           </p>
         </div>
 
         {/* Holdings Table */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden mb-6">
+        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
           <div className="overflow-x-auto">
             <div className="inline-block min-w-full align-middle">
               <table className="w-full">
-                <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                <thead className="bg-[#F9FAFB] dark:bg-[#334155] border-b border-[#E5E7EB] dark:border-[#334155]">
                   <tr>
                     <th 
-                      className="px-6 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-6 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('name')}
                     >
                       <div className="flex items-center gap-2">
@@ -267,7 +267,7 @@ export default function CashHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('accountType')}
                     >
                       <div className="flex items-center gap-2">
@@ -276,7 +276,7 @@ export default function CashHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('balance')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -285,7 +285,7 @@ export default function CashHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('interestRate')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -294,7 +294,7 @@ export default function CashHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('lastUpdated')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -309,29 +309,29 @@ export default function CashHoldingsPage() {
                     <tr>
                       <td colSpan={5} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center gap-2">
-                          <p className="text-sm text-[#6B7280] mb-2">No cash holdings found</p>
-                          <p className="text-xs text-[#9CA3AF]">Add cash accounts to track your liquid assets</p>
+                          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">No cash holdings found</p>
+                          <p className="text-xs text-[#9CA3AF] dark:text-[#64748B]">Add cash accounts to track your liquid assets</p>
                         </div>
                       </td>
                     </tr>
                   ) : (
                     sortedHoldings.map((holding) => (
-                      <tr key={holding.id} className="hover:bg-[#F9FAFB] transition-colors">
+                      <tr key={holding.id} className="hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
                         <td className="px-6 py-3.5">
-                          <p className="text-sm font-medium text-[#0F172A]">{holding.name}</p>
+                          <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.name}</p>
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-[#F3F4F6] text-[#4B5563]">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-[#F3F4F6] dark:bg-[#334155] text-[#4B5563] dark:text-[#CBD5E1]">
                             {holding.accountType}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                           {formatCurrency(holding.balance)}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           {holding.interestRate !== null ? `${holding.interestRate.toFixed(2)}%` : '—'}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#6B7280]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] dark:text-[#94A3B8]">
                           {formatDateTime(holding.lastUpdated)}
                         </td>
                       </tr>
@@ -339,13 +339,13 @@ export default function CashHoldingsPage() {
                   )}
                 </tbody>
                 {sortedHoldings.length > 0 && (
-                  <tfoot className="bg-[#F9FAFB] border-t-2 border-[#E5E7EB]">
+                  <tfoot className="bg-[#F9FAFB] dark:bg-[#334155] border-t-2 border-[#E5E7EB] dark:border-[#334155]">
                     <tr>
-                      <td className="px-6 py-3.5 text-sm font-semibold text-[#0F172A]">
+                      <td className="px-6 py-3.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                         Total
                       </td>
                       <td className="px-4 py-3.5"></td>
-                      <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A]">
+                      <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatCurrency(totalBalance)}
                       </td>
                       <td className="px-4 py-3.5"></td>
@@ -359,14 +359,14 @@ export default function CashHoldingsPage() {
         </div>
 
         {/* Verification Note */}
-        <div className="mb-6 bg-white rounded-xl border border-[#E5E7EB] p-4">
+        <div className="mb-6 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4">
           <div className="flex items-start gap-3">
             <CheckCircleIcon className="w-5 h-5 text-[#16A34A] flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-[#0F172A]">
+              <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                 Verification: Total matches dashboard cash value ({formatCurrency(totalBalance)}) ✓
               </p>
-              <p className="text-xs text-[#6B7280] mt-1">
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                 Cash balances shown are from your portfolio data.
               </p>
             </div>
@@ -375,14 +375,14 @@ export default function CashHoldingsPage() {
 
         {/* Minimal Liquidity Insight */}
         {liquidityInsight && sortedHoldings.length > 0 && (
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-6">
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
             <div className="flex items-center gap-2 mb-3">
-              <InfoIcon className="w-5 h-5 text-[#6B7280]" />
-              <h2 className="text-lg font-semibold text-[#0F172A]">Liquidity Overview</h2>
+              <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+              <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Liquidity Overview</h2>
             </div>
-            <div className="text-sm text-[#475569] leading-relaxed">
+            <div className="text-sm text-[#475569] dark:text-[#CBD5E1] leading-relaxed">
               <p>
-                <strong className="text-[#0F172A]">Total Cash:</strong> {formatCurrency(totalBalance)} ({portfolioPercentage.toFixed(1)}% of portfolio)
+                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Total Cash:</strong> {formatCurrency(totalBalance)} ({portfolioPercentage.toFixed(1)}% of portfolio)
               </p>
               <p className="mt-2">
                 {liquidityInsight}

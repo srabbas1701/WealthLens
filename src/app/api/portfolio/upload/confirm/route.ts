@@ -68,6 +68,7 @@ import {
   getAssetClass,
   formatIndianCurrency,
 } from '@/lib/portfolio-calculations';
+import { getISINsBySchemeCode } from '@/lib/mf-scheme-master';
 
 type Asset = Database['public']['Tables']['assets']['Row'];
 
@@ -104,6 +105,210 @@ function getRiskBucket(assetType: AssetType): 'low' | 'medium' | 'high' {
 }
 
 /**
+ * Normalize scheme name for matching
+ * 
+ * Removes common noise words and normalizes format:
+ * - Lowercase
+ * - Trim whitespace
+ * - Remove: direct, regular, growth, plan, option, idcw, dividend, bonus
+ * - Collapse multiple spaces
+ * 
+ * Example:
+ * "ICICI Prudential Innovation Growth Direct Plan"
+ * → "icici prudential innovation"
+ * 
+ * EXPORTED for use in backfill service
+ */
+export function normalizeSchemeName(schemeName: string): string {
+  if (!schemeName) return '';
+  
+  // Lowercase and trim
+  let normalized = schemeName.toLowerCase().trim();
+  
+  // Remove common noise words (order matters - remove longer phrases first)
+  const noiseWords = [
+    'direct plan',
+    'regular plan',
+    'growth option',
+    'dividend option',
+    'idcw option',
+    'bonus option',
+    'direct',
+    'regular',
+    'growth',
+    'dividend',
+    'idcw',
+    'iddr',
+    'bonus',
+    'plan',
+    'option',
+    'fund',
+    'mf',
+  ];
+  
+  for (const word of noiseWords) {
+    // Remove word with surrounding spaces
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    normalized = normalized.replace(regex, ' ');
+  }
+  
+  // Collapse multiple spaces to single space
+  normalized = normalized.replace(/\s+/g, ' ').trim();
+  
+  return normalized;
+}
+
+/**
+ * Resolve MF scheme from mf_scheme_master (mf_scheme_master is the ONLY source of truth)
+ * 
+ * ARCHITECTURAL PRINCIPLE:
+ * - CSV IS NEVER a source of ISIN truth
+ * - mf_scheme_master is the ONLY source of scheme_code and ISINs
+ * - Upload succeeds even if resolution fails
+ * 
+ * Resolution strategy:
+ * 1. Normalize scheme name from CSV
+ * 2. Exact match on normalized name (ACTIVE schemes only)
+ * 3. Fallback to ILIKE match with fund_house preference
+ * 4. Prefer ACTIVE + DIRECT + GROWTH schemes
+ * 
+ * @param supabase - Supabase client
+ * @param holding - Parsed holding with scheme name
+ * @param warnings - Optional array to collect warnings (for response)
+ * @returns Resolved scheme data (isin, scheme_code, scheme_name) or null
+ */
+async function resolveMFScheme(
+  supabase: ReturnType<typeof createAdminClient>,
+  holding: ParsedHolding,
+  warnings?: string[]
+): Promise<{ isin: string; schemeCode: string; schemeName: string } | null> {
+  // CSV IS NEVER a source of ISIN truth - ignore CSV ISIN, always resolve from scheme master
+  if (!holding.name) {
+    const warning = `ISIN not resolved: No scheme name provided for mutual fund. Asset created without ISIN.`;
+    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    if (warnings) warnings.push(warning);
+    return null;
+  }
+  
+  const normalizedName = normalizeSchemeName(holding.name);
+  if (!normalizedName) {
+    const warning = `ISIN not resolved for "${holding.name}": Scheme name is empty after normalization. Asset created without ISIN.`;
+    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    if (warnings) warnings.push(warning);
+    return null;
+  }
+  
+  // Query mf_scheme_master - ONLY source of truth for ISINs
+  // Filter: ACTIVE schemes only
+  const { data: schemes, error } = await supabase
+    .from('mf_scheme_master')
+    .select('scheme_code, scheme_name, fund_house, isin_growth, isin_div_payout, isin_div_reinvest, scheme_status, last_updated')
+    .eq('scheme_status', 'Active')
+    .order('last_updated', { ascending: false });
+  
+  if (error) {
+    const warning = `ISIN not resolved for "${holding.name}": Error querying scheme master. Asset created without ISIN.`;
+    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    if (warnings) warnings.push(warning);
+    return null;
+  }
+  
+  if (!schemes || schemes.length === 0) {
+    const warning = `ISIN not resolved for "${holding.name}": Scheme master is empty. Asset created without ISIN.`;
+    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    if (warnings) warnings.push(warning);
+    return null;
+  }
+  
+  // Strategy 1: Exact match on normalized name
+  let bestMatch: typeof schemes[0] | null = null;
+  let bestScore = 0;
+  
+  for (const scheme of schemes) {
+    const schemeNormalized = normalizeSchemeName(scheme.scheme_name);
+    
+    if (schemeNormalized === normalizedName) {
+      // Prefer: ACTIVE + DIRECT + GROWTH
+      const isDirect = scheme.scheme_name.toLowerCase().includes('direct');
+      const isGrowth = scheme.isin_growth && !scheme.isin_div_payout && !scheme.isin_div_reinvest;
+      
+      const score = (isDirect ? 100 : 50) + (isGrowth ? 10 : 0);
+      
+      if (score > bestScore) {
+        bestMatch = scheme;
+        bestScore = score;
+      } else if (score === bestScore && scheme.last_updated && bestMatch?.last_updated) {
+        // If same score, prefer more recently updated
+        if (new Date(scheme.last_updated) > new Date(bestMatch.last_updated)) {
+          bestMatch = scheme;
+        }
+      }
+    }
+  }
+  
+  // Strategy 2: ILIKE match with fund_house preference (if no exact match)
+  if (!bestMatch) {
+    // Try ILIKE match on scheme_name
+    const { data: ilikeSchemes } = await supabase
+      .from('mf_scheme_master')
+      .select('scheme_code, scheme_name, fund_house, isin_growth, isin_div_payout, isin_div_reinvest, scheme_status, last_updated')
+      .eq('scheme_status', 'Active')
+      .ilike('scheme_name', `%${normalizedName}%`)
+      .order('last_updated', { ascending: false })
+      .limit(10);
+    
+    if (ilikeSchemes && ilikeSchemes.length > 0) {
+      // Extract fund house from CSV name (first part before "Mutual Fund" or similar)
+      const csvFundHouse = holding.name.match(/^([A-Za-z\s&]+?)(?:\s+(?:Mutual Fund|MF|Fund|Limited|Ltd))?/i)?.[1]?.trim().toLowerCase();
+      
+      for (const scheme of ilikeSchemes) {
+        const schemeNormalized = normalizeSchemeName(scheme.scheme_name);
+        const schemeFundHouse = scheme.fund_house?.toLowerCase().trim();
+        
+        // Prefer schemes with matching fund house
+        const fundHouseMatch = csvFundHouse && schemeFundHouse && 
+          (schemeFundHouse.includes(csvFundHouse) || csvFundHouse.includes(schemeFundHouse));
+        
+        const isDirect = scheme.scheme_name.toLowerCase().includes('direct');
+        const isGrowth = scheme.isin_growth && !scheme.isin_div_payout && !scheme.isin_div_reinvest;
+        
+        const score = (fundHouseMatch ? 75 : 25) + (isDirect ? 10 : 0) + (isGrowth ? 5 : 0);
+        
+        if (score > bestScore) {
+          bestMatch = scheme;
+          bestScore = score;
+        }
+      }
+    }
+  }
+  
+  if (!bestMatch) {
+    const warning = `ISIN not resolved for "${holding.name}" (normalized: "${normalizedName}"). No matching ACTIVE scheme found in scheme master. Asset created without ISIN.`;
+    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    if (warnings) warnings.push(warning);
+    return null;
+  }
+  
+  // Prefer Growth ISIN, fallback to Div Payout, then Div Reinvest
+  const resolvedIsin = bestMatch.isin_growth || bestMatch.isin_div_payout || bestMatch.isin_div_reinvest;
+  
+  if (!resolvedIsin) {
+    const warning = `ISIN not resolved for "${holding.name}": Matched scheme "${bestMatch.scheme_name}" but it has no ISIN. Asset created without ISIN.`;
+    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    if (warnings) warnings.push(warning);
+    return null;
+  }
+  
+  console.log(`  ✅ Resolved MF scheme: "${holding.name}" → ISIN: ${resolvedIsin}, Scheme Code: ${bestMatch.scheme_code}, Name: ${bestMatch.scheme_name}`);
+  
+  return {
+    isin: resolvedIsin,
+    schemeCode: bestMatch.scheme_code,
+    schemeName: bestMatch.scheme_name,
+  };
+}
+
+/**
  * Find existing asset by ISIN, Symbol, or Name
  * 
  * PRIORITY ORDER:
@@ -111,31 +316,62 @@ function getRiskBucket(assetType: AssetType): 'low' | 'medium' | 'high' {
  * 2. Symbol (reliable for Indian markets)
  * 3. Name (exact match, then fuzzy)
  * 
+ * For MF assets: ISIN resolution is best-effort enrichment, not mandatory.
+ * Upload proceeds even if ISIN cannot be resolved.
+ * 
  * This ensures:
  * - Same asset is always matched correctly
  * - No duplicate assets created
  * - Repeated uploads are idempotent
+ * - Uploads never fail due to missing ISIN
  */
 async function findAsset(
   supabase: ReturnType<typeof createAdminClient>,
   holding: ParsedHolding
 ): Promise<Asset | null> {
+  // For MF/ETF/Index Fund, attempt ISIN resolution (BEST EFFORT - NON-BLOCKING)
+  const isMF = holding.asset_type === 'mutual_fund' || holding.asset_type === 'index_fund' || holding.asset_type === 'etf';
+  let resolvedIsin: string | null = null;
+  let resolvedSchemeName: string | null = null;
+  
+  if (isMF) {
+    // Resolve from mf_scheme_master (ONLY source of truth)
+    // Note: warnings parameter not passed here - warnings collected in main loop
+    const resolution = await resolveMFScheme(supabase, holding);
+    if (resolution) {
+      // Scheme was resolved - use authoritative data from scheme master
+      resolvedIsin = resolution.isin;
+      resolvedSchemeName = resolution.schemeName;
+      // Store scheme_code for later use (will be used as symbol)
+      (holding as any)._schemeCode = resolution.schemeCode;
+      // Update holding with resolved ISIN
+      holding.isin = resolvedIsin;
+      // Use canonical scheme name from scheme master (more authoritative than CSV)
+      if (resolvedSchemeName) {
+        holding.name = resolvedSchemeName;
+      }
+    }
+    // If resolution fails, proceed without ISIN (non-blocking)
+    // Warning will be collected in main processing loop
+  }
+  
   // 1. Try ISIN first (most reliable)
-  if (holding.isin) {
+  const isinToSearch = resolvedIsin || holding.isin;
+  if (isinToSearch) {
     const { data: assetByIsin } = await supabase
       .from('assets')
       .select('*')
-      .eq('isin', holding.isin.toUpperCase())
+      .eq('isin', isinToSearch.toUpperCase())
       .single();
     
     if (assetByIsin) {
-      console.log(`  Found asset by ISIN: ${holding.isin} → ${assetByIsin.name}`);
+      console.log(`  Found asset by ISIN: ${isinToSearch} → ${assetByIsin.name}`);
       return assetByIsin;
     }
   }
   
-  // 2. Try Symbol (reliable for Indian markets)
-  if (holding.symbol) {
+  // 2. Try Symbol (reliable for Indian markets, not applicable for MF)
+  if (!isMF && holding.symbol) {
     const { data: assetBySymbol } = await supabase
       .from('assets')
       .select('*')
@@ -148,26 +384,28 @@ async function findAsset(
     }
   }
   
-  // 3. Try exact name match
+  // 3. Try exact name match (for all assets, including MF)
   if (holding.name) {
     const { data: assetByName } = await supabase
       .from('assets')
       .select('*')
       .eq('name', holding.name)
-      .single();
+      .eq('asset_type', holding.asset_type) // Match asset type too
+      .maybeSingle();
     
     if (assetByName) {
       console.log(`  Found asset by exact name: ${holding.name}`);
       return assetByName;
     }
     
-    // 4. Try fuzzy name match (last resort)
+    // 4. Try fuzzy name match (last resort, for all assets)
     const { data: assetByFuzzyName } = await supabase
       .from('assets')
       .select('*')
       .ilike('name', `%${holding.name}%`)
+      .eq('asset_type', holding.asset_type)
       .limit(1)
-      .single();
+      .maybeSingle();
     
     if (assetByFuzzyName) {
       console.log(`  Found asset by fuzzy name: "${holding.name}" → "${assetByFuzzyName.name}"`);
@@ -181,18 +419,54 @@ async function findAsset(
 
 /**
  * Create new asset in the database
+ * 
+ * For MF/ETF/Index Fund assets: ISIN is optional (best-effort enrichment).
+ * Upload proceeds even if ISIN is missing.
+ * 
+ * Asset creation rules for Mutual Funds:
+ * - asset_type = 'mutual_fund' | 'index_fund' | 'etf'
+ * - name = scheme name from CSV (as-is)
+ * - isin = resolved ISIN OR NULL (optional)
+ * - symbol = NULL (MF assets don't use symbols)
  */
 async function createAsset(
   supabase: ReturnType<typeof createAdminClient>,
   holding: ParsedHolding
 ): Promise<Asset> {
+  const isMF = holding.asset_type === 'mutual_fund' || holding.asset_type === 'index_fund' || holding.asset_type === 'etf';
+  
+  // ISIN is optional for MF assets - log warning if missing, but proceed
+  if (isMF && !holding.isin) {
+    console.warn(`  ⚠️ [MF Upload] ISIN not resolved for "${holding.name}". Created asset without ISIN.`);
+    // Continue - do NOT throw error
+  }
+  
+  // Validate ISIN format for MF assets (if provided)
+  if (isMF && holding.isin) {
+    const cleanIsin = holding.isin.toUpperCase().trim();
+    if (cleanIsin.length !== 12 || !/^[A-Z0-9]{12}$/.test(cleanIsin)) {
+      console.warn(
+        `  ⚠️ [MF Upload] Invalid ISIN format for "${holding.name}": ${holding.isin}. ` +
+        `Created asset without ISIN.`
+      );
+      // Clear invalid ISIN and proceed
+      holding.isin = undefined;
+    }
+  }
+  
+  // For MF assets: use scheme_code as symbol (AMFI scheme code)
+  // For other assets: use symbol from CSV
+  const symbol = isMF 
+    ? ((holding as any)._schemeCode || null) // Use scheme_code from resolution
+    : (holding.symbol?.toUpperCase() || null);
+  
   const { data: newAsset, error } = await supabase
     .from('assets')
     .insert({
-      name: holding.name,
+      name: holding.name, // Use canonical name from scheme master if resolved, otherwise CSV name
       asset_type: holding.asset_type,
-      symbol: holding.symbol?.toUpperCase() || null,
-      isin: holding.isin?.toUpperCase() || null,
+      symbol: symbol, // scheme_code for MF, symbol for others
+      isin: holding.isin?.toUpperCase() || null, // ISIN from scheme master (ONLY source of truth)
       asset_class: getAssetClassFromType(holding.asset_type),
       risk_bucket: getRiskBucket(holding.asset_type),
       is_active: true,
@@ -204,7 +478,16 @@ async function createAsset(
     throw new Error(`Failed to create asset "${holding.name}": ${error.message}`);
   }
   
-  console.log(`  Created new asset: ${newAsset.name} (${newAsset.asset_type})`);
+  if (isMF) {
+    if (newAsset.isin) {
+      console.log(`  ✅ Created MF asset: ${newAsset.name} (${newAsset.asset_type}) with ISIN: ${newAsset.isin}`);
+    } else {
+      console.log(`  ✅ Created MF asset: ${newAsset.name} (${newAsset.asset_type}) without ISIN (will be enriched later)`);
+    }
+  } else {
+    console.log(`  Created new asset: ${newAsset.name} (${newAsset.asset_type})`);
+  }
+  
   return newAsset;
 }
 
@@ -674,16 +957,37 @@ export async function POST(request: NextRequest) {
     let holdingsCreated = 0;
     let holdingsMerged = 0;
     let assetsCreated = 0;
+    const warnings: string[] = [];
     
     console.log('\nProcessing holdings:');
     for (const holding of validHoldings) {
       try {
+        const isMF = holding.asset_type === 'mutual_fund' || holding.asset_type === 'index_fund' || holding.asset_type === 'etf';
+        const hadIsinBefore = !!holding.isin;
+        
         // Find or create asset
+        // For MF assets: ISIN resolution is best-effort (non-blocking)
+        // Upload proceeds even if ISIN cannot be resolved
         let asset = await findAsset(supabase, holding);
         
+        // Track if ISIN was not resolved for MF assets (after resolution attempt)
+        if (isMF && !holding.isin && !hadIsinBefore) {
+          warnings.push(`ISIN not resolved for "${holding.name}". Asset created without ISIN and will be enriched later.`);
+        }
+        
         if (!asset) {
+          // createAsset will allow MF assets without ISIN (logs warning only)
           asset = await createAsset(supabase, holding);
           assetsCreated++;
+          
+          // Track if asset was created without ISIN
+          if (isMF && !asset.isin) {
+            // Warning already added above if ISIN wasn't resolved
+            // But also check if asset was created without ISIN for other reasons
+            if (hadIsinBefore && !asset.isin) {
+              warnings.push(`Asset "${holding.name}" created but ISIN was lost during processing.`);
+            }
+          }
         }
         
         // Merge holding (add to existing or create new)
@@ -701,12 +1005,20 @@ export async function POST(request: NextRequest) {
           holdingsMerged++;
         }
       } catch (holdingError) {
-        console.error(`Error processing "${holding.name}":`, holdingError);
-        // Continue with other holdings
+        const errorMessage = holdingError instanceof Error ? holdingError.message : String(holdingError);
+        console.error(`Error processing "${holding.name}":`, errorMessage);
+        // Continue with other holdings - do NOT block upload
+        // ISIN resolution failures are now warnings, not errors
+        warnings.push(`Error processing "${holding.name}": ${errorMessage}`);
       }
     }
     
     console.log(`\nResults: ${holdingsCreated} created, ${holdingsMerged} merged, ${assetsCreated} new assets`);
+    
+    if (warnings.length > 0) {
+      console.log(`\n⚠️ Warnings (${warnings.length}):`);
+      warnings.forEach(w => console.log(`  - ${w}`));
+    }
     
     // Recalculate metrics (CRITICAL - ensures consistency)
     await recalculateMetrics(supabase, portfolio.id);
@@ -715,14 +1027,19 @@ export async function POST(request: NextRequest) {
     console.log('\nGenerating insights...');
     await generateInsights(supabase, portfolio.id);
     
-    // Success response
+    // Success response (with warnings if any)
+    const message = warnings.length > 0
+      ? `Portfolio updated successfully with ${warnings.length} warning(s)`
+      : 'Portfolio updated successfully';
+    
     return NextResponse.json<ConfirmUploadResponse>({
       success: true,
-      message: 'Portfolio updated successfully',
+      message,
       holdingsCreated,
       holdingsUpdated: holdingsMerged,
       assetsCreated,
       portfolioId: portfolio.id,
+      warnings: warnings.length > 0 ? warnings : undefined,
     });
     
   } catch (error) {

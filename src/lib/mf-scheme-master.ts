@@ -37,130 +37,178 @@ export interface SchemeMaster {
 /**
  * Parse AMFI NAV file to extract scheme master data
  * 
- * AMFI NAV file format:
- * - Format: Scheme Code;ISIN Div Payout/ISIN Growth/ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
- * - Example: 119551;INF209KA12Z1;INF209KA13Z9;Aditya Birla Sun Life Banking & PSU Debt Fund - DIRECT - IDCW;110.3299;08-Dec-2025
- * - Fields are semicolon-separated
- * - ISINs are separated by semicolons (not slashes as in older format)
+ * AMFI NAV file format (semicolon separated):
+ * Index 0 → scheme_code
+ * Index 1 → isin_growth (or ISIN Div Payout)
+ * Index 2 → isin_div_reinvest
+ * Index 3 → scheme_name (HUMAN READABLE NAME)
+ * Index 4 → nav (DO NOT STORE IN SCHEME MASTER)
+ * Index 5 → nav_date
  * 
  * @param navContent - Raw NAV file content
- * @returns Array of scheme master records
+ * @returns Object with schemes array and rejection statistics
  */
-function parseSchemeMasterFromNAV(navContent: string): SchemeMaster[] {
-  const schemes: SchemeMaster[] = [];
+function parseSchemeMasterFromNAV(navContent: string): {
+  schemes: SchemeMaster[];
+  stats: {
+    totalRows: number;
+    parsed: number;
+    rejected: {
+      missingSchemeCode: number;
+      missingSchemeName: number;
+      schemeNameStartsWithINF: number;
+      schemeNameTooShort: number;
+      invalidSchemeCode: number;
+      headerOrEmpty: number;
+    };
+  };
+} {
   const lines = navContent.split('\n');
+  const schemeMap = new Map<string, SchemeMaster>();
   
   let currentSection = '';
-  const schemeMap = new Map<string, SchemeMaster>();
+  const stats = {
+    totalRows: lines.length,
+    parsed: 0,
+    rejected: {
+      missingSchemeCode: 0,
+      missingSchemeName: 0,
+      schemeNameStartsWithINF: 0,
+      schemeNameTooShort: 0,
+      invalidSchemeCode: 0,
+      headerOrEmpty: 0,
+    },
+  };
   
   for (const line of lines) {
     const trimmed = line.trim();
     
     // Skip empty lines
-    if (!trimmed) continue;
+    if (!trimmed) {
+      stats.rejected.headerOrEmpty++;
+      continue;
+    }
     
     // Check for section headers (contains scheme type info)
     if (trimmed.includes('Open Ended Schemes') || trimmed.includes('Close Ended Schemes')) {
       currentSection = trimmed;
+      stats.rejected.headerOrEmpty++;
       continue;
     }
     
     // Skip header lines
-    if (trimmed.includes('Scheme Code') || trimmed.includes('Net Asset Value')) {
+    if (trimmed.includes('Scheme Code') || trimmed.includes('Net Asset Value') || trimmed.includes('Date')) {
+      stats.rejected.headerOrEmpty++;
       continue;
     }
     
-    // Parse data line: Scheme Code;ISIN Div Payout;ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
-    // OR: Scheme Code;ISIN Div Payout/ISIN Growth/ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date (older format)
+    // Parse data line using correct column mapping
+    // Format: scheme_code;isin_growth;isin_div_reinvest;scheme_name;nav;nav_date
     const parts = trimmed.split(';').map(p => p.trim());
     
-    if (parts.length >= 5) {
-      const schemeCode = parts[0];
-      let isinDivPayout = '';
-      let isinGrowth = '';
-      let isinDivReinvest = '';
-      let schemeName = '';
-      let navValue = '';
-      
-      // Validate scheme code
-      if (!schemeCode || !/^\d+$/.test(schemeCode)) {
-        continue;
+    // Must have at least 6 fields (0-5)
+    if (parts.length < 6) {
+      stats.rejected.headerOrEmpty++;
+      continue;
+    }
+    
+    // Extract fields according to correct mapping
+    const schemeCode = parts[0] || '';
+    const isinGrowth = parts[1] || '';
+    const isinDivReinvest = parts[2] || '';
+    const schemeName = parts[3] || '';
+    // parts[4] = nav (IGNORE - do not store)
+    // parts[5] = nav_date (IGNORE - do not store)
+    
+    // VALIDATION RULE 1: Skip rows where scheme_code is missing
+    if (!schemeCode) {
+      stats.rejected.missingSchemeCode++;
+      continue;
+    }
+    
+    // VALIDATION RULE 2: Validate scheme code format (must be numeric)
+    if (!/^\d+$/.test(schemeCode)) {
+      stats.rejected.invalidSchemeCode++;
+      continue;
+    }
+    
+    // VALIDATION RULE 3: Skip rows where scheme_name is missing
+    if (!schemeName) {
+      stats.rejected.missingSchemeName++;
+      continue;
+    }
+    
+    // VALIDATION RULE 4: Reject rows where scheme_name starts with "INF"
+    if (schemeName.toUpperCase().startsWith('INF')) {
+      stats.rejected.schemeNameStartsWithINF++;
+      continue;
+    }
+    
+    // VALIDATION RULE 5: Reject rows where scheme_name length < 5
+    if (schemeName.length < 5) {
+      stats.rejected.schemeNameTooShort++;
+      continue;
+    }
+    
+    // Validate ISINs (should be 12 characters, starting with INF for Indian MFs)
+    const validateISIN = (isin: string): string | undefined => {
+      if (!isin) return undefined;
+      const cleanIsin = isin.toUpperCase().trim();
+      if (cleanIsin.length === 12 && /^[A-Z0-9]{12}$/.test(cleanIsin) && !['NA', 'NOTAPP', ''].includes(cleanIsin)) {
+        return cleanIsin;
       }
-      
-      // AMFI format can vary - try to detect format
-      // New format: Code;ISIN Payout;ISIN Growth;ISIN Reinv;Name;NAV;Date (7 fields)
-      // Old format: Code;ISIN Payout/ISIN Growth/ISIN Reinv;Name;NAV;Date (5 fields)
-      if (parts.length >= 7) {
-        // New format with separate ISIN fields
-        isinDivPayout = parts[1] || '';
-        isinGrowth = parts[2] || '';
-        isinDivReinvest = parts[3] || '';
-        schemeName = parts[4] || '';
-        navValue = parts[5] || '';
-      } else {
-        // Old format with combined ISIN field
-        const isinField = parts[1];
-        schemeName = parts[2] || '';
-        navValue = parts[3] || '';
-        
-        // Parse ISINs from combined field (may contain slashes or be semicolon-separated)
-        const isinParts = isinField.split(/[\/;]/).map(p => p.trim());
-        for (const isinPart of isinParts) {
-          // Extract 12-character ISIN (format: INF...)
-          const isinMatch = isinPart.match(/^([A-Z0-9]{12})/);
-          if (isinMatch) {
-            const isin = isinMatch[1];
-            const lowerPart = isinPart.toLowerCase();
-            if (lowerPart.includes('growth') || !isinGrowth) {
-              isinGrowth = isin;
-            } else if (lowerPart.includes('div') && (lowerPart.includes('payout') || lowerPart.includes('idcw'))) {
-              isinDivPayout = isin;
-            } else if (lowerPart.includes('div') && (lowerPart.includes('reinv') || lowerPart.includes('reinvest') || lowerPart.includes('iddr'))) {
-              isinDivReinvest = isin;
-            }
-          }
-        }
-      }
-      
-      // Validate ISINs (should be 12 characters, starting with INF for Indian MFs)
-      const validateISIN = (isin: string): boolean => {
-        return isin.length === 12 && /^[A-Z0-9]{12}$/.test(isin) && !['NA', 'NOTAPP', ''].includes(isin);
-      };
-      
-      if (isinGrowth && !validateISIN(isinGrowth)) isinGrowth = '';
-      if (isinDivPayout && !validateISIN(isinDivPayout)) isinDivPayout = '';
-      if (isinDivReinvest && !validateISIN(isinDivReinvest)) isinDivReinvest = '';
-      
-      // Extract fund house from scheme name (usually first part before "Mutual Fund" or similar)
-      let fundHouse = '';
-      const fundHouseMatch = schemeName.match(/^([A-Za-z\s&]+?)(?:\s+(?:Mutual Fund|MF|Fund|Limited|Ltd))?/);
-      if (fundHouseMatch) {
-        fundHouse = fundHouseMatch[1].trim();
-      }
-      
-      // Store or update scheme master
-      if (!schemeMap.has(schemeCode)) {
-        schemeMap.set(schemeCode, {
-          schemeCode,
-          schemeName,
-          fundHouse: fundHouse || undefined,
-          schemeType: currentSection || undefined,
-          isinGrowth: isinGrowth || undefined,
-          isinDivPayout: isinDivPayout || undefined,
-          isinDivReinvest: isinDivReinvest || undefined,
-          schemeStatus: 'Active', // Assume active if present in NAV file
-        });
-      } else {
-        // Update existing scheme with additional ISINs if found
-        const existing = schemeMap.get(schemeCode)!;
-        if (isinGrowth && !existing.isinGrowth) existing.isinGrowth = isinGrowth;
-        if (isinDivPayout && !existing.isinDivPayout) existing.isinDivPayout = isinDivPayout;
-        if (isinDivReinvest && !existing.isinDivReinvest) existing.isinDivReinvest = isinDivReinvest;
+      return undefined;
+    };
+    
+    // Index 1 could be Growth OR Div Payout (varies by scheme)
+    // Index 2 is Div Reinvest
+    // We'll store index 1 as Growth by default (most common case)
+    // If needed, we can add logic to detect Div Payout vs Growth later
+    const validatedIsinGrowth = validateISIN(isinGrowth);
+    const validatedIsinDivReinvest = validateISIN(isinDivReinvest);
+    
+    // For now, treat index 1 as Growth (most common)
+    // Div Payout ISINs are less common and may not always be present
+    let isinDivPayout: string | undefined = undefined;
+    let finalIsinGrowth: string | undefined = validatedIsinGrowth;
+    
+    // Extract fund house from scheme name (usually first part before "Mutual Fund" or similar)
+    let fundHouse = '';
+    const fundHouseMatch = schemeName.match(/^([A-Za-z\s&]+?)(?:\s+(?:Mutual Fund|MF|Fund|Limited|Ltd))?/);
+    if (fundHouseMatch) {
+      fundHouse = fundHouseMatch[1].trim();
+    }
+    
+    // Store or update scheme master (upsert by scheme_code)
+    if (!schemeMap.has(schemeCode)) {
+      schemeMap.set(schemeCode, {
+        schemeCode,
+        schemeName,
+        fundHouse: fundHouse || undefined,
+        schemeType: currentSection || undefined,
+        isinGrowth: finalIsinGrowth,
+        isinDivPayout: isinDivPayout,
+        isinDivReinvest: validatedIsinDivReinvest,
+        schemeStatus: 'Active', // Assume active if present in NAV file
+      });
+      stats.parsed++;
+    } else {
+      // Update existing scheme with additional ISINs if found
+      const existing = schemeMap.get(schemeCode)!;
+      if (finalIsinGrowth && !existing.isinGrowth) existing.isinGrowth = finalIsinGrowth;
+      if (isinDivPayout && !existing.isinDivPayout) existing.isinDivPayout = isinDivPayout;
+      if (validatedIsinDivReinvest && !existing.isinDivReinvest) existing.isinDivReinvest = validatedIsinDivReinvest;
+      // Update scheme name if it's more complete
+      if (schemeName.length > (existing.schemeName?.length || 0)) {
+        existing.schemeName = schemeName;
       }
     }
   }
   
-  return Array.from(schemeMap.values());
+  return {
+    schemes: Array.from(schemeMap.values()),
+    stats,
+  };
 }
 
 /**
@@ -169,10 +217,23 @@ function parseSchemeMasterFromNAV(navContent: string): SchemeMaster[] {
  * Since AMFI doesn't publish a separate scheme master file,
  * we extract scheme info from the NAV file.
  * 
+ * VALIDATION RULES (MANDATORY):
+ * - Skip rows where scheme_code or scheme_name is missing
+ * - Reject any row where scheme_name starts with "INF"
+ * - Reject rows where scheme_name length < 5
+ * - Log count of rejected rows with reasons
+ * 
+ * IDEMPOTENCY:
+ * - Uses UPSERT on scheme_code
+ * - Safe to run daily
+ * - Does not require truncation every time
+ * 
  * @returns Number of schemes processed
  */
 export async function updateSchemeMaster(): Promise<number> {
   try {
+    console.log('[MF Scheme Master] Fetching AMFI NAV file...');
+    
     // Fetch AMFI NAV file (contains scheme info)
     const url = 'https://www.amfiindia.com/spages/NAVAll.txt';
     const response = await fetch(url, {
@@ -186,15 +247,37 @@ export async function updateSchemeMaster(): Promise<number> {
     }
     
     const content = await response.text();
-    const schemes = parseSchemeMasterFromNAV(content);
+    console.log(`[MF Scheme Master] Fetched ${content.length} bytes from AMFI`);
+    
+    // Parse scheme master data with validation
+    const { schemes, stats } = parseSchemeMasterFromNAV(content);
+    
+    // Log parsing statistics
+    console.log(`[MF Scheme Master] Parsing complete:`);
+    console.log(`  Total rows processed: ${stats.totalRows}`);
+    console.log(`  Successfully parsed: ${stats.parsed}`);
+    console.log(`  Rejected rows:`);
+    console.log(`    - Missing scheme_code: ${stats.rejected.missingSchemeCode}`);
+    console.log(`    - Missing scheme_name: ${stats.rejected.missingSchemeName}`);
+    console.log(`    - scheme_name starts with INF: ${stats.rejected.schemeNameStartsWithINF}`);
+    console.log(`    - scheme_name too short (<5 chars): ${stats.rejected.schemeNameTooShort}`);
+    console.log(`    - Invalid scheme_code format: ${stats.rejected.invalidSchemeCode}`);
+    console.log(`    - Headers/empty lines: ${stats.rejected.headerOrEmpty}`);
+    
+    if (schemes.length === 0) {
+      throw new Error('No valid schemes found in AMFI file after parsing');
+    }
+    
+    console.log(`[MF Scheme Master] Preparing ${schemes.length} schemes for database upsert...`);
     
     // Store schemes in database using batch upsert (much faster than one-by-one)
     const supabase = createAdminClient();
     
     // Prepare data for batch upsert
+    // DO NOT store NAV values or nav_date - only scheme master data
     const dataToUpsert = schemes.map(scheme => ({
       scheme_code: scheme.schemeCode,
-      scheme_name: scheme.schemeName,
+      scheme_name: scheme.schemeName, // Must come ONLY from column 3
       fund_house: scheme.fundHouse || null,
       scheme_type: scheme.schemeType || null,
       isin_growth: scheme.isinGrowth || null,
@@ -206,32 +289,50 @@ export async function updateSchemeMaster(): Promise<number> {
     
     // Batch upsert in chunks of 1000 (Supabase limit)
     const chunkSize = 1000;
-    let totalUpserted = 0;
+    let totalInserted = 0;
+    let totalUpdated = 0;
+    let totalErrors = 0;
+    
+    console.log(`[MF Scheme Master] Upserting in chunks of ${chunkSize}...`);
     
     for (let i = 0; i < dataToUpsert.length; i += chunkSize) {
       const chunk = dataToUpsert.slice(i, i + chunkSize);
+      const chunkNum = Math.floor(i / chunkSize) + 1;
+      const totalChunks = Math.ceil(dataToUpsert.length / chunkSize);
       
       try {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('mf_scheme_master')
           .upsert(chunk, {
             onConflict: 'scheme_code',
             ignoreDuplicates: false,
-          });
+          })
+          .select('scheme_code');
         
         if (error) {
-          console.error(`[MF Scheme Master] Error upserting chunk:`, error);
+          console.error(`[MF Scheme Master] Error upserting chunk ${chunkNum}/${totalChunks}:`, error);
+          totalErrors++;
         } else {
-          totalUpserted += chunk.length;
+          // Count how many were inserted vs updated by checking if they existed before
+          // For simplicity, we'll assume all were upserted successfully
+          const chunkProcessed = data?.length || chunk.length;
+          totalInserted += chunkProcessed; // In reality, some may be updates, but we count as processed
+          console.log(`[MF Scheme Master] Processed chunk ${chunkNum}/${totalChunks}: ${chunkProcessed} schemes`);
         }
       } catch (error) {
-        console.error(`[MF Scheme Master] Error processing chunk:`, error);
+        console.error(`[MF Scheme Master] Error processing chunk ${chunkNum}/${totalChunks}:`, error);
+        totalErrors++;
       }
     }
     
+    console.log(`[MF Scheme Master] ✅ Update complete:`);
+    console.log(`  Total schemes processed: ${totalInserted}`);
+    console.log(`  Chunks with errors: ${totalErrors}`);
+    console.log(`  Expected final count: ~${schemes.length} schemes`);
+    
     return schemes.length;
   } catch (error) {
-    console.error(`[MF Scheme Master] Error updating scheme master:`, error);
+    console.error(`[MF Scheme Master] ❌ Error updating scheme master:`, error);
     throw error;
   }
 }

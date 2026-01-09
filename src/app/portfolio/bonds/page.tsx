@@ -340,17 +340,17 @@ export default function BondsHoldingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-[#6B7280]">Loading bond holdings...</p>
+          <div className="w-8 h-8 border-4 border-[#2563EB] dark:border-[#3B82F6] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Loading bond holdings...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB]">
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
         backHref="/dashboard"
@@ -361,22 +361,22 @@ export default function BondsHoldingsPage() {
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
         {/* Page Title */}
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A] mb-2">Bonds Holdings</h1>
-          <p className="text-sm text-[#6B7280]">
+          <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Bonds Holdings</h1>
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             {holdings.length} holding{holdings.length !== 1 ? 's' : ''} • Total Value: {formatCurrency(totalCurrentValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
           </p>
         </div>
 
         {/* Data Completeness Notice */}
         {holdings.some(h => !h.hasCompleteData) && (
-          <div className="mb-6 bg-[#FEF3C7] border border-[#FCD34D] rounded-xl p-4">
+          <div className="mb-6 bg-[#FEF3C7] dark:bg-[#78350F] border border-[#FCD34D] dark:border-[#FBBF24]/20 rounded-xl p-4">
             <div className="flex items-start gap-3">
-              <AlertTriangleIcon className="w-5 h-5 text-[#D97706] flex-shrink-0 mt-0.5" />
+              <AlertTriangleIcon className="w-5 h-5 text-[#D97706] dark:text-[#FBBF24] flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-[#92400E] mb-1">
+                <p className="text-sm font-medium text-[#92400E] dark:text-[#FCD34D] mb-1">
                   Incomplete Data Detected
                 </p>
-                <p className="text-xs text-[#78350F]">
+                <p className="text-xs text-[#78350F] dark:text-[#FCD34D]">
                   Some bonds are missing coupon rate, maturity date, or issuer information. 
                   Values shown are based on available data. Missing fields are marked with "—".
                 </p>
@@ -386,14 +386,14 @@ export default function BondsHoldingsPage() {
         )}
 
         {/* Holdings Table */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden mb-6">
+        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
           <div className="overflow-x-auto">
             <div className="inline-block min-w-full align-middle">
               <table className="w-full">
-                <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                <thead className="bg-[#F9FAFB] dark:bg-[#334155] border-b border-[#E5E7EB] dark:border-[#334155]">
                   <tr>
                     <th 
-                      className="px-6 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-6 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('name')}
                     >
                       <div className="flex items-center gap-2">
@@ -402,7 +402,7 @@ export default function BondsHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('type')}
                     >
                       <div className="flex items-center gap-2">
@@ -411,7 +411,7 @@ export default function BondsHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('coupon')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -420,7 +420,7 @@ export default function BondsHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('maturityDate')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -429,7 +429,7 @@ export default function BondsHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('faceValue')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -438,7 +438,7 @@ export default function BondsHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('investedValue')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -447,7 +447,7 @@ export default function BondsHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('currentValue')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -456,7 +456,7 @@ export default function BondsHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('yield')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -465,7 +465,7 @@ export default function BondsHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('status')}
                     >
                       <div className="flex items-center gap-2">
@@ -475,7 +475,7 @@ export default function BondsHoldingsPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#E5E7EB]">
+                <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                   {sortedHoldings.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="px-6 py-12 text-center">
@@ -487,58 +487,58 @@ export default function BondsHoldingsPage() {
                     </tr>
                   ) : (
                     sortedHoldings.map((holding) => (
-                      <tr key={holding.id} className="hover:bg-[#F9FAFB] transition-colors">
+                      <tr key={holding.id} className="hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
                         <td className="px-6 py-3.5">
                           <div>
-                            <p className="text-sm font-medium text-[#0F172A]">{holding.name}</p>
+                            <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.name}</p>
                             {holding.issuer && (
-                              <p className="text-xs text-[#6B7280] mt-0.5">{holding.issuer}</p>
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">{holding.issuer}</p>
                             )}
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
                             holding.type === 'Government' 
-                              ? 'bg-[#E0F2FE] text-[#0369A1]'
+                              ? 'bg-[#E0F2FE] dark:bg-[#1E3A8A] text-[#0369A1] dark:text-[#93C5FD]'
                               : holding.type === 'PSU'
-                              ? 'bg-[#F0FDF4] text-[#166534]'
-                              : 'bg-[#F3F4F6] text-[#4B5563]'
+                              ? 'bg-[#F0FDF4] dark:bg-[#14532D] text-[#166534] dark:text-[#86EFAC]'
+                              : 'bg-[#F3F4F6] dark:bg-[#334155] text-[#4B5563] dark:text-[#CBD5E1]'
                           }`}>
                             {holding.type}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           {holding.couponRate !== null ? `${holding.couponRate.toFixed(2)}%` : '—'}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           <div>
                             <p>{formatDate(holding.maturityDate)}</p>
                             {holding.daysToMaturity !== null && holding.status === 'Active' && (
-                              <p className="text-xs text-[#6B7280] mt-0.5">
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
                                 {formatDays(holding.daysToMaturity)}
                               </p>
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           {formatCurrency(holding.faceValue)}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           {formatCurrency(holding.investedValue)}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                           {formatCurrency(holding.currentValue)}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           {holding.yield !== null ? `${holding.yield.toFixed(2)}%` : '—'}
                         </td>
                         <td className="px-4 py-3.5">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
                             holding.status === 'Active'
-                              ? 'bg-[#D1FAE5] text-[#065F46]'
+                              ? 'bg-[#D1FAE5] dark:bg-[#14532D] text-[#065F46] dark:text-[#86EFAC]'
                               : holding.status === 'Matured'
-                              ? 'bg-[#FEE2E2] text-[#991B1B]'
-                              : 'bg-[#F3F4F6] text-[#4B5563]'
+                              ? 'bg-[#FEE2E2] dark:bg-[#7F1D1D] text-[#991B1B] dark:text-[#FCA5A5]'
+                              : 'bg-[#F3F4F6] dark:bg-[#334155] text-[#4B5563] dark:text-[#CBD5E1]'
                           }`}>
                             {holding.status}
                           </span>
@@ -548,21 +548,21 @@ export default function BondsHoldingsPage() {
                   )}
                 </tbody>
                 {sortedHoldings.length > 0 && (
-                  <tfoot className="bg-[#F9FAFB] border-t-2 border-[#E5E7EB]">
+                  <tfoot className="bg-[#F9FAFB] dark:bg-[#334155] border-t-2 border-[#E5E7EB] dark:border-[#334155]">
                     <tr>
-                      <td className="px-6 py-3.5 text-sm font-semibold text-[#0F172A]">
+                      <td className="px-6 py-3.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                         Total
                       </td>
                       <td className="px-4 py-3.5"></td>
                       <td className="px-4 py-3.5"></td>
                       <td className="px-4 py-3.5"></td>
-                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A]">
+                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatCurrency(totalFaceValue)}
                       </td>
-                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A]">
+                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatCurrency(totalInvested)}
                       </td>
-                      <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A]">
+                      <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatCurrency(totalCurrentValue)}
                       </td>
                       <td className="px-4 py-3.5"></td>
@@ -576,14 +576,14 @@ export default function BondsHoldingsPage() {
         </div>
 
         {/* Verification Note */}
-        <div className="mb-6 bg-white rounded-xl border border-[#E5E7EB] p-4">
+        <div className="mb-6 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4">
           <div className="flex items-start gap-3">
-            <CheckCircleIcon className="w-5 h-5 text-[#16A34A] flex-shrink-0 mt-0.5" />
+            <CheckCircleIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-[#0F172A]">
+              <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                 Verification: Total matches dashboard bonds value ({formatCurrency(totalCurrentValue)}) ✓
               </p>
-              <p className="text-xs text-[#6B7280] mt-1">
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                 Current values shown are from your portfolio data. No market price estimates are used.
               </p>
             </div>
@@ -592,30 +592,30 @@ export default function BondsHoldingsPage() {
 
         {/* Maturity and Income-Focused AI Insights */}
         {sortedHoldings.length > 0 && (
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-6">
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
             <div className="flex items-center gap-2 mb-4">
-              <InfoIcon className="w-5 h-5 text-[#6B7280]" />
-              <h2 className="text-lg font-semibold text-[#0F172A]">Fixed Income Insights</h2>
+              <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+              <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Fixed Income Insights</h2>
             </div>
             <div className="space-y-4">
-              <div className="text-sm text-[#475569] leading-relaxed">
+              <div className="text-sm text-[#475569] dark:text-[#CBD5E1] leading-relaxed">
                 <p className="mb-2">
-                  <strong className="text-[#0F172A]">Total Bond Holdings:</strong> {formatCurrency(totalCurrentValue)} ({portfolioPercentage.toFixed(1)}% of portfolio)
+                  <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Total Bond Holdings:</strong> {formatCurrency(totalCurrentValue)} ({portfolioPercentage.toFixed(1)}% of portfolio)
                 </p>
                 
                 {totalAnnualIncome > 0 && (
                   <p className="mb-2">
-                    <strong className="text-[#0F172A]">Estimated Annual Income:</strong> {formatCurrency(totalAnnualIncome)} 
+                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Estimated Annual Income:</strong> {formatCurrency(totalAnnualIncome)} 
                     {sortedHoldings.some(h => !h.couponRate) && (
-                      <span className="text-[#6B7280] ml-1">(based on available coupon data)</span>
+                      <span className="text-[#6B7280] dark:text-[#94A3B8] ml-1">(based on available coupon data)</span>
                     )}
                   </p>
                 )}
                 
                 {upcomingMaturities.length > 0 && (
                   <div className="mb-2">
-                    <strong className="text-[#0F172A]">Upcoming Maturities (next 12 months):</strong>
-                    <ul className="list-disc list-inside mt-1 ml-2 text-[#475569]">
+                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Upcoming Maturities (next 12 months):</strong>
+                    <ul className="list-disc list-inside mt-1 ml-2 text-[#475569] dark:text-[#CBD5E1]">
                       {upcomingMaturities.map((h, idx) => (
                         <li key={h.id}>
                           {h.name} — {formatDate(h.maturityDate)} ({formatDays(h.daysToMaturity)})
@@ -627,13 +627,13 @@ export default function BondsHoldingsPage() {
                 
                 {sortedHoldings.filter(h => h.status === 'Matured').length > 0 && (
                   <p className="mb-2">
-                    <strong className="text-[#0F172A]">Matured Bonds:</strong>{' '}
+                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Matured Bonds:</strong>{' '}
                     {sortedHoldings.filter(h => h.status === 'Matured').length} holding(s) have reached maturity date.
                   </p>
                 )}
                 
                 {sortedHoldings.some(h => !h.hasCompleteData) && (
-                  <p className="text-[#6B7280] italic">
+                  <p className="text-[#6B7280] dark:text-[#94A3B8] italic">
                     Note: Some bonds have incomplete data. Complete bond information (coupon rate, maturity date, issuer) 
                     provides more accurate income and maturity insights.
                   </p>

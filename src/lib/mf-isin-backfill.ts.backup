@@ -1,0 +1,483 @@
+/**
+ * MF ISIN Backfill Service
+ * 
+ * Finds MF assets without ISINs and attempts to resolve them from mf_scheme_master.
+ * This is a post-upload enrichment service that can be run:
+ * - Automatically after upload
+ * - Scheduled nightly
+ * - Manually via API endpoint
+ * 
+ * DESIGN PRINCIPLES:
+ * ==================
+ * 1. Idempotent - safe to run multiple times
+ * 2. Non-blocking - never fails, only logs warnings
+ * 3. Uses mf_scheme_master as ONLY source of truth
+ * 4. Updates assets.isin and assets.symbol (scheme_code)
+ * 
+ * IMPROVED MATCHING:
+ * ==================
+ * - Aggressive normalization removes ALL noise words and punctuation
+ * - Multiple matching strategies with confidence scoring
+ * - Prefers Direct + Growth schemes
+ * - Comprehensive logging for debugging
+ */
+
+import { createAdminClient } from '@/lib/supabase/server';
+import type { Database } from '@/types/database';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+type AssetRow = Database['public']['Tables']['assets']['Row'];
+type AssetUpdate = Database['public']['Tables']['assets']['Update'];
+type SchemeRow = {
+  scheme_code: string;
+  scheme_name: string;
+  fund_house: string | null;
+  isin_growth: string | null;
+  isin_div_payout: string | null;
+  isin_div_reinvest: string | null;
+  scheme_status: string | null;
+  last_updated: string | null;
+};
+
+/**
+ * Comprehensive normalization of scheme/asset names for matching
+ * 
+ * Removes ALL noise words and punctuation to extract core fund name:
+ * - Plan types: Direct Plan, Regular Plan, Direct, Regular
+ * - Options: Growth Option, Dividend Option, IDCW, Growth, Dividend
+ * - Fund types: ETF, Exchange Traded Fund, Fund of Fund, FoF, of Fund, Fund, MF, Mutual Fund, Scheme
+ * - Punctuation: -, _, (, ), ., &, /
+ * 
+ * Example:
+ *   Input: "Mirae Asset Global X Artificial Intelligence & Technology ETF Fund of Fund - Direct Plan- Growth"
+ *   Output: "mirae asset global x artificial intelligence technology"
+ */
+function normalizeName(name: string): string {
+  if (!name) {
+    console.log(`  [Normalize] Empty input, returning empty string`);
+    return '';
+  }
+  
+  console.log(`  [Normalize] Input: "${name}"`);
+  
+  // Step 1: Convert to lowercase and trim
+  let normalized = name.toLowerCase().trim();
+  console.log(`  [Normalize] After lowercase: "${normalized}"`);
+  
+  // Step 2: Remove all punctuation: -, _, (, ), ., &, /
+  normalized = normalized.replace(/[-_().&/]/g, ' ');
+  console.log(`  [Normalize] After punctuation removal: "${normalized}"`);
+  
+  // Step 3: Remove noise phrases (order matters - longer phrases first)
+  const noisePhrases = [
+    'bonus option',
+    'exchange traded fund',
+    'fund of fund',
+    'mutual fund',
+    'of fund',
+  ];
+  
+  for (const phrase of noisePhrases) {
+    const regex = new RegExp(`\\b${phrase}\\b`, 'gi');
+    const before = normalized;
+    normalized = normalized.replace(regex, ' ');
+    if (before !== normalized) {
+      console.log(`  [Normalize] Removed phrase: "${phrase}"`);
+    }
+  }
+  
+  // Step 4: Remove noise words
+  const noiseWords = [
+    'bonus',
+    'plan',
+    'option',
+    'etf',
+    'fof',
+    'fund',
+    'mf',
+    'scheme',
+  ];
+  
+  for (const word of noiseWords) {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    const before = normalized;
+    normalized = normalized.replace(regex, ' ');
+    if (before !== normalized) {
+      console.log(`  [Normalize] Removed word: "${word}"`);
+    }
+  }
+  
+  // Step 5: Collapse multiple spaces to single space and trim
+  normalized = normalized.replace(/\s+/g, ' ').trim();
+  console.log(`  [Normalize] Final normalized: "${normalized}"`);
+  
+  return normalized;
+}
+
+/**
+ * Extract fund house name from asset name (for matching)
+ * 
+ * Attempts to extract the fund house/AMC name from the beginning of the asset name.
+ * This is used to boost matching confidence when fund houses match.
+ */
+function extractFundHouse(assetName: string): string | null {
+  if (!assetName) return null;
+  
+  // Common patterns:
+  // "HDFC Flexi Cap Fund" -> "HDFC"
+  // "Mirae Asset Large Cap Fund" -> "Mirae Asset"
+  // "ICICI Prudential Corporate Bond Fund" -> "ICICI Prudential"
+  
+  const normalized = assetName.toLowerCase().trim();
+  
+  // Try to match common fund house patterns at the start
+  // Stop at common fund type indicators
+  const fundTypeIndicators = [
+    'mutual fund',
+    'mf',
+    'fund',
+    'scheme',
+    'etf',
+    'exchange traded',
+  ];
+  
+  let fundHouse = normalized;
+  for (const indicator of fundTypeIndicators) {
+    const index = fundHouse.indexOf(indicator);
+    if (index > 0) {
+      fundHouse = fundHouse.substring(0, index).trim();
+      break;
+    }
+  }
+  
+  // Remove common suffixes
+  fundHouse = fundHouse.replace(/\s+(limited|ltd|pvt|private)$/i, '').trim();
+  
+  if (fundHouse && fundHouse.length > 2) {
+    console.log(`  [ExtractFundHouse] Extracted: "${fundHouse}" from "${assetName}"`);
+    return fundHouse;
+  }
+  
+  return null;
+}
+
+/**
+ * Calculate matching score for a scheme match
+ * 
+ * Scoring:
+ * - Fund house match: +30 points
+ * - Direct plan: +15 points
+ * - Growth option: +5 points
+ * 
+ * @param assetName Original asset name
+ * @param scheme Scheme from master
+ * @param normalizedAsset Normalized asset name
+ * @param normalizedScheme Normalized scheme name
+ * @param matchType Type of match: 'exact' | 'contains' | 'substring'
+ */
+function calculateMatchScore(
+  assetName: string,
+  scheme: SchemeRow,
+  normalizedAsset: string,
+  normalizedScheme: string,
+  matchType: 'exact' | 'contains' | 'substring'
+): number {
+  let score = 0;
+  
+  // Base score by match type
+  if (matchType === 'exact') {
+    score = 100;
+  } else if (matchType === 'contains') {
+    score = 50;
+  } else {
+    score = 30;
+  }
+  
+  // Fund house match bonus (+30)
+  const assetFundHouse = extractFundHouse(assetName);
+  const schemeFundHouse = scheme.fund_house?.toLowerCase().trim();
+  
+  if (assetFundHouse && schemeFundHouse) {
+    // Check if fund houses match (either contains or is contained)
+    if (schemeFundHouse.includes(assetFundHouse) || assetFundHouse.includes(schemeFundHouse)) {
+      score += 30;
+      console.log(`  [Score] Fund house match: "${assetFundHouse}" ≈ "${schemeFundHouse}" (+30)`);
+    }
+  }
+  
+  // Direct plan bonus (+15)
+  const isDirect = scheme.scheme_name.toLowerCase().includes('direct');
+  if (isDirect) {
+    score += 15;
+    console.log(`  [Score] Direct plan (+15)`);
+  }
+  
+  // Growth option bonus (+5)
+  const isGrowth = scheme.isin_growth && !scheme.isin_div_payout && !scheme.isin_div_reinvest;
+  if (isGrowth) {
+    score += 5;
+    console.log(`  [Score] Growth option (+5)`);
+  }
+  
+  console.log(`  [Score] Total score: ${score} (match type: ${matchType})`);
+  return score;
+}
+
+/**
+ * Find best matching scheme for an asset
+ * 
+ * Uses multiple matching strategies:
+ * 1. Exact match on normalized names (highest confidence)
+ * 2. Substring/contains match (fallback)
+ * 
+ * Returns the best match with highest score, or null if no match found.
+ */
+function findBestMatch(assetName: string, schemes: SchemeRow[]): { scheme: SchemeRow; score: number; matchType: string } | null {
+  const normalizedAsset = normalizeName(assetName);
+  
+  if (!normalizedAsset) {
+    console.warn(`  [FindMatch] Normalized name is empty for "${assetName}"`);
+    return null;
+  }
+  
+  console.log(`  [FindMatch] Searching for: "${assetName}" (normalized: "${normalizedAsset}")`);
+  console.log(`  [FindMatch] Searching in ${schemes.length} schemes`);
+  
+  let bestMatch: SchemeRow | null = null;
+  let bestScore = 0;
+  let bestMatchType = '';
+  
+  // Strategy 1: Exact match on normalized names
+  console.log(`  [FindMatch] Strategy 1: Exact match`);
+  for (const scheme of schemes) {
+    const normalizedScheme = normalizeName(scheme.scheme_name);
+    
+    if (normalizedScheme === normalizedAsset) {
+      const score = calculateMatchScore(assetName, scheme, normalizedAsset, normalizedScheme, 'exact');
+      if (score > bestScore) {
+        bestMatch = scheme;
+        bestScore = score;
+        bestMatchType = 'exact';
+        console.log(`  [FindMatch] ✓ Exact match found: "${scheme.scheme_name}" (score: ${score})`);
+      }
+    }
+  }
+  
+  // Strategy 2: Contains/substring match (only if no exact match)
+  if (!bestMatch) {
+    console.log(`  [FindMatch] Strategy 2: Contains/substring match`);
+    for (const scheme of schemes) {
+      const normalizedScheme = normalizeName(scheme.scheme_name);
+      
+      if (!normalizedScheme) continue;
+      
+      // Check if normalized asset contains normalized scheme or vice versa
+      const assetContainsScheme = normalizedAsset.includes(normalizedScheme);
+      const schemeContainsAsset = normalizedScheme.includes(normalizedAsset);
+      
+      if (assetContainsScheme || schemeContainsAsset) {
+        // Determine match type
+        const matchType = assetContainsScheme ? 'contains' : 'substring';
+        const score = calculateMatchScore(assetName, scheme, normalizedAsset, normalizedScheme, matchType);
+        
+        if (score > bestScore) {
+          bestMatch = scheme;
+          bestScore = score;
+          bestMatchType = matchType;
+          console.log(`  [FindMatch] ✓ ${matchType} match found: "${scheme.scheme_name}" (score: ${score})`);
+        }
+      }
+    }
+  }
+  
+  if (bestMatch) {
+    console.log(`  [FindMatch] ✓ Best match: "${bestMatch.scheme_name}" (score: ${bestScore}, type: ${bestMatchType})`);
+  } else {
+    console.warn(`  [FindMatch] ✗ No match found for "${assetName}"`);
+  }
+  
+  return bestMatch ? { scheme: bestMatch, score: bestScore, matchType: bestMatchType } : null;
+}
+
+export interface BackfillResult {
+  scanned: number;
+  resolved: number;
+  unresolved: number;
+  sample_unresolved: string[];
+}
+
+/**
+ * Backfill ISINs for MF assets that don't have them
+ * 
+ * @returns Backfill result with statistics
+ */
+export async function backfillMFISINs(): Promise<BackfillResult> {
+  const supabase: SupabaseClient<Database> = createAdminClient();
+  const result: BackfillResult = {
+    scanned: 0,
+    resolved: 0,
+    unresolved: 0,
+    sample_unresolved: [],
+  };
+  
+  try {
+    console.log('========================================');
+    console.log('[MF ISIN Backfill] Starting backfill process...');
+    console.log('========================================');
+    
+    // Query assets table for:
+    // - asset_type = 'mutual_fund' (ONLY mutual_fund, not index_fund/etf)
+    // - isin IS NULL
+    // - is_active = true
+    console.log('[MF ISIN Backfill] Fetching assets without ISIN...');
+    const { data: assetsData, error: fetchError } = await supabase
+      .from('assets')
+      .select('id, name, asset_type, isin, symbol')
+      .eq('asset_type', 'mutual_fund')
+      .eq('is_active', true)
+      .is('isin', null);
+    
+    if (fetchError) {
+      console.error('[MF ISIN Backfill] ❌ Error fetching assets:', fetchError);
+      throw fetchError;
+    }
+    
+    const assets: Pick<AssetRow, 'id' | 'name' | 'asset_type' | 'isin' | 'symbol'>[] = assetsData || [];
+    
+    if (assets.length === 0) {
+      console.log('[MF ISIN Backfill] ✓ No active MF assets found without ISIN');
+      return result;
+    }
+    
+    result.scanned = assets.length;
+    console.log(`[MF ISIN Backfill] Found ${assets.length} active MF assets without ISIN`);
+    console.log(`[MF ISIN Backfill] Asset names:`, assets.map(a => a.name));
+    
+    // Get all active schemes from scheme master
+    console.log('[MF ISIN Backfill] Fetching active schemes from scheme master...');
+    const { data: schemesData, error: schemesError } = await supabase
+      .from('mf_scheme_master')
+      .select('scheme_code, scheme_name, fund_house, isin_growth, isin_div_payout, isin_div_reinvest, scheme_status, last_updated')
+      .eq('scheme_status', 'Active')
+      .order('last_updated', { ascending: false });
+    
+    if (schemesError) {
+      console.error('[MF ISIN Backfill] ❌ Error fetching scheme master:', schemesError);
+      throw schemesError;
+    }
+    
+    const schemes: SchemeRow[] = schemesData || [];
+    
+    if (schemes.length === 0) {
+      console.warn('[MF ISIN Backfill] ⚠️ Scheme master is empty - cannot resolve ISINs');
+      result.unresolved = assets.length;
+      result.sample_unresolved = assets.slice(0, 10).map(a => a.name);
+      return result;
+    }
+    
+    console.log(`[MF ISIN Backfill] Loaded ${schemes.length} active schemes from scheme master`);
+    
+    // Attempt to resolve each asset
+    console.log('========================================');
+    console.log('[MF ISIN Backfill] Processing assets...');
+    console.log('========================================');
+    
+    for (let i = 0; i < assets.length; i++) {
+      const asset = assets[i];
+      console.log(`\n[${i + 1}/${assets.length}] Processing: "${asset.name}"`);
+      
+      try {
+        // Find best match
+        const matchResult = findBestMatch(asset.name, schemes);
+        
+        if (!matchResult) {
+          result.unresolved++;
+          if (result.sample_unresolved.length < 10) {
+            result.sample_unresolved.push(asset.name);
+          }
+          console.warn(`  ❌ No match found for "${asset.name}"`);
+          continue;
+        }
+        
+        const { scheme: bestMatch, score, matchType } = matchResult;
+        console.log(`  ✓ Match found: "${bestMatch.scheme_name}"`);
+        console.log(`    - Scheme Code: ${bestMatch.scheme_code}`);
+        console.log(`    - Fund House: ${bestMatch.fund_house}`);
+        console.log(`    - Match Type: ${matchType}`);
+        console.log(`    - Score: ${score}`);
+        
+        // Get ISIN (prefer Growth, fallback to Div Payout, then Div Reinvest)
+        const resolvedIsin = bestMatch.isin_growth || bestMatch.isin_div_payout || bestMatch.isin_div_reinvest;
+        
+        if (!resolvedIsin) {
+          result.unresolved++;
+          if (result.sample_unresolved.length < 10) {
+            result.sample_unresolved.push(asset.name);
+          }
+          console.warn(`  ⚠️ Matched scheme "${bestMatch.scheme_name}" but it has no ISIN`);
+          continue;
+        }
+        
+        console.log(`    - ISIN: ${resolvedIsin} (${bestMatch.isin_growth ? 'Growth' : bestMatch.isin_div_payout ? 'Div Payout' : 'Div Reinvest'})`);
+        
+        // Prepare update data
+        const updateData: AssetUpdate = {
+          isin: resolvedIsin.toUpperCase(),
+          symbol: bestMatch.scheme_code, // Use scheme_code as symbol
+          updated_at: new Date().toISOString(),
+        };
+        
+        console.log(`  [Update] Updating asset with:`, updateData);
+        
+        // Update asset with resolved ISIN and scheme_code
+        // Note: TypeScript has inference issues with Supabase update method typing
+        // Using type assertion to work around the limitation
+        const { error: updateError } = await (supabase
+          .from('assets') as any)
+          .update(updateData)
+          .eq('id', asset.id);
+        
+        if (updateError) {
+          result.unresolved++;
+          if (result.sample_unresolved.length < 10) {
+            result.sample_unresolved.push(asset.name);
+          }
+          console.error(`  ❌ Failed to update "${asset.name}": ${updateError.message}`);
+        } else {
+          result.resolved++;
+          console.log(`  ✅ Successfully updated: "${asset.name}"`);
+          console.log(`     → ISIN: ${resolvedIsin.toUpperCase()}`);
+          console.log(`     → Symbol: ${bestMatch.scheme_code}`);
+        }
+      } catch (error) {
+        result.unresolved++;
+        if (result.sample_unresolved.length < 10) {
+          result.sample_unresolved.push(asset.name);
+        }
+        console.error(`  ❌ Error processing asset "${asset.name}":`, error);
+      }
+    }
+    
+    console.log('\n========================================');
+    console.log('[MF ISIN Backfill] Summary');
+    console.log('========================================');
+    console.log(`  Scanned: ${result.scanned}`);
+    console.log(`  Resolved: ${result.resolved}`);
+    console.log(`  Unresolved: ${result.unresolved}`);
+    console.log(`  Success Rate: ${result.scanned > 0 ? ((result.resolved / result.scanned) * 100).toFixed(1) : 0}%`);
+    
+    if (result.sample_unresolved.length > 0) {
+      console.log(`\n  Sample Unresolved Assets (${result.sample_unresolved.length}):`);
+      result.sample_unresolved.forEach(name => {
+        console.log(`    - ${name}`);
+      });
+    }
+    
+    console.log('========================================\n');
+    
+    return result;
+  } catch (error) {
+    console.error('[MF ISIN Backfill] ❌ Fatal error:', error);
+    throw error;
+  }
+}

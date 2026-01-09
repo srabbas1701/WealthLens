@@ -33,9 +33,10 @@ interface ManualInvestmentModalProps {
   onSuccess?: () => void;
   editingHoldingId?: string;
   editingData?: any;
+  category?: string; // Onboarding category to pre-select asset type
 }
 
-type AssetTypeOption = 'fd' | 'bond' | 'gold' | 'cash';
+type AssetTypeOption = 'fd' | 'bond' | 'gold' | 'cash' | 'epf' | 'ppf' | 'nps';
 type Step = 'select' | 'form' | 'review' | 'saving' | 'success' | 'error';
 
 interface FormData {
@@ -61,6 +62,28 @@ interface FormData {
   purchase_date?: string;
   // Cash fields (optional)
   account_type?: string;
+  // EPF fields (optional)
+  epf_account_number?: string;
+  // PPF fields (optional)
+  ppf_account_number?: string;
+  ppf_maturity_date?: string;
+  // NPS fields (optional)
+  nps_tier?: 'tier1' | 'tier2';
+  nps_pran?: string;
+}
+
+// Map onboarding categories to asset types
+function getAssetTypeFromCategory(category?: string): AssetTypeOption | null {
+  if (!category) return null;
+  
+  const categoryToAssetType: Record<string, AssetTypeOption> = {
+    'fixed_deposits': 'fd',
+    'gold': 'gold',
+    'epf_ppf_nps': null, // Keep as null so user can choose EPF, PPF, or NPS
+    'pension_retirement': null, // Could map to NPS, but let user choose
+  };
+  
+  return categoryToAssetType[category] || null;
 }
 
 export default function ManualInvestmentModal({
@@ -72,6 +95,7 @@ export default function ManualInvestmentModal({
   onSuccess,
   editingHoldingId,
   editingData,
+  category,
 }: ManualInvestmentModalProps) {
   const { formatCurrency } = useCurrency();
   const [step, setStep] = useState<Step>('select');
@@ -84,8 +108,31 @@ export default function ManualInvestmentModal({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Initialize with editing data if provided
+  // Initialize with category or editing data if provided
   useEffect(() => {
+    // Reset when modal closes
+    if (!isOpen) {
+      setStep('select');
+      setFormData({
+        assetType: null,
+        invested_value: null,
+        average_price: null,
+        quantity: 1,
+      });
+      setError(null);
+      return;
+    }
+    
+    // Pre-select asset type from category if provided
+    if (category && step === 'select' && !formData.assetType && !editingData) {
+      const assetType = getAssetTypeFromCategory(category);
+      if (assetType) {
+        setFormData(prev => ({ ...prev, assetType }));
+        setStep('form');
+      }
+    }
+    
+    // Initialize with editing data if provided
     if (editingData && isOpen && step === 'select' && !formData.assetType) {
       setFormData({
         assetType: editingData.assetType || editingData.form_data?.assetType || null,
@@ -173,6 +220,20 @@ export default function ManualInvestmentModal({
       } else if (formData.assetType === 'cash') {
         apiFormData.cashAmount = formData.invested_value;
         apiFormData.cashAccountType = formData.name || formData.account_type || 'Savings Account';
+      } else if (formData.assetType === 'epf') {
+        apiFormData.epfAccountNumber = formData.epf_account_number;
+        apiFormData.epfBalance = formData.invested_value;
+        apiFormData.epfName = formData.name || 'EPF Account';
+      } else if (formData.assetType === 'ppf') {
+        apiFormData.ppfAccountNumber = formData.ppf_account_number;
+        apiFormData.ppfBalance = formData.invested_value;
+        apiFormData.ppfMaturityDate = formData.ppf_maturity_date;
+        apiFormData.ppfName = formData.name || 'PPF Account';
+      } else if (formData.assetType === 'nps') {
+        apiFormData.npsPRAN = formData.nps_pran;
+        apiFormData.npsTier = formData.nps_tier;
+        apiFormData.npsBalance = formData.invested_value;
+        apiFormData.npsName = formData.name || 'NPS Account';
       }
 
       const response = await fetch('/api/investments/manual', {
@@ -214,6 +275,9 @@ export default function ManualInvestmentModal({
       case 'bond': return formData.issuer || 'Bond';
       case 'gold': return `Gold (${formData.gold_type || 'physical'})`;
       case 'cash': return formData.account_type || 'Savings Account';
+      case 'epf': return formData.epf_account_number ? `EPF (${formData.epf_account_number.slice(-4)})` : 'EPF Account';
+      case 'ppf': return formData.ppf_account_number ? `PPF (${formData.ppf_account_number.slice(-4)})` : 'PPF Account';
+      case 'nps': return formData.nps_pran ? `NPS (${formData.nps_pran.slice(-4)})` : 'NPS Account';
       default: return 'Investment';
     }
   };
@@ -263,6 +327,9 @@ export default function ManualInvestmentModal({
                     { id: 'bond' as AssetTypeOption, label: 'Bond', description: 'Government, corporate bonds' },
                     { id: 'gold' as AssetTypeOption, label: 'Gold', description: 'SGB, physical, ETF' },
                     { id: 'cash' as AssetTypeOption, label: 'Cash', description: 'Savings, current account' },
+                    { id: 'epf' as AssetTypeOption, label: 'EPF', description: 'Employee Provident Fund' },
+                    { id: 'ppf' as AssetTypeOption, label: 'PPF', description: 'Public Provident Fund' },
+                    { id: 'nps' as AssetTypeOption, label: 'NPS', description: 'National Pension System' },
                   ].map((option) => (
                     <button
                       key={option.id}
@@ -546,6 +613,69 @@ export default function ManualInvestmentModal({
                       <span className="text-[#6B7280]">Account Type</span>
                       <span className="text-[#0F172A]">{formData.account_type}</span>
                     </div>
+                  </div>
+                )}
+
+                {formData.assetType === 'epf' && (
+                  <div className="pt-4 border-t border-[#E5E7EB] space-y-2 text-sm">
+                    {formData.epf_account_number && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280]">Account Number</span>
+                        <span className="text-[#0F172A]">{formData.epf_account_number}</span>
+                      </div>
+                    )}
+                    {formData.name && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280]">Account Name</span>
+                        <span className="text-[#0F172A]">{formData.name}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {formData.assetType === 'ppf' && (
+                  <div className="pt-4 border-t border-[#E5E7EB] space-y-2 text-sm">
+                    {formData.ppf_account_number && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280]">Account Number</span>
+                        <span className="text-[#0F172A]">{formData.ppf_account_number}</span>
+                      </div>
+                    )}
+                    {formData.ppf_maturity_date && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280]">Maturity Date</span>
+                        <span className="text-[#0F172A]">{formData.ppf_maturity_date}</span>
+                      </div>
+                    )}
+                    {formData.name && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280]">Account Name</span>
+                        <span className="text-[#0F172A]">{formData.name}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {formData.assetType === 'nps' && (
+                  <div className="pt-4 border-t border-[#E5E7EB] space-y-2 text-sm">
+                    {formData.nps_pran && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280]">PRAN</span>
+                        <span className="text-[#0F172A]">{formData.nps_pran}</span>
+                      </div>
+                    )}
+                    {formData.nps_tier && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280]">Tier</span>
+                        <span className="text-[#0F172A] capitalize">{formData.nps_tier}</span>
+                      </div>
+                    )}
+                    {formData.name && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280]">Account Name</span>
+                        <span className="text-[#0F172A]">{formData.name}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -63,6 +63,8 @@ interface HoldingDetail {
   sector: string | null;
   assetClass: string | null;
   notes: string | null;
+  navDate?: string | null; // NAV date for mutual funds (YYYY-MM-DD)
+  priceDate?: string | null; // Price date for equity/stocks (YYYY-MM-DD)
 }
 
 interface AllocationItem {
@@ -100,6 +102,7 @@ interface PortfolioDataResponse {
       totalAssetTypes: number;
       largestHoldingPct: number;
       lastUpdated: string | null;
+      createdAt: string | null;
     };
   };
   error?: string;
@@ -165,7 +168,7 @@ export async function GET(request: NextRequest) {
     // 1. Get user's primary portfolio
     const { data: portfolio, error: portfolioError } = await supabase
       .from('portfolios')
-      .select('id, total_value, updated_at')
+      .select('id, total_value, created_at, updated_at')
       .eq('user_id', userId)
       .eq('is_primary', true)
       .single();
@@ -197,6 +200,7 @@ export async function GET(request: NextRequest) {
             totalAssetTypes: 0,
             largestHoldingPct: 0,
             lastUpdated: null,
+            createdAt: null,
           },
         },
       });
@@ -249,10 +253,7 @@ export async function GET(request: NextRequest) {
       const symbols = equityHoldings.map((h: any) => (h.assets as any).symbol).filter(Boolean);
       const stockPrices = await getStockPrices(symbols);
       
-      // Update holdings with current prices
-      const priceDate = getPreviousTradingDay();
-      let updatedCount = 0;
-      
+      // Update holdings with current prices (in memory only - no DB writes)
       for (const holding of equityHoldings) {
         const asset = holding.assets as any;
         const symbol = asset?.symbol;
@@ -266,47 +267,16 @@ export async function GET(request: NextRequest) {
           const currentPrice = priceData.price;
           const newCurrentValue = quantity * currentPrice;
           
-          // Only update if different (avoid unnecessary DB writes)
-          const existingCurrentValue = holding.current_value || 0;
-          if (Math.abs(newCurrentValue - existingCurrentValue) > 0.01) {
-            const { error: updateError } = await supabase
-              .from('holdings')
-              .update({
-                current_value: newCurrentValue,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', holding.id);
-            
-            if (!updateError) {
-              holding.current_value = newCurrentValue;
-              updatedCount++;
-            } else {
-              console.warn(`[Portfolio Data API] Failed to update current_value for holding ${holding.id}:`, updateError);
-            }
-          }
+          // Store price date in memory for frontend display
+          (holding as any)._priceDate = priceData.priceDate;
+          
+          // Update in memory only - don't write to DB on read path (performance optimization)
+          // Database updates should happen via dedicated update endpoints or background jobs
+          holding.current_value = newCurrentValue;
         } else {
-          // No price available for today - check if we have a stored price (even if stale)
-          // Never default to avg_buy_price for equity
-          const lastPrice = await getStockPrice(symbol);
-          if (lastPrice && lastPrice.price) {
-            const quantity = holding.quantity || 0;
-            const newCurrentValue = quantity * lastPrice.price;
-            
-            // Update with last known price (may be stale, but better than avg_buy_price)
-            const { error: updateError } = await supabase
-              .from('holdings')
-              .update({
-                current_value: newCurrentValue,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', holding.id);
-            
-            if (!updateError) {
-              holding.current_value = newCurrentValue;
-              console.warn(`[Portfolio Data API] Using stale price for ${symbol}: ₹${lastPrice.price} (${lastPrice.priceDate})`);
-            }
-          }
-          // Removed verbose logging - prices are fetched silently, errors are logged elsewhere if needed
+          // Price not found in batch query - it will be null in the map
+          // Use existing current_value from database (already loaded)
+          // Don't make individual queries here (performance optimization)
         }
       }
       
@@ -314,133 +284,101 @@ export async function GET(request: NextRequest) {
     }
     
     // 3.6. Fetch NAVs for mutual fund holdings and update current_value
-    // Extract MF holdings with ISINs
-    const mfHoldings = holdings.filter((h: any) => {
+    // Separate MF holdings into those with ISINs and those without
+    const allMFHoldings = holdings.filter((h: any) => {
       const asset = h.assets as any;
-      return (asset?.asset_type === 'mutual_fund' || asset?.asset_type === 'index_fund' || asset?.asset_type === 'etf') && asset?.isin;
+      return asset?.asset_type === 'mutual_fund' || asset?.asset_type === 'index_fund' || asset?.asset_type === 'etf';
     });
     
-    if (mfHoldings.length > 0) {
-      const isins = mfHoldings.map((h: any) => (h.assets as any).isin).filter(Boolean);
+    const mfHoldingsWithISIN = allMFHoldings.filter((h: any) => {
+      const asset = h.assets as any;
+      return asset?.isin;
+    });
+    
+    const mfHoldingsWithoutISIN = allMFHoldings.filter((h: any) => {
+      const asset = h.assets as any;
+      return !asset?.isin;
+    });
+    
+    // Note: MF holdings without ISINs need backfill (run POST /api/mf/isin/backfill)
+    
+    // Fetch NAVs for MF holdings WITH ISINs
+    if (mfHoldingsWithISIN.length > 0) {
+      const isins = mfHoldingsWithISIN.map((h: any) => (h.assets as any).isin).filter(Boolean);
       const mfNavs = await getMFNavsByISIN(isins);
       
-      // Update holdings with current NAVs
-      const navDate = getPreviousTradingDay();
-      let updatedCount = 0;
+      // For MF holdings: Store NAV data in memory for read-time computation
+      // DO NOT persist current_value for MF - it's computed from units × latest_nav
+      // DO NOT use diff logic for MF - NAV is the single source of truth
       
-      for (const holding of mfHoldings) {
+      // Store NAV data in holding object for later use (don't persist current_value)
+      for (const holding of mfHoldingsWithISIN) {
         const asset = holding.assets as any;
         const isin = asset?.isin;
         if (!isin) continue;
         
         const navData = mfNavs.get(isin.toUpperCase());
         
-        if (navData && navData.nav) {
-          // Calculate current_value from quantity × current_nav
-          const quantity = holding.quantity || 0;
-          const currentNav = navData.nav;
-          const newCurrentValue = quantity * currentNav;
-          
-          // Only update if different (avoid unnecessary DB writes)
-          const existingCurrentValue = holding.current_value || 0;
-          if (Math.abs(newCurrentValue - existingCurrentValue) > 0.01) {
-            const { error: updateError } = await supabase
-              .from('holdings')
-              .update({
-                current_value: newCurrentValue,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', holding.id);
-            
-            if (!updateError) {
-              holding.current_value = newCurrentValue;
-              updatedCount++;
-            } else {
-              console.warn(`[Portfolio Data API] Failed to update current_value for MF holding ${holding.id}:`, updateError);
-            }
-          }
+        if (!navData) {
+          // NAV not found in batch query - use invested_value as fallback
+          // Don't make individual queries here (performance optimization)
+          console.warn(`[Portfolio Data API] No NAV data found for ISIN: ${isin}`);
+        } else if (navData.nav) {
+          // Store NAV in memory for computation (don't persist)
+          (holding as any)._computedNav = navData.nav;
+          (holding as any)._navDate = navData.navDate;
         } else {
-          // No NAV available for today - check if we have a stored NAV (even if stale)
-          // Never default to avg_buy_nav for MF
-          const lastNav = await getMFNavByISIN(isin);
-          if (lastNav && lastNav.nav) {
-            const quantity = holding.quantity || 0;
-            const newCurrentValue = quantity * lastNav.nav;
-            
-            // Update with last known NAV (may be stale, but better than avg_buy_nav)
-            const { error: updateError } = await supabase
-              .from('holdings')
-              .update({
-                current_value: newCurrentValue,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', holding.id);
-            
-            if (!updateError) {
-              holding.current_value = newCurrentValue;
-              // Only log if NAV is more than 3 days old (stale data warning)
-              const navDate = new Date(lastNav.navDate);
-              const daysOld = (Date.now() - navDate.getTime()) / (1000 * 60 * 60 * 24);
-              if (daysOld > 3) {
-                console.warn(`[Portfolio Data API] Using stale NAV for ${isin}: ₹${lastNav.nav} (${lastNav.navDate}, ${daysOld.toFixed(0)} days old)`);
-              }
-            }
-          }
-          // Removed verbose logging - NAVs are fetched silently, errors are logged elsewhere if needed
+          console.warn(`[Portfolio Data API] NAV data exists but nav is null/undefined for ISIN: ${isin}, navDate: ${navData.navDate}`);
         }
       }
-      
-      // NAV updates complete (no logging for routine operations)
     }
     
     // 4. Calculate total portfolio value from holdings (source of truth)
     // CRITICAL: This ensures totals match sum of holdings
-    // Use current_value for equity (if available), invested_value for others
+    // For MF: Compute current_value from units × NAV (computed at read-time)
+    // For equity: Use current_value if available (from stored prices)
+    // For others: Use invested_value
     let totalValue = 0;
+    const allocationMap = new Map<string, number>();
+    
     holdings.forEach(h => {
       const assetType = (h.assets as any)?.asset_type || 'other';
+      const isMF = assetType === 'mutual_fund' || assetType === 'index_fund' || assetType === 'etf';
+      const isEquity = assetType === 'equity';
+      const investedValue = h.invested_value || 0;
       
-      // Recompute invested_value from quantity × average_price for verification
-      const computedInvestedValue = calculateInvestedValue(h.quantity || 0, h.average_price || 0);
-      const storedInvestedValue = h.invested_value || 0;
+      let valueToUse = investedValue;
       
-      if (Math.abs(computedInvestedValue - storedInvestedValue) > 0.01 && storedInvestedValue > 0) {
-        console.warn(`Value mismatch for holding ${h.id}: stored=${storedInvestedValue}, computed=${computedInvestedValue}`);
-      }
-      
-      // For equity and MF, use current_value if available (from stored prices/NAVs)
-      // If current_value is null for equity/MF, use invested_value as temporary fallback for display
-      // (This ensures dashboard doesn't break while prices/NAVs are being fetched)
-      let valueToUse = storedInvestedValue;
-      if (assetType === 'equity' || assetType === 'mutual_fund' || assetType === 'index_fund' || assetType === 'etf') {
+      if (isMF) {
+        // MF: Compute current_value from units × latest_nav (NAV-driven)
+        const computedNav = (h as any)._computedNav;
+        const quantity = h.quantity || 0;
+        
+        if (computedNav && computedNav > 0 && quantity > 0) {
+          // Compute current_value from units × latest_nav
+          valueToUse = quantity * computedNav;
+        } else {
+          // No NAV available - use invested_value as fallback
+          valueToUse = investedValue;
+        }
+      } else if (isEquity) {
+        // Stocks: Use persisted current_value (with diff logic applied earlier)
         if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
           valueToUse = h.current_value;
         } else {
-          // Temporary fallback: use invested_value for display, but log that prices/NAVs need fetching
-          valueToUse = storedInvestedValue;
-          if (h.current_value === null || h.current_value === undefined) {
-            const identifier = (h.assets as any)?.symbol || (h.assets as any)?.isin || `${assetType} holding`;
-            console.warn(`[Portfolio Data API] Using invested_value as temporary fallback for ${identifier} - ${assetType === 'equity' ? 'prices' : 'NAVs'} need to be fetched`);
-          }
+          // Temporary fallback: use invested_value for display until prices are fetched
+          valueToUse = investedValue;
         }
       }
       
+      // Add to total
       totalValue += valueToUse;
+      
+      // Add to allocation map (use computed value for equity/MF, invested_value for others)
+      allocationMap.set(assetType, (allocationMap.get(assetType) || 0) + valueToUse);
     });
     
-    // 5. Calculate allocation by asset type
-    // Group holdings by asset type and sum values
-    // Use current_value for equity, invested_value for others
-    const allocationMap = new Map<string, number>();
-    holdings.forEach(h => {
-      const assetType = (h.assets as any)?.asset_type || 'other';
-      // For equity, use current_value if available; otherwise invested_value
-      // For other asset types, use invested_value (no market pricing)
-      const value = assetType === 'equity' && h.current_value 
-        ? h.current_value 
-        : (h.invested_value || 0);
-      allocationMap.set(assetType, (allocationMap.get(assetType) || 0) + value);
-    });
+    // 5. Calculate allocation by asset type (already computed above)
     
     // Convert to allocation array with percentages
     let allocation: AllocationItem[] = Array.from(allocationMap.entries())
@@ -464,21 +402,37 @@ export async function GET(request: NextRequest) {
       const assetType = asset?.asset_type || 'other';
       const investedValue = h.invested_value || 0;
       
-      // For equity and MF, use current_value if available (from stored prices/NAVs)
-      // If current_value is null, use invested_value as temporary fallback for display
+      // CRITICAL: Mutual Funds use NAV-driven computation (no diff logic, no persistence)
+      // For MF: current_value = units × latest_nav (computed at read-time)
+      // For Stocks: use persisted current_value (with diff logic)
       let currentValue = investedValue;
-      const isMarketPriced = assetType === 'equity' || assetType === 'mutual_fund' || assetType === 'index_fund' || assetType === 'etf';
-      if (isMarketPriced) {
+      const isMF = assetType === 'mutual_fund' || assetType === 'index_fund' || assetType === 'etf';
+      const isEquity = assetType === 'equity';
+      
+      if (isMF) {
+        // MF: Compute from NAV (single source of truth)
+        const computedNav = (h as any)._computedNav;
+        const quantity = h.quantity || 0;
+        
+        if (computedNav && computedNav > 0 && quantity > 0) {
+          // Compute current_value from units × latest_nav (NAV-driven)
+          currentValue = quantity * computedNav;
+          } else {
+            // No NAV available - use invested_value as fallback
+            currentValue = investedValue;
+          }
+      } else if (isEquity) {
+        // Stocks: Use persisted current_value (with diff logic applied earlier)
         if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
           currentValue = h.current_value;
         } else {
-          // Temporary fallback: use invested_value for display until prices/NAVs are fetched
+          // Temporary fallback: use invested_value for display until prices are fetched
           currentValue = investedValue;
         }
       }
       
       // Calculate allocation based on current_value for equity/MF (if available), invested_value for others
-      const valueForAllocation = isMarketPriced && currentValue !== investedValue && currentValue > investedValue
+      const valueForAllocation = (isMF || isEquity) && currentValue !== investedValue && currentValue > investedValue
         ? currentValue
         : investedValue;
       
@@ -496,6 +450,8 @@ export async function GET(request: NextRequest) {
         sector: asset?.sector || null,
         assetClass: asset?.asset_class || null,
         notes: h.notes || null,
+        navDate: isMF ? ((h as any)._navDate || null) : null, // Include NAV date for MF holdings
+        priceDate: isEquity ? ((h as any)._priceDate || null) : null, // Include price date for equity holdings
       };
     });
     
@@ -595,6 +551,7 @@ export async function GET(request: NextRequest) {
           totalAssetTypes: assetTypes.size,
           largestHoldingPct,
           lastUpdated: portfolio.updated_at,
+          createdAt: portfolio.created_at,
         },
       },
     };

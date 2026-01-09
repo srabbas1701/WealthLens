@@ -45,7 +45,7 @@ interface ManualInvestmentRequest {
   user_id: string;
   portfolio_id?: string;
   form_data: {
-    assetType: 'fd' | 'bond' | 'gold' | 'cash';
+    assetType: 'fd' | 'bond' | 'gold' | 'cash' | 'epf' | 'ppf' | 'nps';
     // FD fields
     fdInstitution?: string;
     fdPrincipal?: number;
@@ -65,6 +65,20 @@ interface ManualInvestmentRequest {
     // Cash fields
     cashAccountType?: string;
     cashAmount?: number;
+    // EPF fields
+    epfAccountNumber?: string;
+    epfBalance?: number;
+    epfName?: string;
+    // PPF fields
+    ppfAccountNumber?: string;
+    ppfBalance?: number;
+    ppfMaturityDate?: string;
+    ppfName?: string;
+    // NPS fields
+    npsPRAN?: string;
+    npsTier?: 'tier1' | 'tier2';
+    npsBalance?: number;
+    npsName?: string;
   };
   editing_holding_id?: string;
 }
@@ -127,9 +141,12 @@ function getRiskBucket(assetType: string): 'low' | 'medium' | 'high' {
   switch (assetType) {
     case 'fd':
     case 'cash':
+    case 'epf':
+    case 'ppf':
       return 'low';
     case 'bond':
     case 'gold':
+    case 'nps':
       return 'medium';
     default:
       return 'medium';
@@ -476,6 +493,35 @@ export async function POST(req: NextRequest) {
         investedValue = form_data.cashAmount || 0;
         metadata = {
           account_type: form_data.cashAccountType,
+        };
+        break;
+
+      case 'epf':
+        assetType = 'epf';
+        assetName = form_data.epfName || 'EPF Account';
+        investedValue = form_data.epfBalance || 0;
+        metadata = {
+          account_number: form_data.epfAccountNumber,
+        };
+        break;
+
+      case 'ppf':
+        assetType = 'ppf';
+        assetName = form_data.ppfName || 'PPF Account';
+        investedValue = form_data.ppfBalance || 0;
+        metadata = {
+          account_number: form_data.ppfAccountNumber,
+          maturity_date: form_data.ppfMaturityDate,
+        };
+        break;
+
+      case 'nps':
+        assetType = 'nps';
+        assetName = form_data.npsName || 'NPS Account';
+        investedValue = form_data.npsBalance || 0;
+        metadata = {
+          pran: form_data.npsPRAN,
+          tier: form_data.npsTier,
         };
         break;
 

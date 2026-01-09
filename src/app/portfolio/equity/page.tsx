@@ -9,6 +9,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
@@ -28,6 +29,8 @@ import DataConsolidationMessage from '@/components/DataConsolidationMessage';
 type SortField = 'name' | 'quantity' | 'avgPrice' | 'currentPrice' | 'investedValue' | 'currentValue' | 'gainLoss' | 'allocation';
 type SortDirection = 'asc' | 'desc';
 
+type GroupBy = 'none' | 'company' | 'sector';
+
 interface EquityHolding {
   id: string;
   name: string;
@@ -40,6 +43,8 @@ interface EquityHolding {
   gainLoss: number;
   gainLossPercent: number;
   allocationPct: number;
+  sector: string | null;
+  priceDate: string | null; // Price date (YYYY-MM-DD)
 }
 
 export default function EquityHoldingsPage() {
@@ -55,6 +60,7 @@ export default function EquityHoldingsPage() {
   
   const [sortField, setSortField] = useState<SortField>('currentValue');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
   
   // Price update state
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
@@ -92,6 +98,8 @@ export default function EquityHoldingsPage() {
                 gainLoss,
                 gainLossPercent,
                 allocationPct: h.allocationPct,
+                sector: h.sector || null,
+                priceDate: h.priceDate || null,
               };
             });
 
@@ -225,6 +233,76 @@ export default function EquityHoldingsPage() {
     ? totalValue / holdings.reduce((sum, h) => sum + h.quantity, 0)
     : 0;
 
+  // Get most recent price date across all holdings
+  const mostRecentPriceDate = useMemo(() => {
+    const dates = holdings
+      .map(h => h.priceDate)
+      .filter((date): date is string => date !== null && date !== undefined)
+      .sort((a, b) => b.localeCompare(a)); // Sort descending (most recent first)
+    return dates.length > 0 ? dates[0] : null;
+  }, [holdings]);
+
+  // Format price date for display
+  const formatPriceDate = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Group holdings
+  const groupedHoldings = useMemo(() => {
+    if (groupBy === 'none') {
+      return [{ key: 'all', label: 'All Holdings', holdings: sortedHoldings }];
+    }
+
+    if (groupBy === 'company') {
+      // Group by company name (first word of stock name)
+      const groups = new Map<string, EquityHolding[]>();
+      sortedHoldings.forEach(h => {
+        const companyName = h.name.split(' ')[0] || 'Other';
+        if (!groups.has(companyName)) groups.set(companyName, []);
+        groups.get(companyName)!.push(h);
+      });
+      return Array.from(groups.entries())
+        .sort((a, b) => {
+          const aTotal = a[1].reduce((sum, h) => sum + h.currentValue, 0);
+          const bTotal = b[1].reduce((sum, h) => sum + h.currentValue, 0);
+          return bTotal - aTotal;
+        })
+        .map(([key, holdings]) => ({
+          key,
+          label: key,
+          holdings,
+        }));
+    }
+
+    if (groupBy === 'sector') {
+      const groups = new Map<string, EquityHolding[]>();
+      sortedHoldings.forEach(h => {
+        const sector = h.sector || 'Other';
+        if (!groups.has(sector)) groups.set(sector, []);
+        groups.get(sector)!.push(h);
+      });
+      return Array.from(groups.entries())
+        .sort((a, b) => {
+          const aTotal = a[1].reduce((sum, h) => sum + h.currentValue, 0);
+          const bTotal = b[1].reduce((sum, h) => sum + h.currentValue, 0);
+          return bTotal - aTotal;
+        })
+        .map(([key, holdings]) => ({
+          key,
+          label: key,
+          holdings,
+        }));
+    }
+
+    return [{ key: 'all', label: 'All Holdings', holdings: sortedHoldings }];
+  }, [sortedHoldings, groupBy]);
+
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) {
       return <ChevronDownIcon className="w-4 h-4 text-[#9CA3AF] opacity-0 group-hover:opacity-100 transition-opacity" />;
@@ -237,8 +315,8 @@ export default function EquityHoldingsPage() {
   // GUARD: Show loading while auth state is being determined
   if (authStatus === 'loading') {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
       </div>
     );
   }
@@ -250,17 +328,17 @@ export default function EquityHoldingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-[#6B7280]">Loading stocks holdings...</p>
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Loading stocks holdings...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB]">
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
         backHref="/dashboard"
@@ -272,14 +350,14 @@ export default function EquityHoldingsPage() {
         {/* Page Title */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <h1 className="text-2xl font-semibold text-[#0F172A]">Stocks Holdings</h1>
+            <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Stocks Holdings</h1>
             <button
               onClick={handlePriceUpdate}
               disabled={priceUpdateLoading || priceUpdateDisabled}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
                 priceUpdateLoading || priceUpdateDisabled
-                  ? 'bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed'
-                  : 'bg-[#2563EB] text-white hover:bg-[#1E40AF]'
+                  ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
+                  : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
               }`}
               title={priceUpdateDisabled ? 'Prices already updated today' : 'Update stock prices from Yahoo Finance'}
             >
@@ -293,20 +371,53 @@ export default function EquityHoldingsPage() {
                   : 'Update Prices'}
             </button>
           </div>
-          <p className="text-sm text-[#6B7280]">
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             {holdings.length} holding{holdings.length !== 1 ? 's' : ''} • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
+            {mostRecentPriceDate && (
+              <span className="ml-2 text-[#475569] dark:text-[#CBD5E1] font-medium">
+                • Price as of {formatPriceDate(mostRecentPriceDate)}
+              </span>
+            )}
           </p>
         </div>
 
+        {/* Controls */}
+        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4 mb-6">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]">Group by:</span>
+              <div className="flex gap-2">
+                {[
+                  { value: 'none', label: 'None' },
+                  { value: 'company', label: 'Company' },
+                  { value: 'sector', label: 'Sector' },
+                ].map(option => (
+                  <button
+                    key={option.value}
+                    onClick={() => setGroupBy(option.value as GroupBy)}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors font-medium ${
+                      groupBy === option.value
+                        ? 'bg-[#2563EB] dark:bg-[#3B82F6] text-white'
+                        : 'bg-white dark:bg-[#1E293B] text-[#475569] dark:text-[#CBD5E1] border border-[#E5E7EB] dark:border-[#334155] hover:bg-[#F6F8FB] dark:hover:bg-[#334155]'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Holdings Table */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden mb-6">
+        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
           <div className="overflow-x-auto">
             <div className="inline-block min-w-full align-middle">
               <table className="w-full">
-                <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                <thead className="bg-[#F9FAFB] dark:bg-[#334155] border-b border-[#E5E7EB] dark:border-[#334155]">
                 <tr>
                   <th 
-                    className="px-6 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                    className="px-6 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                     onClick={() => handleSort('name')}
                   >
                     <div className="flex items-center gap-2">
@@ -315,7 +426,7 @@ export default function EquityHoldingsPage() {
                     </div>
                   </th>
                   <th 
-                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                     onClick={() => handleSort('quantity')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -324,7 +435,7 @@ export default function EquityHoldingsPage() {
                     </div>
                   </th>
                   <th 
-                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                     onClick={() => handleSort('avgPrice')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -333,16 +444,7 @@ export default function EquityHoldingsPage() {
                     </div>
                   </th>
                   <th 
-                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
-                    onClick={() => handleSort('currentPrice')}
-                  >
-                    <div className="flex items-center justify-end gap-2">
-                      <span>Current Price</span>
-                      <SortIcon field="currentPrice" />
-                    </div>
-                  </th>
-                  <th 
-                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                     onClick={() => handleSort('investedValue')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -351,7 +453,16 @@ export default function EquityHoldingsPage() {
                     </div>
                   </th>
                   <th 
-                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                    onClick={() => handleSort('currentPrice')}
+                  >
+                    <div className="flex items-center justify-end gap-2">
+                      <span>Current Price</span>
+                      <SortIcon field="currentPrice" />
+                    </div>
+                  </th>
+                  <th 
+                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                     onClick={() => handleSort('currentValue')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -360,7 +471,7 @@ export default function EquityHoldingsPage() {
                     </div>
                   </th>
                   <th 
-                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                     onClick={() => handleSort('gainLoss')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -369,7 +480,7 @@ export default function EquityHoldingsPage() {
                     </div>
                   </th>
                   <th 
-                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                     onClick={() => handleSort('allocation')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -379,95 +490,111 @@ export default function EquityHoldingsPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E5E7EB]">
-                {sortedHoldings.length === 0 ? (
+              <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
+                {groupedHoldings.length === 0 || (groupedHoldings[0].holdings.length === 0 && groupBy === 'none') ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center">
-                      <p className="text-sm text-[#6B7280] mb-2">No stocks holdings found</p>
-                      <p className="text-xs text-[#9CA3AF]">Upload your portfolio to see stocks holdings</p>
+                      <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">No stocks holdings found</p>
+                      <p className="text-xs text-[#9CA3AF] dark:text-[#64748B]">Upload your portfolio to see stocks holdings</p>
                     </td>
                   </tr>
                 ) : (
-                  sortedHoldings.map((holding) => (
-                    <tr key={holding.id} className="hover:bg-[#F9FAFB] transition-colors">
-                      <td className="px-6 py-3.5">
-                        <div>
-                          <p className="font-semibold text-[#0F172A] text-sm">{holding.name}</p>
-                          {holding.symbol && (
-                            <p className="text-xs text-[#6B7280] mt-0.5">NSE: {holding.symbol}</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 text-right text-[#0F172A] font-medium number-emphasis text-sm">
-                        {holding.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-4 py-3.5 text-right text-[#0F172A] font-medium number-emphasis text-sm">
-                        {formatPrice(holding.averagePrice)}
-                      </td>
-                      <td className="px-4 py-3.5 text-right text-[#0F172A] font-medium number-emphasis text-sm">
-                        {formatPrice(holding.currentPrice)}
-                      </td>
-                      <td className="px-4 py-3.5 text-right text-[#0F172A] font-medium number-emphasis text-sm">
-                        {formatCurrency(holding.investedValue)}
-                      </td>
-                      <td className="px-4 py-3.5 text-right text-[#0F172A] font-semibold number-emphasis text-sm">
+                  groupedHoldings.map(group => (
+                    <React.Fragment key={group.key}>
+                      {groupBy !== 'none' && (
+                        <tr className="bg-[#F9FAFB] dark:bg-[#334155]">
+                          <td colSpan={8} className="px-6 py-2.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                            {group.label}
+                            <span className="ml-2 text-[#6B7280] dark:text-[#94A3B8] font-medium">
+                              ({group.holdings.length} holding{group.holdings.length !== 1 ? 's' : ''}, {
+                                formatCurrency(group.holdings.reduce((sum, h) => sum + h.currentValue, 0))
+                              })
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                      {group.holdings.map((holding) => (
+                        <tr key={holding.id} className="hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
+                          <td className="px-6 py-3.5">
+                            <div>
+                              <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-sm">{holding.name}</p>
+                              {holding.symbol && (
+                                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">NSE: {holding.symbol}</p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 text-right text-[#0F172A] dark:text-[#F8FAFC] font-medium number-emphasis text-sm">
+                            {holding.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-3.5 text-right text-[#0F172A] dark:text-[#F8FAFC] font-medium number-emphasis text-sm">
+                            {formatPrice(holding.averagePrice)}
+                          </td>
+                          <td className="px-4 py-3.5 text-right text-[#0F172A] dark:text-[#F8FAFC] font-medium number-emphasis text-sm">
+                            {formatCurrency(holding.investedValue)}
+                          </td>
+                          <td className="px-4 py-3.5 text-right text-[#0F172A] dark:text-[#F8FAFC] font-medium number-emphasis text-sm">
+                            {formatPrice(holding.currentPrice)}
+                          </td>
+                      <td className="px-4 py-3.5 text-right text-[#0F172A] dark:text-[#F8FAFC] font-semibold number-emphasis text-sm">
                         {formatCurrency(holding.currentValue)}
                       </td>
                       <td className="px-4 py-3.5 text-right text-sm">
                         <div className={`font-semibold number-emphasis ${
-                          holding.gainLoss >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
+                          holding.gainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'
                         }`}>
                           {holding.gainLoss >= 0 ? '+' : ''}{formatCurrency(holding.gainLoss)}
                         </div>
                         <div className={`text-xs font-medium mt-0.5 ${
-                          holding.gainLoss >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
+                          holding.gainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'
                         }`}>
                           ({holding.gainLoss >= 0 ? '+' : ''}{holding.gainLossPercent.toFixed(2)}%)
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-right">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F1F5F9] text-[#475569] border border-[#E5E7EB]">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F1F5F9] dark:bg-[#334155] text-[#475569] dark:text-[#CBD5E1] border border-[#E5E7EB] dark:border-[#334155]">
                           {holding.allocationPct.toFixed(1)}%
                         </span>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      ))}
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
-              {sortedHoldings.length > 0 && (
-                <tfoot className="bg-[#F9FAFB] border-t-2 border-[#0F172A]">
+              {holdings.length > 0 && (
+                <tfoot className="bg-[#F9FAFB] dark:bg-[#334155] border-t-2 border-[#0F172A] dark:border-[#F8FAFC]">
                   <tr>
-                    <td className="px-6 py-3.5 text-sm font-bold text-[#0F172A]">
+                    <td className="px-6 py-3.5 text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                       TOTAL
                     </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] number-emphasis">
+                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                       {holdings.reduce((sum, h) => sum + h.quantity, 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                     </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] number-emphasis">
+                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                       {formatPrice(holdings.length > 0 ? totalInvested / holdings.reduce((sum, h) => sum + h.quantity, 0) : 0)}
                     </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] number-emphasis">
-                      {formatPrice(avgCurrentPrice)}
-                    </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] number-emphasis">
+                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                       {formatCurrency(totalInvested)}
                     </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] number-emphasis">
+                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
+                      {formatPrice(avgCurrentPrice)}
+                    </td>
+                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                       {formatCurrency(totalValue)}
                     </td>
                     <td className="px-4 py-3.5 text-right text-sm">
                       <div className={`font-bold number-emphasis ${
-                        totalGainLoss >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
+                        totalGainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'
                       }`}>
                         {totalGainLoss >= 0 ? '+' : ''}{formatCurrency(totalGainLoss)}
                       </div>
                       <div className={`text-xs font-semibold mt-0.5 ${
-                        totalGainLoss >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
+                        totalGainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'
                       }`}>
                         ({totalGainLoss >= 0 ? '+' : ''}{totalGainLossPercent.toFixed(2)}%)
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A]">
+                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                       {portfolioPercentage.toFixed(1)}%
                     </td>
                   </tr>
@@ -479,14 +606,14 @@ export default function EquityHoldingsPage() {
         </div>
 
         {/* Verification Note */}
-        <div className="mb-6 bg-white rounded-xl border border-[#E5E7EB] p-4">
+        <div className="mb-6 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4">
           <div className="flex items-start gap-3">
-            <CheckCircleIcon className="w-5 h-5 text-[#16A34A] flex-shrink-0 mt-0.5" />
+            <CheckCircleIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-[#0F172A]">
+              <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                 Verification: Total matches dashboard stocks value ({formatCurrency(totalValue)}) ✓
               </p>
-              <p className="text-xs text-[#6B7280] mt-1">
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                 All values computed from Quantity × Average Price. Current values match invested values (MVP - no live price sync).
               </p>
             </div>
@@ -494,32 +621,32 @@ export default function EquityHoldingsPage() {
         </div>
 
         {/* Inline Insights */}
-        {sortedHoldings.length > 0 && (
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-6">
-            <h2 className="text-lg font-semibold text-[#0F172A] mb-4">Portfolio Insights</h2>
+        {holdings.length > 0 && (
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+            <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Portfolio Insights</h2>
             <div className="space-y-4">
-              <div className="bg-[#F6F8FB] rounded-lg border border-[#E5E7EB] p-4">
-                <p className="text-sm text-[#475569]">
-                    <strong className="text-[#0F172A]">Total Stocks Holdings:</strong> {formatCurrency(totalValue)} ({portfolioPercentage.toFixed(1)}% of portfolio)
+              <div className="bg-[#F6F8FB] dark:bg-[#334155] rounded-lg border border-[#E5E7EB] dark:border-[#334155] p-4">
+                <p className="text-sm text-[#475569] dark:text-[#CBD5E1]">
+                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Total Stocks Holdings:</strong> {formatCurrency(totalValue)} ({portfolioPercentage.toFixed(1)}% of portfolio)
                 </p>
-                <p className="text-sm text-[#475569] mt-2">
-                  <strong className="text-[#0F172A]">Total Invested:</strong> {formatCurrency(totalInvested)}
+                <p className="text-sm text-[#475569] dark:text-[#CBD5E1] mt-2">
+                  <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Total Invested:</strong> {formatCurrency(totalInvested)}
                 </p>
-                <p className="text-sm text-[#475569] mt-2">
-                  <strong className="text-[#0F172A]">Total P&L:</strong>{' '}
-                  <span className={totalGainLoss >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'}>
+                <p className="text-sm text-[#475569] dark:text-[#CBD5E1] mt-2">
+                  <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Total P&L:</strong>{' '}
+                  <span className={totalGainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}>
                     {totalGainLoss >= 0 ? '+' : ''}{formatCurrency(totalGainLoss)} ({totalGainLoss >= 0 ? '+' : ''}{totalGainLossPercent.toFixed(2)}%)
                   </span>
                 </p>
               </div>
               
-              {sortedHoldings.length > 1 && (
-                <div className="bg-[#F6F8FB] rounded-lg border border-[#E5E7EB] p-4">
-                  <p className="text-sm text-[#475569]">
-                    <strong className="text-[#0F172A]">Top Holding:</strong> {sortedHoldings[0].name} ({sortedHoldings[0].allocationPct.toFixed(1)}% of stocks holdings)
+              {holdings.length > 1 && (
+                <div className="bg-[#F6F8FB] dark:bg-[#334155] rounded-lg border border-[#E5E7EB] dark:border-[#334155] p-4">
+                  <p className="text-sm text-[#475569] dark:text-[#CBD5E1]">
+                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Top Holding:</strong> {sortedHoldings[0]?.name} ({sortedHoldings[0]?.allocationPct.toFixed(1)}% of stocks holdings)
                   </p>
-                  <p className="text-sm text-[#475569] mt-2">
-                    <strong className="text-[#0F172A]">Concentration:</strong> Top 3 holdings represent{' '}
+                  <p className="text-sm text-[#475569] dark:text-[#CBD5E1] mt-2">
+                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Concentration:</strong> Top 3 holdings represent{' '}
                     {sortedHoldings.slice(0, 3).reduce((sum, h) => sum + h.allocationPct, 0).toFixed(1)}% of stocks portfolio
                   </p>
                 </div>
