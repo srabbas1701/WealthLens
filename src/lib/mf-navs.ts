@@ -607,6 +607,7 @@ export async function updateMFNavs(schemeCodes?: string[]): Promise<NavUpdateRes
 
 /**
  * Get NAVs for multiple ISINs (via scheme_code mapping)
+ * OPTIMIZED: Batch queries to reduce from N*2 queries to 2 queries total
  * 
  * @param isins - Array of ISINs (used in assets table)
  * @returns Map of ISIN to NAV (or null if not found)
@@ -616,11 +617,144 @@ export async function getMFNavsByISIN(
 ): Promise<Map<string, MFNav | null>> {
   const navMap = new Map<string, MFNav | null>();
   
-  for (const isin of isins) {
-    const nav = await getMFNavByISIN(isin);
-    navMap.set(isin.toUpperCase(), nav);
+  if (isins.length === 0) {
+    return navMap;
   }
   
-  return navMap;
+  try {
+    const supabase = createAdminClient();
+    const targetDate = getPreviousTradingDay();
+    const upperISINs = isins.map(i => i.toUpperCase());
+    
+    // STEP 1: Batch query to get ALL scheme_codes for ALL ISINs at once
+    // The mf_scheme_master table has 3 ISIN columns (growth, div_payout, div_reinvest)
+    // We need to query all three columns - use 3 separate IN queries and combine results
+    const [growthResult, payoutResult, reinvestResult] = await Promise.all([
+      supabase
+        .from('mf_scheme_master')
+        .select('scheme_code, isin_growth, isin_div_payout, isin_div_reinvest')
+        .in('isin_growth', upperISINs),
+      supabase
+        .from('mf_scheme_master')
+        .select('scheme_code, isin_growth, isin_div_payout, isin_div_reinvest')
+        .in('isin_div_payout', upperISINs),
+      supabase
+        .from('mf_scheme_master')
+        .select('scheme_code, isin_growth, isin_div_payout, isin_div_reinvest')
+        .in('isin_div_reinvest', upperISINs),
+    ]);
+    
+    // Combine all results (deduplicate by scheme_code)
+    const schemeMap = new Map();
+    const allResults = [
+      ...(growthResult.data || []),
+      ...(payoutResult.data || []),
+      ...(reinvestResult.data || []),
+    ];
+    
+    const schemeMappings = allResults.filter(scheme => {
+      if (schemeMap.has(scheme.scheme_code)) {
+        return false; // Already added
+      }
+      schemeMap.set(scheme.scheme_code, true);
+      return true;
+    });
+    
+    // Build ISIN → scheme_code map
+    const isinToSchemeCode = new Map<string, string>();
+    if (schemeMappings && schemeMappings.length > 0) {
+      for (const mapping of schemeMappings) {
+        const schemeCode = mapping.scheme_code;
+        if (mapping.isin_growth) {
+          isinToSchemeCode.set(mapping.isin_growth.toUpperCase(), schemeCode);
+        }
+        if (mapping.isin_div_payout) {
+          isinToSchemeCode.set(mapping.isin_div_payout.toUpperCase(), schemeCode);
+        }
+        if (mapping.isin_div_reinvest) {
+          isinToSchemeCode.set(mapping.isin_div_reinvest.toUpperCase(), schemeCode);
+        }
+      }
+    }
+    
+    const schemeCodes = Array.from(new Set(isinToSchemeCode.values()));
+    
+    if (schemeCodes.length === 0) {
+      // No mappings found - return nulls for all ISINs
+      for (const isin of upperISINs) {
+        navMap.set(isin, null);
+      }
+      return navMap;
+    }
+    
+    // STEP 2: Batch query to get ALL NAVs for ALL scheme_codes at once
+    const { data: navData, error: navError } = await supabase
+      .from('mf_navs')
+      .select('scheme_code, scheme_name, nav, nav_date, last_updated')
+      .in('scheme_code', schemeCodes)
+      .eq('nav_date', targetDate);
+    
+    // Build scheme_code → NAV map
+    const schemeCodeToNav = new Map<string, MFNav>();
+    if (navData && !navError) {
+      for (const row of navData) {
+        schemeCodeToNav.set(row.scheme_code, {
+          schemeCode: row.scheme_code,
+          schemeName: row.scheme_name,
+          nav: row.nav,
+          navDate: row.nav_date,
+          lastUpdated: row.last_updated,
+        });
+      }
+    }
+    
+    // For missing NAVs, get latest in batch
+    const missingSchemeCodes = schemeCodes.filter(sc => !schemeCodeToNav.has(sc));
+    if (missingSchemeCodes.length > 0) {
+      const { data: latestNavs, error: latestError } = await supabase
+        .from('mf_navs')
+        .select('scheme_code, scheme_name, nav, nav_date, last_updated')
+        .in('scheme_code', missingSchemeCodes)
+        .order('nav_date', { ascending: false });
+      
+      if (latestNavs && !latestError) {
+        // Take the first (most recent) NAV for each scheme_code
+        const seen = new Set<string>();
+        for (const row of latestNavs) {
+          if (!seen.has(row.scheme_code)) {
+            seen.add(row.scheme_code);
+            schemeCodeToNav.set(row.scheme_code, {
+              schemeCode: row.scheme_code,
+              schemeName: row.scheme_name,
+              nav: row.nav,
+              navDate: row.nav_date,
+              lastUpdated: row.last_updated,
+            });
+          }
+        }
+      }
+    }
+    
+    // STEP 3: Build final result map (ISIN → NAV)
+    for (const isin of upperISINs) {
+      const schemeCode = isinToSchemeCode.get(isin);
+      if (schemeCode) {
+        const nav = schemeCodeToNav.get(schemeCode);
+        navMap.set(isin, nav || null);
+      } else {
+        navMap.set(isin, null);
+      }
+    }
+    
+    return navMap;
+  } catch (error) {
+    console.error('[MF NAV Service] Error in getMFNavsByISIN:', error);
+    // Fall back to loop on error
+    for (const isin of isins) {
+      const nav = await getMFNavByISIN(isin);
+      navMap.set(isin.toUpperCase(), nav);
+    }
+    return navMap;
+  }
 }
 

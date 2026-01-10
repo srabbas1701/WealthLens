@@ -329,8 +329,9 @@ async function findAsset(
   supabase: ReturnType<typeof createAdminClient>,
   holding: ParsedHolding
 ): Promise<Asset | null> {
-  // For MF/ETF/Index Fund, attempt ISIN resolution (BEST EFFORT - NON-BLOCKING)
-  const isMF = holding.asset_type === 'mutual_fund' || holding.asset_type === 'index_fund' || holding.asset_type === 'etf';
+  // For MF/Index Fund (NOT ETF), attempt ISIN resolution (BEST EFFORT - NON-BLOCKING)
+  // ETFs trade on exchanges like stocks and use trading symbols, not scheme codes
+  const isMF = holding.asset_type === 'mutual_fund' || holding.asset_type === 'index_fund';
   let resolvedIsin: string | null = null;
   let resolvedSchemeName: string | null = null;
   
@@ -370,7 +371,7 @@ async function findAsset(
     }
   }
   
-  // 2. Try Symbol (reliable for Indian markets, not applicable for MF)
+  // 2. Try Symbol (reliable for stocks and ETFs, not applicable for MF)
   if (!isMF && holding.symbol) {
     const { data: assetBySymbol } = await supabase
       .from('assets')
@@ -420,20 +421,29 @@ async function findAsset(
 /**
  * Create new asset in the database
  * 
- * For MF/ETF/Index Fund assets: ISIN is optional (best-effort enrichment).
+ * For MF/Index Fund assets: ISIN is optional (best-effort enrichment).
+ * For ETFs: Symbol is REQUIRED (they trade like stocks on exchanges).
  * Upload proceeds even if ISIN is missing.
  * 
- * Asset creation rules for Mutual Funds:
- * - asset_type = 'mutual_fund' | 'index_fund' | 'etf'
- * - name = scheme name from CSV (as-is)
- * - isin = resolved ISIN OR NULL (optional)
- * - symbol = NULL (MF assets don't use symbols)
+ * Asset creation rules:
+ * - Mutual Funds/Index Funds:
+ *   - asset_type = 'mutual_fund' | 'index_fund'
+ *   - name = scheme name from CSV (as-is)
+ *   - isin = resolved ISIN OR NULL (optional)
+ *   - symbol = scheme_code (AMFI code) OR NULL
+ * 
+ * - ETFs:
+ *   - asset_type = 'etf'
+ *   - name = ETF name from CSV
+ *   - isin = ISIN from CSV OR NULL
+ *   - symbol = trading symbol from CSV (REQUIRED - e.g., CPSEETF, NIFTYBEES)
  */
 async function createAsset(
   supabase: ReturnType<typeof createAdminClient>,
   holding: ParsedHolding
 ): Promise<Asset> {
-  const isMF = holding.asset_type === 'mutual_fund' || holding.asset_type === 'index_fund' || holding.asset_type === 'etf';
+  const isMF = holding.asset_type === 'mutual_fund' || holding.asset_type === 'index_fund';
+  const isETF = holding.asset_type === 'etf';
   
   // ISIN is optional for MF assets - log warning if missing, but proceed
   if (isMF && !holding.isin) {
@@ -454,11 +464,13 @@ async function createAsset(
     }
   }
   
-  // For MF assets: use scheme_code as symbol (AMFI scheme code)
-  // For other assets: use symbol from CSV
+  // Symbol logic:
+  // - MF/Index Funds: use scheme_code (AMFI code) if available
+  // - ETFs: use trading symbol from CSV (REQUIRED for price updates)
+  // - Stocks: use symbol from CSV
   const symbol = isMF 
     ? ((holding as any)._schemeCode || null) // Use scheme_code from resolution
-    : (holding.symbol?.toUpperCase() || null);
+    : (holding.symbol?.toUpperCase() || null); // ETFs and stocks use trading symbols
   
   const { data: newAsset, error } = await supabase
     .from('assets')
@@ -483,6 +495,11 @@ async function createAsset(
       console.log(`  ✅ Created MF asset: ${newAsset.name} (${newAsset.asset_type}) with ISIN: ${newAsset.isin}`);
     } else {
       console.log(`  ✅ Created MF asset: ${newAsset.name} (${newAsset.asset_type}) without ISIN (will be enriched later)`);
+    }
+  } else if (isETF) {
+    console.log(`  ✅ Created ETF asset: ${newAsset.name} with symbol: ${newAsset.symbol || 'MISSING'}`);
+    if (!newAsset.symbol) {
+      console.warn(`  ⚠️ ETF "${newAsset.name}" created without trading symbol - price updates will fail!`);
     }
   } else {
     console.log(`  Created new asset: ${newAsset.name} (${newAsset.asset_type})`);
@@ -962,17 +979,24 @@ export async function POST(request: NextRequest) {
     console.log('\nProcessing holdings:');
     for (const holding of validHoldings) {
       try {
-        const isMF = holding.asset_type === 'mutual_fund' || holding.asset_type === 'index_fund' || holding.asset_type === 'etf';
+        const isMF = holding.asset_type === 'mutual_fund' || holding.asset_type === 'index_fund';
+        const isETF = holding.asset_type === 'etf';
         const hadIsinBefore = !!holding.isin;
         
         // Find or create asset
         // For MF assets: ISIN resolution is best-effort (non-blocking)
+        // For ETFs: Symbol is required for price updates
         // Upload proceeds even if ISIN cannot be resolved
         let asset = await findAsset(supabase, holding);
         
         // Track if ISIN was not resolved for MF assets (after resolution attempt)
         if (isMF && !holding.isin && !hadIsinBefore) {
           warnings.push(`ISIN not resolved for "${holding.name}". Asset created without ISIN and will be enriched later.`);
+        }
+        
+        // Warn if ETF is missing trading symbol
+        if (isETF && !holding.symbol) {
+          warnings.push(`ETF "${holding.name}" is missing trading symbol. Price updates will not work. Please add symbol column to your CSV.`);
         }
         
         if (!asset) {

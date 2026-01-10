@@ -12,7 +12,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
@@ -53,6 +53,7 @@ export default function PortfolioSummaryPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
   
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<PortfolioSummaryData | null>(null);
@@ -60,6 +61,13 @@ export default function PortfolioSummaryPage() {
 
   // Fetch portfolio summary data
   const fetchData = useCallback(async (userId: string) => {
+    // Prevent duplicate simultaneous fetches
+    if (fetchingRef.current) {
+      console.log('[Summary Page] Skipping duplicate fetch');
+      return;
+    }
+    
+    fetchingRef.current = true;
     setLoading(true);
     try {
       const params = new URLSearchParams({ user_id: userId });
@@ -112,6 +120,7 @@ export default function PortfolioSummaryPage() {
       console.error('Failed to fetch portfolio summary:', error);
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
   }, []);
 
@@ -160,6 +169,9 @@ export default function PortfolioSummaryPage() {
       'Bonds': '/portfolio/bonds',
       'Bond': '/portfolio/bonds',
       'ETFs': '/portfolio/etfs',
+      'PPF': '/portfolio/ppf',
+      'NPS': '/portfolio/nps',
+      'EPF': '/portfolio/epf',
       'ETF': '/portfolio/etfs',
       'NPS': '/portfolio/nps',
       'Index Funds': '/portfolio/summary',

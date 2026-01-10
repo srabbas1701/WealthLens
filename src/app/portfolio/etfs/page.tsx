@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
@@ -18,11 +18,12 @@ import {
   InfoIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  RefreshIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 
-type SortField = 'name' | 'category' | 'units' | 'avgPrice' | 'currentNAV' | 'investedValue' | 'currentValue' | 'allocation';
+type SortField = 'name' | 'category' | 'units' | 'avgPrice' | 'currentNAV' | 'investedValue' | 'currentValue' | 'gainLoss' | 'allocation';
 type SortDirection = 'asc' | 'desc';
 
 interface ETFHolding {
@@ -38,6 +39,7 @@ interface ETFHolding {
   gainLoss: number;
   gainLossPercent: number;
   allocationPct: number;
+  priceDate: string | null; // Price date (YYYY-MM-DD)
 }
 
 // Category label mapping
@@ -57,6 +59,7 @@ export default function ETFHoldingsPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<ETFHolding[]>([]);
@@ -66,8 +69,19 @@ export default function ETFHoldingsPage() {
   
   const [sortField, setSortField] = useState<SortField>('currentValue');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  
+  // Price update state
+  const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
+  const [priceUpdateDisabled, setPriceUpdateDisabled] = useState(false);
 
   const fetchData = useCallback(async (userId: string) => {
+    // Prevent duplicate simultaneous fetches
+    if (fetchingRef.current) {
+      console.log('[ETF Page] Skipping duplicate fetch');
+      return;
+    }
+    
+    fetchingRef.current = true;
     setLoading(true);
     try {
       const params = new URLSearchParams({ user_id: userId });
@@ -101,6 +115,7 @@ export default function ETFHoldingsPage() {
                 gainLoss,
                 gainLossPercent,
                 allocationPct: h.allocationPct,
+                priceDate: (h as any)._priceDate || null,
               };
             });
 
@@ -120,6 +135,7 @@ export default function ETFHoldingsPage() {
       console.error('Failed to fetch ETF holdings:', error);
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
   }, []);
 
@@ -137,6 +153,50 @@ export default function ETFHoldingsPage() {
       fetchData(user.id);
     }
   }, [user?.id, fetchData]);
+
+  const handlePriceUpdate = async () => {
+    setPriceUpdateLoading(true);
+    try {
+      const response = await fetch('/api/stocks/prices/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('[ETF Page] Price update result:', result);
+        
+        // Refresh data
+        if (user?.id) {
+          await fetchData(user.id);
+        }
+        
+        // Disable button after successful update
+        setPriceUpdateDisabled(true);
+        setTimeout(() => setPriceUpdateDisabled(false), 60000); // Re-enable after 1 minute
+      } else {
+        console.error('[ETF Page] Price update failed');
+      }
+    } catch (error) {
+      console.error('[ETF Page] Price update error:', error);
+    } finally {
+      setPriceUpdateLoading(false);
+    }
+  };
+
+  const formatPriceDate = (dateStr: string | null): string => {
+    if (!dateStr) return 'N/A';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-IN', { 
+        day: 'numeric', 
+        month: 'short', 
+        year: 'numeric' 
+      });
+    } catch {
+      return 'N/A';
+    }
+  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -175,26 +235,35 @@ export default function ETFHoldingsPage() {
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) {
-      return <ChevronUpIcon className="w-4 h-4 text-[#9CA3AF] opacity-0 group-hover:opacity-100 transition-opacity" />;
+      return <ChevronUpIcon className="w-4 h-4 text-[#9CA3AF] dark:text-[#64748B] opacity-0 group-hover:opacity-100 transition-opacity" />;
     }
     return sortDirection === 'asc' 
-      ? <ChevronUpIcon className="w-4 h-4 text-[#2563EB]" />
-      : <ChevronDownIcon className="w-4 h-4 text-[#2563EB]" />;
+      ? <ChevronUpIcon className="w-4 h-4 text-[#2563EB] dark:text-[#3B82F6]" />
+      : <ChevronDownIcon className="w-4 h-4 text-[#2563EB] dark:text-[#3B82F6]" />;
   };
+
+  // Get most recent price date from holdings
+  const mostRecentPriceDate = useMemo(() => {
+    const dates = holdings
+      .map(h => h.priceDate)
+      .filter(Boolean)
+      .sort((a, b) => new Date(b!).getTime() - new Date(a!).getTime());
+    return dates.length > 0 ? dates[0] : null;
+  }, [holdings]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-[#6B7280]">Loading ETF holdings...</p>
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Loading ETF holdings...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB]">
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
         backHref="/dashboard"
@@ -205,21 +274,47 @@ export default function ETFHoldingsPage() {
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
         {/* Page Title */}
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A] mb-2">ETF Holdings</h1>
-          <p className="text-sm text-[#6B7280]">
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">ETF Holdings</h1>
+            <button
+              onClick={handlePriceUpdate}
+              disabled={priceUpdateLoading || priceUpdateDisabled}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                priceUpdateLoading || priceUpdateDisabled
+                  ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
+                  : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
+              }`}
+              title={priceUpdateDisabled ? 'Prices already updated today' : 'Update ETF prices from Yahoo Finance'}
+            >
+              <RefreshIcon 
+                className={`w-4 h-4 ${priceUpdateLoading ? 'animate-spin' : ''}`} 
+              />
+              {priceUpdateLoading 
+                ? 'Updating...' 
+                : priceUpdateDisabled 
+                  ? 'Updated Today' 
+                  : 'Update Prices'}
+            </button>
+          </div>
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             {holdings.length} holding{holdings.length !== 1 ? 's' : ''} • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
+            {mostRecentPriceDate && (
+              <span className="ml-2 text-[#475569] dark:text-[#CBD5E1] font-medium">
+                • Price as of {formatPriceDate(mostRecentPriceDate)}
+              </span>
+            )}
           </p>
         </div>
 
         {/* Holdings Table */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden mb-6">
+        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
           <div className="overflow-x-auto">
             <div className="inline-block min-w-full align-middle">
               <table className="w-full">
-                <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                <thead className="bg-[#F9FAFB] dark:bg-[#334155] border-b border-[#E5E7EB] dark:border-[#334155]">
                   <tr>
                     <th 
-                      className="px-6 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-6 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('name')}
                     >
                       <div className="flex items-center gap-2">
@@ -228,7 +323,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('category')}
                     >
                       <div className="flex items-center gap-2">
@@ -237,7 +332,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('units')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -246,7 +341,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('avgPrice')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -255,7 +350,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('currentNAV')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -264,7 +359,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('investedValue')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -273,7 +368,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('currentValue')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -282,7 +377,16 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] transition-colors group"
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                      onClick={() => handleSort('gainLoss')}
+                    >
+                      <div className="flex items-center justify-end gap-2">
+                        <span>Gain/Loss</span>
+                        <SortIcon field="gainLoss" />
+                      </div>
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('allocation')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -292,56 +396,74 @@ export default function ETFHoldingsPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#E5E7EB]">
+                <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                   {sortedHoldings.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center">
+                      <td colSpan={9} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center gap-2">
-                          <p className="text-sm text-[#6B7280] mb-2">No ETF holdings found</p>
-                          <p className="text-xs text-[#9CA3AF]">Upload your portfolio to see ETF holdings</p>
+                          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">No ETF holdings found</p>
+                          <p className="text-xs text-[#9CA3AF] dark:text-[#64748B]">Upload your portfolio to see ETF holdings</p>
                         </div>
                       </td>
                     </tr>
                   ) : (
                     sortedHoldings.map((holding) => (
-                      <tr key={holding.id} className="hover:bg-[#F9FAFB] transition-colors">
+                      <tr key={holding.id} className="hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
                         <td className="px-6 py-3.5">
                           <div>
-                            <p className="text-sm font-medium text-[#0F172A]">{holding.name}</p>
+                            <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.name}</p>
                             {holding.symbol && (
-                              <p className="text-xs text-[#6B7280] mt-0.5">{holding.symbol}</p>
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">{holding.symbol}</p>
                             )}
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
                             holding.category === 'Equity' 
-                              ? 'bg-[#E0F2FE] text-[#0369A1]'
+                              ? 'bg-[#E0F2FE] dark:bg-[#0C4A6E] text-[#0369A1] dark:text-[#7DD3FC]'
                               : holding.category === 'Debt'
-                              ? 'bg-[#F0FDF4] text-[#166534]'
+                              ? 'bg-[#F0FDF4] dark:bg-[#14532D] text-[#166534] dark:text-[#86EFAC]'
                               : holding.category === 'Gold'
-                              ? 'bg-[#FEF3C7] text-[#92400E]'
-                              : 'bg-[#F3F4F6] text-[#4B5563]'
+                              ? 'bg-[#FEF3C7] dark:bg-[#78350F] text-[#92400E] dark:text-[#FDE047]'
+                              : 'bg-[#F3F4F6] dark:bg-[#475569] text-[#4B5563] dark:text-[#E5E7EB]'
                           }`}>
                             {holding.category}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           {formatNumber(holding.units, 2)}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           ₹{formatNumber(holding.averagePrice, 2)}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           ₹{formatNumber(holding.currentNAV, 2)}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           {formatCurrency(holding.investedValue)}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                           {formatCurrency(holding.currentValue)}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A]">
+                        <td className="px-4 py-3.5 text-right text-sm">
+                          <div>
+                            <div className={`font-medium ${
+                              holding.gainLoss >= 0 
+                                ? 'text-[#16A34A] dark:text-[#22C55E]' 
+                                : 'text-[#DC2626] dark:text-[#EF4444]'
+                            }`}>
+                              {holding.gainLoss >= 0 ? '+' : ''}{formatCurrency(holding.gainLoss)}
+                            </div>
+                            <div className={`text-xs ${
+                              holding.gainLossPercent >= 0 
+                                ? 'text-[#16A34A] dark:text-[#22C55E]' 
+                                : 'text-[#DC2626] dark:text-[#EF4444]'
+                            }`}>
+                              {holding.gainLossPercent >= 0 ? '+' : ''}{holding.gainLossPercent.toFixed(2)}%
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                           {holding.allocationPct.toFixed(1)}%
                         </td>
                       </tr>
@@ -349,24 +471,33 @@ export default function ETFHoldingsPage() {
                   )}
                 </tbody>
                 {sortedHoldings.length > 0 && (
-                  <tfoot className="bg-[#F9FAFB] border-t-2 border-[#E5E7EB]">
+                  <tfoot className="bg-[#F9FAFB] dark:bg-[#334155] border-t-2 border-[#E5E7EB] dark:border-[#334155]">
                     <tr>
-                      <td className="px-6 py-3.5 text-sm font-semibold text-[#0F172A]">
+                      <td className="px-6 py-3.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                         Total
                       </td>
                       <td className="px-4 py-3.5"></td>
-                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A]">
+                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatNumber(sortedHoldings.reduce((sum, h) => sum + h.units, 0), 2)}
                       </td>
                       <td className="px-4 py-3.5"></td>
                       <td className="px-4 py-3.5"></td>
-                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A]">
+                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatCurrency(totalInvested)}
                       </td>
-                      <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A]">
+                      <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatCurrency(totalValue)}
                       </td>
-                      <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A]">
+                      <td className="px-4 py-3.5 text-right text-sm">
+                        <div className={`font-semibold ${
+                          (totalValue - totalInvested) >= 0 
+                            ? 'text-[#16A34A] dark:text-[#22C55E]' 
+                            : 'text-[#DC2626] dark:text-[#EF4444]'
+                        }`}>
+                          {(totalValue - totalInvested) >= 0 ? '+' : ''}{formatCurrency(totalValue - totalInvested)}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                         {portfolioPercentage.toFixed(1)}%
                       </td>
                     </tr>
@@ -378,14 +509,14 @@ export default function ETFHoldingsPage() {
         </div>
 
         {/* Verification Note */}
-        <div className="mb-6 bg-white rounded-xl border border-[#E5E7EB] p-4">
+        <div className="mb-6 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4">
           <div className="flex items-start gap-3">
-            <CheckCircleIcon className="w-5 h-5 text-[#16A34A] flex-shrink-0 mt-0.5" />
+            <CheckCircleIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-[#0F172A]">
+              <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                 Verification: Total matches dashboard ETFs value ({formatCurrency(totalValue)}) ✓
               </p>
-              <p className="text-xs text-[#6B7280] mt-1">
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                 This page shows ETF holdings only. Direct equity holdings are shown separately.
               </p>
             </div>
@@ -394,20 +525,20 @@ export default function ETFHoldingsPage() {
 
         {/* Optional AI Insights */}
         {sortedHoldings.length > 0 && (
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-6">
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
             <div className="flex items-center gap-2 mb-4">
-              <InfoIcon className="w-5 h-5 text-[#6B7280]" />
-              <h2 className="text-lg font-semibold text-[#0F172A]">Portfolio Insights</h2>
+              <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+              <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Portfolio Insights</h2>
             </div>
             <div className="space-y-4">
-              <div className="text-sm text-[#475569] leading-relaxed">
+              <div className="text-sm text-[#475569] dark:text-[#CBD5E1] leading-relaxed">
                 <p className="mb-2">
-                  <strong className="text-[#0F172A]">Total ETF Holdings:</strong> {formatCurrency(totalValue)} ({portfolioPercentage.toFixed(1)}% of portfolio)
+                  <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Total ETF Holdings:</strong> {formatCurrency(totalValue)} ({portfolioPercentage.toFixed(1)}% of portfolio)
                 </p>
                 {sortedHoldings.length > 0 && (
                   <>
                     <p className="mb-2">
-                      <strong className="text-[#0F172A]">Category Distribution:</strong>{' '}
+                      <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Category Distribution:</strong>{' '}
                       {Array.from(new Set(sortedHoldings.map(h => h.category))).map(cat => {
                         const catValue = sortedHoldings
                           .filter(h => h.category === cat)
@@ -417,11 +548,11 @@ export default function ETFHoldingsPage() {
                       }).join(', ')}
                     </p>
                     <p className="mb-2">
-                      <strong className="text-[#0F172A]">Top Holding:</strong> {sortedHoldings[0].name} ({sortedHoldings[0].allocationPct.toFixed(1)}% of ETF holdings)
+                      <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Top Holding:</strong> {sortedHoldings[0].name} ({sortedHoldings[0].allocationPct.toFixed(1)}% of ETF holdings)
                     </p>
                     {sortedHoldings.length >= 3 && (
                       <p>
-                        <strong className="text-[#0F172A]">Concentration:</strong> Top 3 holdings represent{' '}
+                        <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Concentration:</strong> Top 3 holdings represent{' '}
                         {sortedHoldings.slice(0, 3).reduce((sum, h) => sum + h.allocationPct, 0).toFixed(1)}% of ETF portfolio
                       </p>
                     )}

@@ -7,7 +7,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React from 'react';
@@ -49,6 +49,7 @@ export default function MutualFundsPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<MFHolding[]>([]);
@@ -64,6 +65,13 @@ export default function MutualFundsPage() {
   const [navUpdateLoading, setNavUpdateLoading] = useState(false);
 
   const fetchData = useCallback(async (userId: string) => {
+    // Prevent duplicate simultaneous fetches
+    if (fetchingRef.current) {
+      console.log('[MF Page] Skipping duplicate fetch');
+      return;
+    }
+    
+    fetchingRef.current = true;
     setLoading(true);
     try {
       const params = new URLSearchParams({ user_id: userId });
@@ -162,6 +170,7 @@ export default function MutualFundsPage() {
       console.error('Failed to fetch MF holdings:', error);
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
   }, []);
 

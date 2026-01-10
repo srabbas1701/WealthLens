@@ -58,6 +58,8 @@ import {
 import FloatingCopilot from '@/components/FloatingCopilot';
 import PortfolioUploadModal from '@/components/PortfolioUploadModal';
 import ManualInvestmentModal from '@/components/ManualInvestmentModal';
+import PPFAddModal from '@/components/PPFAddModal';
+import NPSAddModal from '@/components/NPSAddModal';
 import VerificationBanner from '@/components/VerificationBanner';
 import InsightsLimitBanner from '@/components/InsightsLimitBanner';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
@@ -197,6 +199,9 @@ export default function DashboardPage() {
   const { user, profile, authStatus, hasPortfolio, portfolioCheckComplete, signOut } = useAuth();
   const { formatCurrency } = useCurrency();
   const redirectAttemptedRef = useRef(false);
+  const fetchingRef = useRef(false); // Prevent duplicate simultaneous portfolio fetches
+  const fetchingAiSummaryRef = useRef(false); // Prevent duplicate AI summary fetches
+  const fetchingWeeklySummaryRef = useRef(false); // Prevent duplicate weekly summary fetches
   
   const [greeting, setGreeting] = useState('');
   const [userName, setUserName] = useState('');
@@ -221,6 +226,16 @@ export default function DashboardPage() {
   
   // Manual investment modal state
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  
+  // Price update state
+  const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
+  const [priceUpdateSuccess, setPriceUpdateSuccess] = useState(false);
+  
+  // PPF Add modal state
+  const [isPPFModalOpen, setIsPPFModalOpen] = useState(false);
+  
+  // NPS Add modal state
+  const [isNPSModalOpen, setIsNPSModalOpen] = useState(false);
   
   // User dropdown state
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -313,6 +328,13 @@ export default function DashboardPage() {
 
   // Fetch portfolio data
   const fetchPortfolioData = useCallback(async (userId: string) => {
+    // Prevent duplicate simultaneous fetches (React 18 dev mode causes double-calls)
+    if (fetchingRef.current) {
+      console.log('[Dashboard] Skipping duplicate portfolio fetch');
+      return;
+    }
+    
+    fetchingRef.current = true;
     setPortfolioLoading(true);
     
     try {
@@ -332,11 +354,19 @@ export default function DashboardPage() {
       console.error('Failed to fetch portfolio data:', error);
     } finally {
       setPortfolioLoading(false);
+      fetchingRef.current = false;
     }
   }, []);
 
   // Fetch AI daily summary
   const fetchAiSummary = useCallback(async (userId: string) => {
+    // Prevent duplicate simultaneous fetches
+    if (fetchingAiSummaryRef.current) {
+      console.log('[Dashboard] Skipping duplicate AI summary fetch');
+      return;
+    }
+    
+    fetchingAiSummaryRef.current = true;
     setSummaryLoading(true);
     setSummaryError(false);
     
@@ -358,11 +388,19 @@ export default function DashboardPage() {
       setSummaryError(true);
     } finally {
       setSummaryLoading(false);
+      fetchingAiSummaryRef.current = false;
     }
   }, []);
 
   // Fetch AI weekly summary
   const fetchWeeklySummary = useCallback(async (userId: string) => {
+    // Prevent duplicate simultaneous fetches
+    if (fetchingWeeklySummaryRef.current) {
+      console.log('[Dashboard] Skipping duplicate weekly summary fetch');
+      return;
+    }
+    
+    fetchingWeeklySummaryRef.current = true;
     setWeeklyLoading(true);
     setWeeklyError(false);
     
@@ -384,8 +422,44 @@ export default function DashboardPage() {
       setWeeklyError(true);
     } finally {
       setWeeklyLoading(false);
+      fetchingWeeklySummaryRef.current = false;
     }
   }, []);
+
+  // Handle price update
+  const handlePriceUpdate = async () => {
+    if (!user?.id) return;
+    
+    setPriceUpdateLoading(true);
+    setPriceUpdateSuccess(false);
+    
+    try {
+      const response = await fetch('/api/stocks/prices/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('[Dashboard] Price update result:', result);
+        
+        // Show success message
+        setPriceUpdateSuccess(true);
+        
+        // Refresh portfolio data to show updated values
+        await fetchPortfolioData(user.id);
+        
+        // Hide success message after 3 seconds
+        setTimeout(() => setPriceUpdateSuccess(false), 3000);
+      } else {
+        console.error('[Dashboard] Price update failed');
+      }
+    } catch (error) {
+      console.error('[Dashboard] Price update error:', error);
+    } finally {
+      setPriceUpdateLoading(false);
+    }
+  };
 
   // Fetch data when user is available
   useEffect(() => {
@@ -582,6 +656,36 @@ export default function DashboardPage() {
                 >
                   <PlusIcon className="w-5 h-5" />
                   Add Manually
+                </button>
+                <button
+                  onClick={handlePriceUpdate}
+                  disabled={priceUpdateLoading}
+                  className={`flex items-center gap-2 px-5 py-2.5 font-medium rounded-lg transition-colors ${
+                    priceUpdateSuccess
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-2 border-green-600 dark:border-green-500'
+                      : 'bg-white dark:bg-[#1E293B] text-blue-600 dark:text-blue-400 border-2 border-blue-600 dark:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+                  } ${priceUpdateLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  title="Update stock and ETF prices from Yahoo Finance"
+                >
+                  {priceUpdateLoading ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Updating...
+                    </>
+                  ) : priceUpdateSuccess ? (
+                    <>
+                      <CheckCircleIcon className="w-5 h-5" />
+                      Updated!
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUpIcon className="w-5 h-5" />
+                      Update Prices
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -1025,6 +1129,32 @@ export default function DashboardPage() {
         userId={user?.id || ''}
         source="dashboard"
         onSuccess={handleUploadSuccess}
+        onPPFSelected={() => {
+          setIsManualModalOpen(false);
+          setIsPPFModalOpen(true);
+        }}
+        onNPSSelected={() => {
+          setIsManualModalOpen(false);
+          setIsNPSModalOpen(true);
+        }}
+      />
+
+      {/* PPF Add Modal */}
+      <PPFAddModal
+        isOpen={isPPFModalOpen}
+        onClose={() => setIsPPFModalOpen(false)}
+        userId={user?.id || ''}
+        onSuccess={handleUploadSuccess}
+        existingHolding={null}
+      />
+
+      {/* NPS Add Modal */}
+      <NPSAddModal
+        isOpen={isNPSModalOpen}
+        onClose={() => setIsNPSModalOpen(false)}
+        userId={user?.id || ''}
+        onSuccess={handleUploadSuccess}
+        existingHolding={null}
       />
     </div>
   );

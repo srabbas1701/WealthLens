@@ -173,15 +173,15 @@ export default function HomePage() {
           {/* Platform Logos */}
           <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12 lg:gap-16">
             {[
-              { name: 'Kuvera', logo: '/logos/kuvera.svg' },
-              { name: 'Groww', logo: '/logos/groww.svg' },
-              { name: 'Zerodha', logo: '/logos/zerodha.svg' },
-              { name: 'Coin', logo: '/logos/coin.svg' },
-              { name: 'ET Money', logo: '/logos/etmoney.svg' },
+              { name: 'Kuvera', logo: '/logos/kuvera.png' },
+              { name: 'Groww', logo: '/logos/groww.png' },
+              { name: 'Zerodha', logo: '/logos/zerodha.png' },
+              { name: 'Coin', logo: '/logos/coin.png' },
+              { name: 'ET Money', logo: '/logos/etmoney.png' },
             ].map((brand) => (
               <div
                 key={brand.name}
-                className="flex items-center justify-center h-8 md:h-10 opacity-60 hover:opacity-100 transition-all duration-200 grayscale hover:grayscale-0"
+                className="flex items-center justify-center h-8 md:h-10 opacity-80 hover:opacity-100 transition-all duration-200"
               >
                 <Image
                   src={brand.logo}

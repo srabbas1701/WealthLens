@@ -22,22 +22,35 @@ import {
   ChevronUpIcon,
   CalendarIcon,
   LockIcon,
+  PlusIcon,
+  EditIcon,
+  TrashIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
+import PPFAddModal from '@/components/PPFAddModal';
 
 interface PPFHolding {
   id: string;
   name: string;
-  accountNumber?: string | null;
-  openingYear?: number | null;
+  accountNumber: string;
+  accountHolderName: string;
+  openingDate: string;
+  maturityDate: string;
   currentBalance: number;
-  annualContribution?: number | null;
-  interestRate?: number | null;
-  maturityYear?: number | null;
-  status?: 'active' | 'matured' | null;
+  totalContributions: number;
+  interestEarned: number;
+  interestRate: number;
+  bankOrPostOffice: string;
+  branch?: string;
+  status: 'active' | 'matured' | 'extended';
+  extensionDetails?: {
+    extensionStartDate: string;
+    extensionEndDate: string;
+    extensionNumber: number;
+  } | null;
   notes?: string | null;
 }
 
@@ -51,6 +64,9 @@ export default function PPFHoldingsPage() {
   const [totalBalance, setTotalBalance] = useState(0);
   const [portfolioPercentage, setPortfolioPercentage] = useState(0);
   const [showContributionHistory, setShowContributionHistory] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingHolding, setEditingHolding] = useState<PPFHolding | null>(null);
+  const [deletingHoldingId, setDeletingHoldingId] = useState<string | null>(null);
   
   // Calculate summary metrics
   const summary = useMemo(() => {
@@ -58,22 +74,20 @@ export default function PPFHoldingsPage() {
       return {
         earliestOpeningYear: null,
         latestMaturityYear: null,
-        totalAnnualContribution: 0,
+        totalInterestEarned: 0,
         averageInterestRate: null,
       };
     }
 
     const openingYears = holdings
-      .map(h => h.openingYear)
-      .filter((year): year is number => year !== null && year !== undefined);
+      .map(h => new Date(h.openingDate).getFullYear())
+      .filter((year): year is number => year !== null && year !== undefined && !isNaN(year));
     
     const maturityYears = holdings
-      .map(h => h.maturityYear)
-      .filter((year): year is number => year !== null && year !== undefined);
+      .map(h => new Date(h.maturityDate).getFullYear())
+      .filter((year): year is number => year !== null && year !== undefined && !isNaN(year));
     
-    const annualContributions = holdings
-      .map(h => h.annualContribution || 0)
-      .filter(val => val > 0);
+    const totalInterestEarned = holdings.reduce((sum, h) => sum + (h.interestEarned || 0), 0);
     
     const interestRates = holdings
       .map(h => h.interestRate)
@@ -82,7 +96,7 @@ export default function PPFHoldingsPage() {
     return {
       earliestOpeningYear: openingYears.length > 0 ? Math.min(...openingYears) : null,
       latestMaturityYear: maturityYears.length > 0 ? Math.max(...maturityYears) : null,
-      totalAnnualContribution: annualContributions.reduce((sum, val) => sum + val, 0),
+      totalInterestEarned,
       averageInterestRate: interestRates.length > 0 
         ? interestRates.reduce((sum, rate) => sum + rate, 0) / interestRates.length 
         : null,
@@ -114,32 +128,30 @@ export default function PPFHoldingsPage() {
               return {
                 id: h.id,
                 name: h.name || 'PPF Account',
-                accountNumber: notes.accountNumber || null,
-                openingYear: notes.openingYear || null,
-                currentBalance: h.currentValue || h.investedValue || 0,
-                annualContribution: notes.annualContribution || null,
-                interestRate: notes.interestRate || null,
-                maturityYear: notes.maturityYear || null,
+                accountNumber: notes.accountNumber || '',
+                accountHolderName: notes.accountHolderName || '',
+                openingDate: notes.openingDate || '',
+                maturityDate: notes.maturityDate || '',
+                currentBalance: notes.currentBalance || h.currentValue || h.investedValue || 0,
+                totalContributions: notes.totalContributions || 0,
+                interestEarned: notes.interestEarned || 0,
+                interestRate: notes.interestRate || 7.1,
+                bankOrPostOffice: notes.bankOrPostOffice || '',
+                branch: notes.branch || '',
                 status: notes.status || 'active',
+                extensionDetails: notes.extensionDetails || null,
                 notes: h.notes,
               };
             });
 
-          // Use shared aggregation utility for consistency
-          const allHoldings = portfolioData.holdings.map((h: any) => ({
-            id: h.id,
-            name: h.name,
-            assetType: h.assetType,
-            investedValue: h.investedValue,
-            currentValue: h.currentValue || h.investedValue,
-          }));
-          
-          const assetTotals = getAssetTotals(allHoldings, 'PPF');
+          // Calculate total balance from PPF holdings directly (not from generic asset totals)
+          // This ensures we use the accurate currentBalance from notes, not h.currentValue
+          const totalPPFBalance = ppfHoldings.reduce((sum, h) => sum + (h.currentBalance || 0), 0);
           
           setHoldings(ppfHoldings);
-          setTotalBalance(assetTotals.totalCurrent);
+          setTotalBalance(totalPPFBalance);
           setPortfolioPercentage(portfolioData.metrics.netWorth > 0 
-            ? (assetTotals.totalCurrent / portfolioData.metrics.netWorth) * 100 
+            ? (totalPPFBalance / portfolioData.metrics.netWorth) * 100 
             : 0);
         }
       }
@@ -164,6 +176,53 @@ export default function PPFHoldingsPage() {
       fetchData(user.id);
     }
   }, [user?.id, fetchData]);
+
+  const handleAddSuccess = () => {
+    setShowAddModal(false);
+    setEditingHolding(null);
+    if (user?.id) {
+      fetchData(user.id);
+    }
+  };
+
+  const handleEdit = (holding: PPFHolding) => {
+    setEditingHolding(holding);
+    setShowAddModal(true);
+  };
+
+  const handleDelete = async (holdingId: string) => {
+    if (!user?.id) return;
+    
+    if (!confirm('Are you sure you want to delete this PPF account? This action cannot be undone.')) {
+      return;
+    }
+
+    setDeletingHoldingId(holdingId);
+    try {
+      const params = new URLSearchParams({
+        user_id: user.id,
+        holding_id: holdingId,
+      });
+
+      const response = await fetch(`/api/ppf/holdings?${params}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Refresh data
+        fetchData(user.id);
+      } else {
+        alert(`Failed to delete PPF account: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('Failed to delete PPF account. Please try again.');
+    } finally {
+      setDeletingHoldingId(null);
+    }
+  };
 
   // Mask account number for display
   const maskAccountNumber = (accountNumber: string | null | undefined): string => {
@@ -208,49 +267,61 @@ export default function PPFHoldingsPage() {
 
       <main className="max-w-[1200px] mx-auto px-6 py-8 pt-24">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A] mb-2">PPF Holdings</h1>
-          <p className="text-sm text-[#6B7280]">Public Provident Fund accounts in your portfolio</p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">PPF Holdings</h1>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Public Provident Fund accounts in your portfolio</p>
+          </div>
+          <button
+            onClick={() => {
+              setEditingHolding(null);
+              setShowAddModal(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium"
+          >
+            <PlusIcon className="w-5 h-5" />
+            Add PPF Account
+          </button>
         </div>
 
         {/* Account Summary */}
         <div className="grid md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-6">
-            <p className="text-sm text-[#6B7280] mb-2">Total Balance</p>
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">Total Balance</p>
             {!hasData ? (
-              <p className="text-lg text-[#6B7280]">—</p>
+              <p className="text-lg text-[#6B7280] dark:text-[#94A3B8]">—</p>
             ) : (
-              <p className="text-2xl font-semibold text-[#0F172A] number-emphasis">
+              <p className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                 {formatCurrency(totalBalance)}
               </p>
             )}
           </div>
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-6">
-            <p className="text-sm text-[#6B7280] mb-2">Opening Year</p>
-            {summary.earliestOpeningYear ? (
-              <p className="text-2xl font-semibold text-[#0F172A] number-emphasis">
-                {summary.earliestOpeningYear}
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">Interest Earned</p>
+            {summary.totalInterestEarned > 0 ? (
+              <p className="text-2xl font-semibold text-[#16A34A] dark:text-[#22C55E] number-emphasis">
+                {formatCurrency(summary.totalInterestEarned)}
               </p>
             ) : (
-              <p className="text-lg text-[#6B7280]">—</p>
+              <p className="text-lg text-[#6B7280] dark:text-[#94A3B8]">—</p>
             )}
           </div>
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-6">
-            <p className="text-sm text-[#6B7280] mb-2">Maturity Year</p>
-            {summary.latestMaturityYear ? (
-              <p className="text-2xl font-semibold text-[#0F172A] number-emphasis">
-                {summary.latestMaturityYear}
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">Avg. Interest Rate</p>
+            {summary.averageInterestRate ? (
+              <p className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
+                {summary.averageInterestRate.toFixed(2)}%
               </p>
             ) : (
-              <p className="text-lg text-[#6B7280]">—</p>
+              <p className="text-lg text-[#6B7280] dark:text-[#94A3B8]">—</p>
             )}
           </div>
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-6">
-            <p className="text-sm text-[#6B7280] mb-2">Portfolio Allocation</p>
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">Portfolio Allocation</p>
             {!hasData ? (
-              <p className="text-lg text-[#6B7280]">—</p>
+              <p className="text-lg text-[#6B7280] dark:text-[#94A3B8]">—</p>
             ) : (
-              <p className="text-2xl font-semibold text-[#0F172A] number-emphasis">
+              <p className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                 {portfolioPercentage.toFixed(1)}%
               </p>
             )}
@@ -264,102 +335,126 @@ export default function PPFHoldingsPage() {
 
         {/* Holdings Table */}
         {hasData && (
-          <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden mb-6">
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-[#F6F8FB] border-b border-[#E5E7EB]">
+                <thead className="bg-[#F6F8FB] dark:bg-[#334155] border-b border-[#E5E7EB] dark:border-[#334155]">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                      Account Name
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider">
+                      Account Holder
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                      Account Number
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider">
+                      Bank/Post Office
                     </th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                      Opening Year
-                    </th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider">
                       Current Balance
                     </th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                      Annual Contribution
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider">
+                      Interest Earned
                     </th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider">
                       Interest Rate
                     </th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                      Maturity Year
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider">
                       Status
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider">
+                      Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#E5E7EB]">
+                <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                   {holdings.map((holding) => (
-                    <tr key={holding.id} className="hover:bg-[#F6F8FB] transition-colors">
+                    <tr key={holding.id} className="hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors">
                       <td className="px-6 py-4">
-                        <p className="text-sm font-medium text-[#0F172A]">{holding.name}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm text-[#6B7280] font-mono">
+                        <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.accountHolderName}</p>
+                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] font-mono mt-1">
                           {maskAccountNumber(holding.accountNumber)}
                         </p>
                       </td>
-                      <td className="px-6 py-4 text-right text-sm text-[#0F172A]">
-                        {formatYear(holding.openingYear)}
+                      <td className="px-6 py-4">
+                        <p className="text-sm text-[#0F172A] dark:text-[#F8FAFC]">{holding.bankOrPostOffice}</p>
+                        {holding.branch && (
+                          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">{holding.branch}</p>
+                        )}
                       </td>
-                      <td className="px-6 py-4 text-right text-sm text-[#0F172A] number-emphasis">
-                        {formatCurrency(holding.currentBalance)}
+                      <td className="px-6 py-4 text-right">
+                        <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
+                          {formatCurrency(holding.currentBalance)}
+                        </p>
+                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                          Contributed: {formatCurrency(holding.totalContributions)}
+                        </p>
                       </td>
-                      <td className="px-6 py-4 text-right text-sm text-[#0F172A]">
-                        {holding.annualContribution 
-                          ? formatCurrency(holding.annualContribution)
-                          : '—'}
+                      <td className="px-6 py-4 text-right">
+                        <p className="text-sm font-medium text-[#16A34A] dark:text-[#22C55E]">
+                          {formatCurrency(holding.interestEarned)}
+                        </p>
+                        {holding.totalContributions > 0 && (
+                          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                            {((holding.interestEarned / holding.totalContributions) * 100).toFixed(1)}% return
+                          </p>
+                        )}
                       </td>
-                      <td className="px-6 py-4 text-right text-sm text-[#0F172A]">
-                        {holding.interestRate 
-                          ? `${holding.interestRate.toFixed(2)}%`
-                          : '—'}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm text-[#0F172A]">
-                        <div className="flex flex-col items-end">
-                          <span>{formatYear(holding.maturityYear)}</span>
-                          {holding.maturityYear && (
-                            <span className="text-xs text-[#6B7280] mt-1">
-                              {yearsToMaturity(holding.maturityYear)}
-                            </span>
-                          )}
-                        </div>
+                      <td className="px-6 py-4 text-right">
+                        <p className="text-sm text-[#0F172A] dark:text-[#F8FAFC]">
+                          {holding.interestRate.toFixed(2)}%
+                        </p>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                          holding.status === 'matured'
-                            ? 'bg-[#F6F8FB] text-[#6B7280]'
-                            : 'bg-[#F0FDF4] text-[#166534]'
+                          holding.status === 'active'
+                            ? 'bg-[#DCFCE7] text-[#15803D] dark:bg-[#14532D] dark:text-[#86EFAC]'
+                            : holding.status === 'matured'
+                            ? 'bg-[#E0E7FF] text-[#3730A3] dark:bg-[#1E3A8A] dark:text-[#93C5FD]'
+                            : 'bg-[#FEF3C7] text-[#92400E] dark:bg-[#78350F] dark:text-[#FCD34D]'
                         }`}>
-                          {holding.status === 'matured' ? 'Matured' : 'Active'}
+                          {holding.status.charAt(0).toUpperCase() + holding.status.slice(1)}
                         </span>
+                        {holding.maturityDate && (
+                          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                            Maturity: {new Date(holding.maturityDate).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => handleEdit(holding)}
+                            className="p-2 text-[#2563EB] dark:text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A8A] rounded-lg transition-colors"
+                            title="Edit PPF Account"
+                          >
+                            <EditIcon className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(holding.id)}
+                            disabled={deletingHoldingId === holding.id}
+                            className="p-2 text-[#DC2626] dark:text-[#EF4444] hover:bg-[#FEF2F2] dark:hover:bg-[#7F1D1D] rounded-lg transition-colors disabled:opacity-50"
+                            title="Delete PPF Account"
+                          >
+                            {deletingHoldingId === holding.id ? (
+                              <div className="w-4 h-4 border-2 border-[#DC2626] dark:border-[#EF4444] border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <TrashIcon className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot className="bg-[#F6F8FB] border-t-2 border-[#E5E7EB]">
+                <tfoot className="bg-[#F6F8FB] dark:bg-[#334155] border-t-2 border-[#E5E7EB] dark:border-[#334155]">
                   <tr>
-                    <td className="px-6 py-4 text-sm font-semibold text-[#0F172A]">
-                      Total
+                    <td className="px-6 py-4 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]" colSpan={2}>
+                      Total ({holdings.length} account{holdings.length !== 1 ? 's' : ''})
                     </td>
-                    <td className="px-6 py-4"></td>
-                    <td className="px-6 py-4"></td>
-                    <td className="px-6 py-4 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                       {formatCurrency(totalBalance)}
                     </td>
-                    <td className="px-6 py-4 text-right text-sm font-semibold text-[#0F172A]">
-                      {summary.totalAnnualContribution > 0
-                        ? formatCurrency(summary.totalAnnualContribution)
-                        : '—'}
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-[#16A34A] dark:text-[#22C55E]">
+                      {formatCurrency(summary.totalInterestEarned)}
                     </td>
-                    <td className="px-6 py-4 text-right text-sm font-semibold text-[#0F172A]">
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                       {summary.averageInterestRate 
                         ? `${summary.averageInterestRate.toFixed(2)}%`
                         : '—'}
@@ -462,6 +557,18 @@ export default function PPFHoldingsPage() {
           </div>
         )}
       </main>
+
+      {/* PPF Add/Edit Modal */}
+      <PPFAddModal
+        isOpen={showAddModal}
+        onClose={() => {
+          setShowAddModal(false);
+          setEditingHolding(null);
+        }}
+        userId={user?.id || ''}
+        onSuccess={handleAddSuccess}
+        existingHolding={editingHolding}
+      />
     </div>
   );
 }

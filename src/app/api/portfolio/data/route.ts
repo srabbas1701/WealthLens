@@ -46,6 +46,14 @@ import { getStockPrices, getPreviousTradingDay, getStockPrice } from '@/lib/stoc
 import { getMFNavsByISIN, getMFNavByISIN } from '@/lib/mf-navs';
 
 // ============================================================================
+// CACHING CONFIGURATION
+// ============================================================================
+// Cache portfolio data for 5 minutes to improve performance
+// This prevents redundant database queries and price calculations on every page load
+// The cache is user-specific (based on user_id query param)
+export const revalidate = 300; // 5 minutes in seconds
+
+// ============================================================================
 // RESPONSE TYPES
 // ============================================================================
 
@@ -242,52 +250,45 @@ export async function GET(request: NextRequest) {
     
     const holdings = rawHoldings || [];
     
-    // 3.5. Fetch stock prices for equity holdings and update current_value
-    // Extract equity holdings with symbols
-    const equityHoldings = holdings.filter((h: any) => {
+    // 3.5. Fetch stock prices for equity and ETF holdings (batch query for performance)
+    // ETFs trade on exchanges like stocks, so they need real-time prices (like MF NAVs)
+    const equityAndETFHoldings = holdings.filter((h: any) => {
       const asset = h.assets as any;
-      return asset?.asset_type === 'equity' && asset?.symbol;
+      return (asset?.asset_type === 'equity' || asset?.asset_type === 'etf') && asset?.symbol;
     });
     
-    if (equityHoldings.length > 0) {
-      const symbols = equityHoldings.map((h: any) => (h.assets as any).symbol).filter(Boolean);
+    if (equityAndETFHoldings.length > 0) {
+      const symbols = equityAndETFHoldings.map((h: any) => (h.assets as any).symbol).filter(Boolean);
       const stockPrices = await getStockPrices(symbols);
       
-      // Update holdings with current prices (in memory only - no DB writes)
-      for (const holding of equityHoldings) {
+      // Store price data in memory for read-time computation (like MF NAVs)
+      for (const holding of equityAndETFHoldings) {
         const asset = holding.assets as any;
         const symbol = asset?.symbol;
         if (!symbol) continue;
         
         const priceData = stockPrices.get(symbol.toUpperCase());
         
-        if (priceData && priceData.price) {
-          // Calculate current_value from quantity × current_price
-          const quantity = holding.quantity || 0;
-          const currentPrice = priceData.price;
-          const newCurrentValue = quantity * currentPrice;
-          
-          // Store price date in memory for frontend display
-          (holding as any)._priceDate = priceData.priceDate;
-          
-          // Update in memory only - don't write to DB on read path (performance optimization)
-          // Database updates should happen via dedicated update endpoints or background jobs
-          holding.current_value = newCurrentValue;
-        } else {
-          // Price not found in batch query - it will be null in the map
-          // Use existing current_value from database (already loaded)
+        if (!priceData) {
+          // Price not found - use current_value from database if available, else invested_value
           // Don't make individual queries here (performance optimization)
+          console.warn(`[Portfolio Data API] No price data found for symbol: ${symbol}`);
+        } else if (priceData.price && priceData.price > 0) {
+          // Store price in memory for computation
+          (holding as any)._computedPrice = priceData.price;
+          (holding as any)._priceDate = priceData.priceDate;
+        } else {
+          console.warn(`[Portfolio Data API] Price data exists but price is null/zero for symbol: ${symbol}`);
         }
       }
-      
-      // Price updates complete (no logging for routine operations)
     }
     
-    // 3.6. Fetch NAVs for mutual fund holdings and update current_value
+    // 3.6. Fetch NAVs for mutual fund holdings (batch query for performance)
     // Separate MF holdings into those with ISINs and those without
+    // NOTE: ETFs are handled above in section 3.5 - they trade on exchanges and get prices from stock_prices table
     const allMFHoldings = holdings.filter((h: any) => {
       const asset = h.assets as any;
-      return asset?.asset_type === 'mutual_fund' || asset?.asset_type === 'index_fund' || asset?.asset_type === 'etf';
+      return asset?.asset_type === 'mutual_fund' || asset?.asset_type === 'index_fund';
     });
     
     const mfHoldingsWithISIN = allMFHoldings.filter((h: any) => {
@@ -343,8 +344,8 @@ export async function GET(request: NextRequest) {
     
     holdings.forEach(h => {
       const assetType = (h.assets as any)?.asset_type || 'other';
-      const isMF = assetType === 'mutual_fund' || assetType === 'index_fund' || assetType === 'etf';
-      const isEquity = assetType === 'equity';
+      const isMF = assetType === 'mutual_fund' || assetType === 'index_fund';
+      const isEquity = assetType === 'equity' || assetType === 'etf';
       const investedValue = h.invested_value || 0;
       
       let valueToUse = investedValue;
@@ -362,12 +363,20 @@ export async function GET(request: NextRequest) {
           valueToUse = investedValue;
         }
       } else if (isEquity) {
-        // Stocks: Use persisted current_value (with diff logic applied earlier)
-        if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
-          valueToUse = h.current_value;
+        // Stocks & ETFs: Compute from price (like MF NAVs) - real-time pricing
+        const computedPrice = (h as any)._computedPrice;
+        const quantity = h.quantity || 0;
+        
+        if (computedPrice && computedPrice > 0 && quantity > 0) {
+          // Compute current_value from quantity × latest_price (price-driven, like MF NAVs)
+          valueToUse = quantity * computedPrice;
         } else {
-          // Temporary fallback: use invested_value for display until prices are fetched
-          valueToUse = investedValue;
+          // No price available - use current_value from database if available, else invested_value
+          if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
+            valueToUse = h.current_value;
+          } else {
+            valueToUse = investedValue;
+          }
         }
       }
       
@@ -402,12 +411,12 @@ export async function GET(request: NextRequest) {
       const assetType = asset?.asset_type || 'other';
       const investedValue = h.invested_value || 0;
       
-      // CRITICAL: Mutual Funds use NAV-driven computation (no diff logic, no persistence)
+      // CRITICAL: Mutual Funds and ETFs/Equity use real-time computation (like MF NAVs)
       // For MF: current_value = units × latest_nav (computed at read-time)
-      // For Stocks: use persisted current_value (with diff logic)
+      // For Stocks & ETFs: current_value = quantity × latest_price (computed at read-time)
       let currentValue = investedValue;
-      const isMF = assetType === 'mutual_fund' || assetType === 'index_fund' || assetType === 'etf';
-      const isEquity = assetType === 'equity';
+      const isMF = assetType === 'mutual_fund' || assetType === 'index_fund';
+      const isEquity = assetType === 'equity' || assetType === 'etf';
       
       if (isMF) {
         // MF: Compute from NAV (single source of truth)
@@ -417,17 +426,25 @@ export async function GET(request: NextRequest) {
         if (computedNav && computedNav > 0 && quantity > 0) {
           // Compute current_value from units × latest_nav (NAV-driven)
           currentValue = quantity * computedNav;
+        } else {
+          // No NAV available - use invested_value as fallback
+          currentValue = investedValue;
+        }
+      } else if (isEquity) {
+        // Stocks & ETFs: Compute from price (like MF NAVs) - real-time pricing
+        const computedPrice = (h as any)._computedPrice;
+        const quantity = h.quantity || 0;
+        
+        if (computedPrice && computedPrice > 0 && quantity > 0) {
+          // Compute current_value from quantity × latest_price (price-driven, like MF NAVs)
+          currentValue = quantity * computedPrice;
+        } else {
+          // No price available - use current_value from database if available, else invested_value
+          if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
+            currentValue = h.current_value;
           } else {
-            // No NAV available - use invested_value as fallback
             currentValue = investedValue;
           }
-      } else if (isEquity) {
-        // Stocks: Use persisted current_value (with diff logic applied earlier)
-        if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
-          currentValue = h.current_value;
-        } else {
-          // Temporary fallback: use invested_value for display until prices are fetched
-          currentValue = investedValue;
         }
       }
       
@@ -451,7 +468,7 @@ export async function GET(request: NextRequest) {
         assetClass: asset?.asset_class || null,
         notes: h.notes || null,
         navDate: isMF ? ((h as any)._navDate || null) : null, // Include NAV date for MF holdings
-        priceDate: isEquity ? ((h as any)._priceDate || null) : null, // Include price date for equity holdings
+        priceDate: isEquity ? ((h as any)._priceDate || null) : null, // Include price date for equity/ETF holdings
       };
     });
     

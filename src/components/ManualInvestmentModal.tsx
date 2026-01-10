@@ -34,6 +34,8 @@ interface ManualInvestmentModalProps {
   editingHoldingId?: string;
   editingData?: any;
   category?: string; // Onboarding category to pre-select asset type
+  onPPFSelected?: () => void; // Callback when PPF is selected
+  onNPSSelected?: () => void; // Callback when NPS is selected
 }
 
 type AssetTypeOption = 'fd' | 'bond' | 'gold' | 'cash' | 'epf' | 'ppf' | 'nps';
@@ -96,6 +98,8 @@ export default function ManualInvestmentModal({
   editingHoldingId,
   editingData,
   category,
+  onPPFSelected,
+  onNPSSelected,
 }: ManualInvestmentModalProps) {
   const { formatCurrency } = useCurrency();
   const [step, setStep] = useState<Step>('select');
@@ -169,6 +173,18 @@ export default function ManualInvestmentModal({
   };
 
   const handleAssetTypeSelect = (type: AssetTypeOption) => {
+    // Special handling for PPF - redirect to comprehensive PPF modal
+    if (type === 'ppf' && onPPFSelected) {
+      onPPFSelected();
+      return;
+    }
+    
+    // Special handling for NPS - redirect to comprehensive NPS modal
+    if (type === 'nps' && onNPSSelected) {
+      onNPSSelected();
+      return;
+    }
+    
     setFormData({
       ...formData,
       assetType: type,

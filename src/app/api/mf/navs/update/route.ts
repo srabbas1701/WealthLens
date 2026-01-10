@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
       console.log('[MF NAV Update API] Fetching holdings with ISINs...');
       
       // Get all mutual fund holdings with ISINs
+      // NOTE: ETFs are NOT included - they trade on exchanges and get prices via stock price API
       const { data: holdings, error } = await supabase
         .from('holdings')
         .select(`
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
             asset_type
           )
         `)
-        .in('assets.asset_type', ['mutual_fund', 'index_fund', 'etf'])
+        .in('assets.asset_type', ['mutual_fund', 'index_fund'])
         .not('assets.isin', 'is', null);
       
       if (error) {

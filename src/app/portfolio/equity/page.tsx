@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -51,6 +51,7 @@ export default function EquityHoldingsPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<EquityHolding[]>([]);
@@ -67,6 +68,13 @@ export default function EquityHoldingsPage() {
   const [priceUpdateDisabled, setPriceUpdateDisabled] = useState(false);
 
   const fetchData = useCallback(async (userId: string) => {
+    // Prevent duplicate simultaneous fetches
+    if (fetchingRef.current) {
+      console.log('[Equity Page] Skipping duplicate fetch');
+      return;
+    }
+    
+    fetchingRef.current = true;
     setLoading(true);
     try {
       const params = new URLSearchParams({ user_id: userId });
@@ -126,6 +134,7 @@ export default function EquityHoldingsPage() {
       console.error('Failed to fetch stocks holdings:', error);
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
   }, []);
 
