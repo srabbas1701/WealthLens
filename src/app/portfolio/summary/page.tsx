@@ -169,19 +169,21 @@ export default function PortfolioSummaryPage() {
       'Bonds': '/portfolio/bonds',
       'Bond': '/portfolio/bonds',
       'ETFs': '/portfolio/etfs',
-      'PPF': '/portfolio/ppf',
-      'NPS': '/portfolio/nps',
-      'EPF': '/portfolio/epf',
       'ETF': '/portfolio/etfs',
+      'PPF': '/portfolio/ppf',
+      'EPF': '/portfolio/epf',
       'NPS': '/portfolio/nps',
-      'Index Funds': '/portfolio/summary',
+      'Index Funds': '/portfolio/mutualfunds',
       'Gold': '/portfolio/summary',
-      'PPF': '/portfolio/summary',
-      'EPF': '/portfolio/summary',
       'Other': '/portfolio/summary',
     };
     
-    return routeMap[assetType] || '/portfolio/summary';
+    const route = routeMap[assetType] || '/portfolio/summary';
+    // Debug: Log route resolution for troubleshooting
+    if (assetType === 'PPF' || assetType === 'EPF') {
+      console.log(`[Portfolio Summary] Routing ${assetType} to ${route}`);
+    }
+    return route;
   };
 
   // GUARD: Show loading while auth state is being determined
@@ -290,11 +292,11 @@ export default function PortfolioSummaryPage() {
             {data.assetSummaries.map((asset) => (
               <div key={asset.assetType}>
                 {/* Asset Row */}
-                <button
-                  onClick={() => toggleAsset(asset.assetType)}
-                  className="w-full px-6 py-5 flex items-center justify-between hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors text-left"
-                >
-                  <div className="flex items-center gap-4 flex-1">
+                <div className="px-6 py-5 flex items-center justify-between hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
+                  <div 
+                    className="flex items-center gap-4 flex-1 cursor-pointer"
+                    onClick={() => toggleAsset(asset.assetType)}
+                  >
                     {expandedAssets.has(asset.assetType) ? (
                       <ChevronDownIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
                     ) : (
@@ -319,12 +321,12 @@ export default function PortfolioSummaryPage() {
                     <Link
                       href={getAssetRoute(asset.assetType)}
                       onClick={(e) => e.stopPropagation()}
-                      className="text-[#2563EB] dark:text-[#3B82F6] hover:text-[#1E40AF] dark:hover:text-[#2563EB] text-sm font-medium"
+                      className="text-[#2563EB] dark:text-[#3B82F6] hover:text-[#1E40AF] dark:hover:text-[#2563EB] hover:underline text-sm font-medium transition-all"
                     >
                       View Details →
                     </Link>
                   </div>
-                </button>
+                </div>
 
                 {/* Expanded Content */}
                 {expandedAssets.has(asset.assetType) && (

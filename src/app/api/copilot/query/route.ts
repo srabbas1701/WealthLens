@@ -8,6 +8,8 @@ import type {
   ConfidenceLevel
 } from '@/types/copilot';
 import type { CopilotContext } from '@/types/database';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * POST /api/copilot/query
@@ -25,12 +27,225 @@ import type { CopilotContext } from '@/types/database';
  * 3. Fetch market context from Supabase
  * 4. Apply guardrails (pre-LLM)
  * 5. Inject system prompt
- * 6. Call LLM (mock for now)
+ * 6. Call LLM (OpenAI GPT-4o-mini)
  * 7. Post-process response (post-LLM guardrails)
  * 8. Log session to Supabase
  * 
  * Frontend does NONE of this - just passes intent and renders response.
  */
+
+// =============================================================================
+// OPENAI CLIENT INITIALIZATION
+// =============================================================================
+
+// Use require() for server-side dynamic loading in Next.js
+let openaiClient: any = null;
+let OpenAI: any = null;
+let cachedApiKey: string | null = null; // Track which API key was used to initialize the client
+
+/**
+ * Read API key directly from .env.local file to avoid system env variable conflicts
+ */
+function getApiKeyFromEnvFile(): string | null {
+  try {
+    const envFilePath = path.join(process.cwd(), '.env.local');
+    if (!fs.existsSync(envFilePath)) {
+      console.warn('.env.local file not found at:', envFilePath);
+      return null;
+    }
+    
+    const envContent = fs.readFileSync(envFilePath, 'utf-8');
+    // Match OPENAI_API_KEY=value - improved regex to handle end of file and multiline
+    // Use a more robust pattern that captures everything after = until newline or end
+    const lines = envContent.split(/\r?\n/);
+    let key: string | null = null;
+    
+    for (const line of lines) {
+      if (line.trim().startsWith('OPENAI_API_KEY=')) {
+        // Split on = and take everything after it
+        const parts = line.split('=', 2);
+        if (parts.length === 2) {
+          key = parts[1].trim();
+          break;
+        }
+      }
+    }
+    
+    if (key) {
+      // Remove quotes if present
+      key = key.replace(/^["']+|["']+$/g, '');
+      // Remove any newlines that might be in the value
+      key = key.replace(/\r?\n/g, '');
+      // Remove invisible characters
+      key = key.replace(/[\u200B-\u200D\uFEFF]/g, '');
+      key = key.trim();
+      
+      if (key && key.startsWith('sk-')) {
+        const keyPreview = key.length > 14 
+          ? `${key.substring(0, 10)}...${key.substring(key.length - 4)}`
+          : '***';
+        console.log('✅ Successfully loaded API key from .env.local file:', keyPreview, `(length: ${key.length})`);
+        return key;
+      } else {
+        console.warn('API key found in .env.local but does not start with "sk-"');
+      }
+    } else {
+      console.warn('OPENAI_API_KEY not found in .env.local file');
+    }
+    
+    return null;
+  } catch (error: any) {
+    console.error('Failed to read .env.local file:', error.message);
+    return null;
+  }
+}
+
+function getOpenAIClient() {
+  // ALWAYS read from .env.local file first - never use process.env as primary source
+  // This ensures we use the correct key even if system environment variables are set
+  let rawApiKey = getApiKeyFromEnvFile();
+  
+  // Only fallback to process.env if .env.local file doesn't exist or is unreadable
+  if (!rawApiKey) {
+    // Check if .env.local exists - if it does but key is missing, don't use process.env
+    const envFilePath = path.join(process.cwd(), '.env.local');
+    const envFileExists = fs.existsSync(envFilePath);
+    
+    if (!envFileExists) {
+      // File doesn't exist, safe to use process.env as fallback
+      rawApiKey = process.env.OPENAI_API_KEY || null;
+      if (rawApiKey) {
+        console.warn('⚠️ .env.local file not found - using API key from process.env (may be from system environment variables)');
+        console.warn('⚠️ RECOMMENDATION: Create .env.local file with your API key for better control');
+      }
+    } else {
+      // File exists but key not found - don't use process.env, it might be wrong
+      console.warn('⚠️ .env.local file exists but OPENAI_API_KEY not found in it');
+      console.warn('⚠️ NOT using process.env to avoid conflicts - please add OPENAI_API_KEY to .env.local');
+      return null;
+    }
+  } else {
+    // Successfully read from .env.local - log if process.env has different value
+    const processEnvKey = process.env.OPENAI_API_KEY;
+    if (processEnvKey && processEnvKey !== rawApiKey && !rawApiKey.includes(processEnvKey.substring(10, 30))) {
+      console.log('ℹ️ Note: process.env.OPENAI_API_KEY exists but differs from .env.local - using .env.local (correct)');
+    }
+  }
+  
+  if (!rawApiKey) {
+    console.warn('OPENAI_API_KEY not found in .env.local or environment variables');
+    return null;
+  }
+  
+  // More aggressive cleaning - remove quotes, whitespace, newlines, and invisible characters
+  let apiKey = rawApiKey.trim()
+    .replace(/^["']+|["']+$/g, '')  // Remove quotes from start/end
+    .replace(/\r?\n/g, '')           // Remove newlines
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')  // Remove zero-width spaces and other invisible chars
+    .trim();                         // Final trim
+  
+  if (!apiKey) {
+    console.warn('OPENAI_API_KEY is empty after cleaning');
+    return null;
+  }
+  
+  // If client exists but API key changed, clear the cache and reinitialize
+  if (openaiClient && cachedApiKey !== apiKey) {
+    console.log('API key changed - clearing cached client and reinitializing');
+    openaiClient = null;
+    cachedApiKey = null;
+  }
+  
+  if (openaiClient) {
+    return openaiClient;
+  }
+  
+  try {
+    // Use require() for server-side - works better with Next.js route handlers
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const OpenAIModule = require('openai');
+    OpenAI = OpenAIModule.default || OpenAIModule;
+    
+    if (!OpenAI) {
+      throw new Error('OpenAI module default export not found');
+    }
+    
+    // Validate API key format
+    if (!apiKey.startsWith('sk-')) {
+      console.error('Invalid OpenAI API key format - should start with "sk-"');
+      console.error('Key preview:', apiKey.substring(0, 10) + '...');
+      return null;
+    }
+    
+    // Log key info for debugging (first 10 and last 4 chars only for security)
+    const keyPreview = apiKey.length > 14 
+      ? `${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 4)}`
+      : '***';
+    console.log('Initializing OpenAI client - Key preview:', keyPreview, `(length: ${apiKey.length}, starts with: ${apiKey.substring(0, 7)})`);
+    
+    openaiClient = new OpenAI({
+      apiKey: apiKey,
+    });
+    cachedApiKey = apiKey; // Remember which key was used
+    return openaiClient;
+  } catch (error: any) {
+    console.error('Failed to load OpenAI module:', error.message || error);
+    console.error('Error details:', {
+      code: error.code,
+      path: error.path,
+      message: error.message,
+    });
+    return null;
+  }
+}
+
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
+// =============================================================================
+// SYSTEM PROMPT LOADING
+// =============================================================================
+
+function getSystemPrompt(): string {
+  try {
+    // Try to read from ai/copilot/system_prompt.txt
+    const promptPath = path.join(process.cwd(), 'ai', 'copilot', 'system_prompt.txt');
+    if (fs.existsSync(promptPath)) {
+      return fs.readFileSync(promptPath, 'utf-8');
+    }
+    
+    // Fallback: Try from src directory (if different structure)
+    const altPath = path.join(process.cwd(), 'src', '..', 'ai', 'copilot', 'system_prompt.txt');
+    if (fs.existsSync(altPath)) {
+      return fs.readFileSync(altPath, 'utf-8');
+    }
+    
+    // Final fallback: Use inline prompt
+    console.warn('System prompt file not found, using fallback');
+    return `You are WealthLens, an investment intelligence assistant for Indian investors.
+
+Your role is to explain portfolio behavior, risk, diversification, and goal alignment
+in a calm, neutral, and easy-to-understand manner.
+
+STRICT RULES — NEVER VIOLATE:
+1. You NEVER provide buy, sell, or timing advice.
+2. You NEVER predict stock prices, index movements, or future returns.
+3. You NEVER recommend specific securities, funds, or financial products.
+4. You NEVER use urgency, hype, or fear-based language.
+5. You NEVER say "you should" or "I recommend" regarding investment decisions.
+6. You NEVER provide tax advice — only explain general tax concepts.
+7. You NEVER guarantee outcomes or use words like "definitely", "guaranteed", "certain".
+
+ALWAYS consider the user's portfolio context when responding. Personalize your explanations
+to their specific situation, goals, and comfort level with risk.
+
+TONE: Calm, professional, and supportive. Like a knowledgeable friend, not a salesperson.
+LANGUAGE: Simple English — explain concepts, don't assume knowledge. Use Indian context (₹, lakh, crore).
+FORMAT: Maximum 3 short paragraphs for most responses. Lead with the most important point.`;
+  } catch (error) {
+    console.error('Error loading system prompt:', error);
+    return 'You are WealthLens, an investment intelligence assistant for Indian investors.';
+  }
+}
 
 // =============================================================================
 // GUARDRAILS (Pre-LLM)
@@ -234,19 +449,167 @@ function transformSupabaseContext(ctx: CopilotContext): {
 }
 
 // =============================================================================
-// RESPONSE GENERATION
+// AI RESPONSE GENERATION (OpenAI Integration)
 // =============================================================================
 
-function generateResponse(
+async function generateResponse(
+  question: string,
+  intent: string,
+  portfolio: PortfolioContextMock,
+  user: UserProfileMock,
+  market: MarketContextMock
+): Promise<{ summary: string; explanation: string; status: Status; confidence: ConfidenceLevel }> {
+  
+  // Get OpenAI client (using require for server-side)
+  const openai = getOpenAIClient();
+  
+  // If OpenAI is not configured or failed to load, fall back to template responses
+  if (!openai) {
+    // Check both file and process.env for better error reporting
+    const fileKey = getApiKeyFromEnvFile();
+    const envKey = process.env.OPENAI_API_KEY;
+    
+    if (fileKey) {
+      const keyPreview = fileKey.substring(0, 20) + '...';
+      console.warn(`⚠️ OpenAI API key found in .env.local (${keyPreview}) but client failed to initialize - using fallback template responses`);
+      console.warn('This might indicate an invalid API key or network issue. Check your API key at https://platform.openai.com/account/api-keys');
+    } else if (envKey) {
+      const keyPreview = envKey.trim().substring(0, 20) + '...';
+      console.warn(`⚠️ OpenAI API key found in process.env (${keyPreview}) but .env.local file not found or unreadable - using fallback template responses`);
+      console.warn('Recommendation: Use .env.local file instead of system environment variables');
+    } else {
+      console.warn('⚠️ OpenAI not configured - no API key found in .env.local or process.env - using fallback template responses');
+      console.warn('To enable AI features, add OPENAI_API_KEY to .env.local file');
+    }
+    return generateFallbackResponse(question, intent, portfolio, user, market);
+  }
+
+  const systemPrompt = getSystemPrompt();
+  
+  // Build comprehensive context string from portfolio data
+  const portfolioAllocation = portfolio.allocation
+    .map(a => `${a.asset}: ${a.percentage}%`)
+    .join(', ');
+  
+  const topHoldings = portfolio.top_holdings
+    .slice(0, 5)
+    .map(h => `${h.name} (${h.type}): ₹${(h.value / 100000).toFixed(2)}L`)
+    .join(', ');
+  
+  const context = `PORTFOLIO CONTEXT:
+- Net Worth: ₹${(portfolio.net_worth / 100000).toFixed(2)}L
+- Risk Score: ${portfolio.risk_score}/100 (${portfolio.risk_label})
+- Goal Alignment: ${portfolio.goal_alignment}%
+- Asset Allocation: ${portfolioAllocation}
+- Top Holdings: ${topHoldings}
+- Active Insights: ${portfolio.active_insights.join('; ')}
+
+USER PROFILE:
+- Name: ${user.name}
+- Risk Comfort Level: ${user.risk_comfort}
+- Investment Goals: ${user.goals.join(', ')}
+- Time Horizon: ${user.time_horizon} years
+
+MARKET CONTEXT:
+- Market Status: ${market.market_status}
+- Nifty Change Today: ${market.nifty_change > 0 ? '+' : ''}${market.nifty_change}%
+- Sector Movements: ${market.sector_movers.map(s => `${s.sector}: ${s.change > 0 ? '+' : ''}${s.change}%`).join(', ')}
+
+USER QUESTION: ${question}
+DETECTED INTENT: ${intent}
+
+Please provide a helpful, personalized response that:
+1. Directly addresses the user's question
+2. Uses their actual portfolio data
+3. Maintains a calm, educational tone
+4. Avoids any investment advice or predictions
+5. Provides a brief summary (first sentence) followed by a detailed explanation (2-3 paragraphs)
+
+Format your response as:
+SUMMARY: [One sentence summary]
+EXPLANATION: [Detailed explanation in 2-3 paragraphs]`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: context },
+      ],
+      temperature: 0.7,
+      max_tokens: 600,
+    } as any);
+
+    const aiResponse = completion.choices[0]?.message?.content || '';
+    
+    // Parse the response - look for SUMMARY and EXPLANATION markers
+    let summary = '';
+    let explanation = '';
+    
+    if (aiResponse.includes('SUMMARY:') && aiResponse.includes('EXPLANATION:')) {
+      const parts = aiResponse.split('EXPLANATION:');
+      summary = parts[0].replace('SUMMARY:', '').trim();
+      explanation = parts[1]?.trim() || '';
+    } else {
+      // Fallback: split by first sentence/paragraph
+      const sentences = aiResponse.split(/[.!?]\s+/);
+      summary = sentences[0] || 'Here\'s what I can tell you about your portfolio.';
+      explanation = sentences.slice(1).join('. ') || aiResponse;
+    }
+    
+    // Determine status based on content (simple heuristic)
+    let status: Status = 'no_action_required';
+    const lowerResponse = aiResponse.toLowerCase();
+    if (lowerResponse.includes('monitor') || lowerResponse.includes('watch')) {
+      status = 'monitor';
+    } else if (lowerResponse.includes('review') || lowerResponse.includes('consider') || lowerResponse.includes('attention')) {
+      status = 'attention_required';
+    }
+
+    return {
+      summary: summary.trim() || 'Here\'s what I can tell you about your portfolio.',
+      explanation: explanation.trim() || aiResponse.trim(),
+      status,
+      confidence: 'high',
+    };
+    
+  } catch (error: any) {
+    // Handle specific API key errors
+    if (error?.code === 'invalid_api_key' || error?.status === 401) {
+      console.error('OpenAI API key error:', {
+        message: error.message,
+        code: error.code,
+        status: error.status,
+      });
+      console.error('Troubleshooting:');
+      console.error('1. Check that OPENAI_API_KEY in .env.local starts with "sk-"');
+      console.error('2. Ensure there are no extra spaces or newlines in the key');
+      console.error('3. Verify the key is active at https://platform.openai.com/account/api-keys');
+      console.error('4. Make sure you restarted the dev server after adding the key');
+    } else {
+      console.error('OpenAI API error:', {
+        message: error.message,
+        code: error.code,
+        status: error.status,
+      });
+    }
+    
+    // Fallback to template response on error
+    return generateFallbackResponse(question, intent, portfolio, user, market);
+  }
+}
+
+// =============================================================================
+// FALLBACK TEMPLATE RESPONSES (When AI is unavailable)
+// =============================================================================
+
+function generateFallbackResponse(
   question: string,
   intent: string,
   portfolio: PortfolioContextMock,
   user: UserProfileMock,
   market: MarketContextMock
 ): { summary: string; explanation: string; status: Status; confidence: ConfidenceLevel } {
-  
-  // Intent-based response templates
-  // In production, this would be LLM-generated with system prompt injection
   
   if (intent === 'daily_movement' || question.toLowerCase().includes('today') || question.toLowerCase().includes('change')) {
     const movement = market.nifty_change >= 0 ? 'up' : 'down';
@@ -419,8 +782,8 @@ export async function POST(request: NextRequest) {
       marketContext = getMockMarketContext();
     }
     
-    // Step 3: Generate response
-    const generatedResponse = generateResponse(
+    // Step 3: Generate AI response (or fallback to templates)
+    const generatedResponse = await generateResponse(
       processedQuestion,
       body.intent || 'general_question',
       portfolioContext,
@@ -455,7 +818,7 @@ export async function POST(request: NextRequest) {
         intent: body.intent || 'general_question',
         response: response.summary + (response.explanation ? '\n\n' + response.explanation : ''),
         response_status: response.status,
-        context_snapshot: usedRealData ? { source: 'supabase' } : { source: 'mock' },
+        context_snapshot: usedRealData ? { source: 'supabase', ai_enabled: !!process.env.OPENAI_API_KEY } : { source: 'mock', ai_enabled: !!process.env.OPENAI_API_KEY },
         guardrails_triggered: guardrailsTriggered,
       });
     } catch (logError) {

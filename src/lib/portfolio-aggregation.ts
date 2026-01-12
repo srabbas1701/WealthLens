@@ -60,20 +60,21 @@ const ASSET_TYPE_LABELS: Record<string, string> = {
 };
 
 // Asset type to color mapping
+// Using distinct colors to avoid similar shades (especially greens)
 const ASSET_TYPE_COLORS: Record<string, string> = {
-  'Equity': '#16A34A',
-  'Stocks': '#16A34A',
-  'Mutual Fund': '#2563EB',
-  'Mutual Funds': '#2563EB',
-  'Fixed Deposit': '#F59E0B',
-  'Fixed Deposits': '#F59E0B',
-  'PPF': '#8B5CF6',
-  'NPS': '#7C3AED',
-  'National Pension System': '#7C3AED',
-  'Gold': '#DC2626',
-  'ETF': '#10B981',
-  'Bonds': '#6366F1',
-  'Cash': '#64748B',
+  'Equity': '#2563EB',      // Blue (changed from green)
+  'Stocks': '#2563EB',      // Blue (changed from green)
+  'Mutual Fund': '#7C3AED', // Purple
+  'Mutual Funds': '#7C3AED', // Purple
+  'Fixed Deposit': '#F59E0B', // Amber
+  'Fixed Deposits': '#F59E0B', // Amber
+  'PPF': '#8B5CF6',         // Violet
+  'NPS': '#EC4899',         // Pink (changed from purple)
+  'National Pension System': '#EC4899', // Pink
+  'Gold': '#DC2626',        // Red
+  'ETF': '#10B981',         // Emerald (green)
+  'Bonds': '#6366F1',       // Indigo
+  'Cash': '#64748B',        // Slate
 };
 
 /**

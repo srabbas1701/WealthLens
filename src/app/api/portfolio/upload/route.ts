@@ -66,7 +66,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 // COLUMN DETECTION SYSTEM
 // ============================================================================
 
-type TargetField = 'symbol' | 'isin' | 'name' | 'quantity' | 'average_price' | 'asset_type';
+type TargetField = 'symbol' | 'isin' | 'name' | 'quantity' | 'average_price';
 
 /**
  * BLACKLIST: Columns that should NEVER be mapped to financial fields
@@ -116,81 +116,88 @@ const BLACKLIST_PATTERNS: { pattern: RegExp; reason: string }[] = [
 ];
 
 /**
- * Column name patterns for detection
- * Priority: exact > strong > weak
+ * Column variations for fuzzy matching
+ * These handle ANY CSV format from ANY investment platform
  */
-const COLUMN_PATTERNS: Record<TargetField, { exact: string[]; strong: string[]; weak: string[] }> = {
-  // ISIN - highest priority for identification (most reliable)
-  isin: {
-    exact: ['isin', 'isin_code', 'isin_number', 'isin_no'],
-    strong: [],
-    weak: [],
-  },
-  
-  // Symbol - second priority for identification
-  symbol: {
-    exact: ['symbol', 'ticker', 'scrip', 'scrip_code', 'trading_symbol', 'tradingsymbol'],
-    strong: ['stock_symbol', 'nse_symbol', 'bse_symbol', 'script', 'scrip_name'],
-    weak: [],
-  },
-  
-  // Name - fallback for identification
-  name: {
-    exact: ['name', 'stock_name', 'company_name', 'security_name', 'instrument_name', 'scheme_name', 'fund_name', 'scrip_name'],
-    strong: ['company', 'security', 'instrument', 'scheme', 'fund', 'stock', 'particulars'],
-    weak: ['description'],
-  },
-  
-  // Quantity - required field
-  quantity: {
-    exact: ['quantity', 'qty', 'units', 'shares', 'no_of_shares', 'num_shares', 'holding_quantity'],
-    strong: ['holdings', 'balance_units', 'balance_qty', 'nav_units', 'total_units'],
-    weak: ['balance', 'holding'],
-  },
-  
-  // Average/Buy Price - required field (NOT current price!)
-  // Be very specific - we want BUY price, not current/market price
-  average_price: {
-    exact: ['avg_price', 'average_price', 'avg_cost', 'average_cost', 'buy_price', 'purchase_price', 'cost_price', 'buy_avg', 'avg_buy_price'],
-    strong: ['buy_average', 'invested_nav', 'average_nav', 'purchase_nav', 'cost', 'rate'],
-    weak: ['price'], // Only use 'price' if nothing else matches - could be current price
-  },
-  
-  // Asset Type - optional
-  asset_type: {
-    exact: ['asset_type', 'instrument_type', 'security_type', 'asset_class'],
-    strong: ['type', 'category'],
-    weak: [],
-  },
-};
+const NAME_VARIATIONS = [
+  'scheme name', 'scheme', 'fund name', 'fund', 'security name',
+  'asset name', 'script name', 'scrip name', 'stock name', 
+  'company name', 'name', 'symbol', 'tradingsymbol', 'security'
+];
+
+const QUANTITY_VARIATIONS = [
+  'units', 'quantity', 'shares', 'holdings', 'no of units',
+  'shares held', 'balance units', 'close units', 'holding quantity',
+  'no of shares', 'qty', 'balance', 'holding'
+];
+
+// Total invested variations (total amount invested)
+const TOTAL_INVESTED_VARIATIONS = [
+  'invested', 'invested amount', 'investment amount', 'invested value',
+  'investment value', 'total invested', 'total investment', 'cost value',
+  'invested amt', 'investment', 'total cost', 'book value', 
+  'purchase value', 'acquisition value', 'cost of acquisition'
+];
+
+// Average price variations (per-unit price)
+const AVERAGE_PRICE_VARIATIONS = [
+  'average price', 'avg price', 'average cost', 'avg cost',
+  'price per unit', 'unit price', 'buy price', 'purchase price',
+  'cost per unit', 'price', 'rate', 'avg rate', 'average rate',
+  'average buy price', 'avg buy price', 'nav', 'average nav'
+];
+
+const SECTOR_TYPE_VARIATIONS = [
+  'sector', 'type', 'asset type', 'asset class', 'category',
+  'instrument type', 'security type', 'instrument', 'product type'
+];
+
+const ISIN_VARIATIONS = [
+  'isin', 'isin code', 'isin number', 'isinnumber', 'isin no', 'isin no.'
+];
+
+const FOLIO_VARIATIONS = [
+  'folio', 'folio number', 'folio no', 'folionumber'
+];
+
+const AMC_VARIATIONS = [
+  'amc', 'amc name', 'fund house', 'asset management company'
+];
+
+const SYMBOL_VARIATIONS = [
+  'symbol', 'stock symbol', 'scrip code', 'script code', 
+  'trading symbol', 'ticker', 'nse symbol', 'bse code'
+];
+
+const EXCHANGE_VARIATIONS = [
+  'exchange', 'market', 'stock exchange'
+];
 
 /**
  * Asset type inference patterns
- * Used when asset_type column is not present
+ * NOTE: Index funds are classified as 'mutual_fund', not a separate type
  */
 const ASSET_TYPE_PATTERNS: { pattern: RegExp; type: AssetType }[] = [
-  // Mutual Funds
+  // Mutual Funds (includes index funds!)
   { pattern: /\b(fund|mf|mutual)\b/i, type: 'mutual_fund' },
   { pattern: /\b(direct|growth|dividend|idcw)\b/i, type: 'mutual_fund' },
-  
-  // Index Funds
-  { pattern: /\b(index|nifty|sensex|midcap|smallcap)\s*(fund|index)\b/i, type: 'index_fund' },
+  { pattern: /\b(index|nifty|sensex|midcap|smallcap)\s*(fund|index)\b/i, type: 'mutual_fund' },
   
   // ETFs
   { pattern: /\b(etf|exchange\s*traded)\b/i, type: 'etf' },
   { pattern: /\bbees\b/i, type: 'etf' },
   
-  // Government schemes
-  { pattern: /\bppf\b/i, type: 'ppf' },
-  { pattern: /\bepf\b/i, type: 'epf' },
-  { pattern: /\bnps\b/i, type: 'nps' },
+  // Government schemes (classify as 'other' for now)
+  { pattern: /\bppf\b/i, type: 'other' },
+  { pattern: /\bepf\b/i, type: 'other' },
+  { pattern: /\bnps\b/i, type: 'other' },
   
-  // Fixed Income
-  { pattern: /\b(fd|fixed\s*deposit)\b/i, type: 'fd' },
-  { pattern: /\b(bond|debenture|ncd)\b/i, type: 'bond' },
+  // Fixed Income (classify as 'other' for now)
+  { pattern: /\b(fd|fixed\s*deposit)\b/i, type: 'other' },
+  { pattern: /\b(bond|debenture|ncd)\b/i, type: 'other' },
   
-  // Gold
-  { pattern: /\b(gold|sgb|sovereign)\b/i, type: 'gold' },
+  // Gold (classify as 'other' for now)
+  { pattern: /\b(gold|sgb|sovereign)\b/i, type: 'other' },
 ];
 
 // ============================================================================
@@ -198,7 +205,434 @@ const ASSET_TYPE_PATTERNS: { pattern: RegExp; type: AssetType }[] = [
 // ============================================================================
 
 /**
- * Normalize a column header for comparison
+ * Normalize column name for fuzzy matching
+ * Removes all punctuation/spaces for better matching
+ */
+function normalizeColumnName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]/g, ''); // Remove all punctuation/spaces
+}
+
+/**
+ * Fuzzy match column name against variations
+ * Returns true if either contains the other (handles abbreviations)
+ */
+function fuzzyMatchColumn(columnName: string, variations: string[]): boolean {
+  const normalized = normalizeColumnName(columnName);
+  
+  return variations.some(variation => {
+    const normalizedVariation = normalizeColumnName(variation);
+    
+    // Match if either contains the other (handles abbreviations)
+    return normalized.includes(normalizedVariation) || 
+           normalizedVariation.includes(normalized);
+  });
+}
+
+/**
+ * Column map interface for detected columns
+ */
+interface ColumnMap {
+  name: number | null;           // Index of name column
+  quantity: number | null;       // Index of quantity column
+  totalInvested: number | null;  // Index of total invested amount column
+  averagePrice: number | null;   // Index of average price per unit column
+  isin: number | null;           // Index of ISIN column (optional)
+  sectorType: number | null;     // Index of Sector/Type/Category column (optional, context-aware)
+  
+  // Metadata columns (optional, for better detection)
+  folio: number | null;          // Folio number (MF indicator)
+  amc: number | null;            // AMC name (MF indicator)
+  symbol: number | null;         // Trading symbol (Stock/ETF indicator)
+  exchange: number | null;       // Exchange (NSE/BSE - Stock indicator)
+}
+
+/**
+ * Detect columns using fuzzy matching
+ * Maps CSV column headers to canonical fields
+ */
+function detectColumns(headers: string[]): ColumnMap {
+  const map: ColumnMap = {
+    name: null,
+    quantity: null,
+    totalInvested: null,
+    averagePrice: null,
+    isin: null,
+    sectorType: null,
+    folio: null,
+    amc: null,
+    symbol: null,
+    exchange: null
+  };
+  
+  headers.forEach((header, index) => {
+    if (map.name === null && fuzzyMatchColumn(header, NAME_VARIATIONS)) {
+      map.name = index;
+    }
+    
+    if (map.quantity === null && fuzzyMatchColumn(header, QUANTITY_VARIATIONS)) {
+      map.quantity = index;
+    }
+    
+    // CRITICAL: Match totalInvested BEFORE averagePrice
+    // Check totalInvested first to avoid matching "invested" when we have "avg price"
+    if (map.totalInvested === null && fuzzyMatchColumn(header, TOTAL_INVESTED_VARIATIONS)) {
+      map.totalInvested = index;
+      console.log(`[Column Detection] Matched "${header}" to totalInvested`);
+    }
+    // Only match averagePrice if we haven't matched totalInvested
+    else if (map.averagePrice === null && fuzzyMatchColumn(header, AVERAGE_PRICE_VARIATIONS)) {
+      map.averagePrice = index;
+      console.log(`[Column Detection] Matched "${header}" to averagePrice`);
+    }
+    
+    if (map.sectorType === null && fuzzyMatchColumn(header, SECTOR_TYPE_VARIATIONS)) {
+      map.sectorType = index;
+      console.log(`[Column Detection] Matched "${header}" to sectorType`);
+    }
+    
+    if (map.isin === null && fuzzyMatchColumn(header, ISIN_VARIATIONS)) {
+      map.isin = index;
+    }
+    if (map.folio === null && fuzzyMatchColumn(header, FOLIO_VARIATIONS)) {
+      map.folio = index;
+    }
+    if (map.amc === null && fuzzyMatchColumn(header, AMC_VARIATIONS)) {
+      map.amc = index;
+    }
+    if (map.symbol === null && fuzzyMatchColumn(header, SYMBOL_VARIATIONS)) {
+      map.symbol = index;
+    }
+    if (map.exchange === null && fuzzyMatchColumn(header, EXCHANGE_VARIATIONS)) {
+      map.exchange = index;
+    }
+  });
+  
+  return map;
+}
+
+/**
+ * ISIN Classification Result
+ */
+interface ISINClassification {
+  type: AssetType | 'ambiguous';
+  confidence: number;
+}
+
+/**
+ * Classify asset type by ISIN
+ * ISIN is the PRIMARY classifier when available
+ */
+function classifyByISIN(isin: string | null | undefined): ISINClassification {
+  if (!isin || isin.length !== 12) {
+    return { type: 'ambiguous', confidence: 0 };
+  }
+  
+  const prefix = isin.substring(0, 3).toUpperCase();
+  const positionCode = isin.substring(7, 9);
+  
+  // Stocks (INE prefix)
+  if (prefix === 'INE') {
+    // Check for REITs/InvITs (not supported, mark as other)
+    if (positionCode === '25' || positionCode === '23') {
+      return { type: 'other', confidence: 95 };
+    }
+    return { type: 'equity', confidence: 95 };
+  }
+  
+  // Mutual Funds or ETFs (INF prefix)
+  if (prefix === 'INF') {
+    // Cannot distinguish MF from ETF by ISIN alone
+    // Need additional checks (name, symbol)
+    return { type: 'ambiguous', confidence: 70 };
+  }
+  
+  // Government Securities (IN0-IN4)
+  if (prefix >= 'IN0' && prefix <= 'IN4') {
+    return { type: 'other', confidence: 95 };
+  }
+  
+  return { type: 'ambiguous', confidence: 0 };
+}
+
+/**
+ * Detection signals from different sources
+ */
+interface DetectionSignals {
+  sectorSignal: AssetType | 'ambiguous';
+  isinSignal: AssetType | 'ambiguous';
+  columnSignal: AssetType | 'ambiguous';
+  nameSignal: AssetType | 'ambiguous';
+}
+
+/**
+ * Asset detection result with confidence
+ */
+interface AssetDetection {
+  assetType: AssetType;
+  confidence: number;
+  signals: DetectionSignals;
+  rowIndex: number;
+  name: string;
+}
+
+/**
+ * Detect asset type from row using multi-signal approach
+ * Priority: Sector (if no MF indicators) > ISIN > Column patterns > Name patterns
+ */
+function detectAssetTypeFromRow(
+  row: any[],
+  columnMap: ColumnMap,
+  rowIndex: number
+): AssetDetection {
+  
+  const name = columnMap.name !== null ? String(row[columnMap.name] || '') : '';
+  const isin = columnMap.isin !== null ? String(row[columnMap.isin] || '').trim() : '';
+  
+  let confidence = 0;
+  const signals: DetectionSignals = {
+    sectorSignal: 'ambiguous',
+    isinSignal: 'ambiguous',
+    columnSignal: 'ambiguous',
+    nameSignal: 'ambiguous'
+  };
+  
+  // SIGNAL 1: Explicit Sector/Type column (CONTEXT-AWARE)
+  if (columnMap.sectorType !== null) {
+    const sectorValue = String(row[columnMap.sectorType] || '').toLowerCase().trim();
+    
+    // CRITICAL: Check if row has MF indicators first
+    const hasAMC = columnMap.amc !== null && row[columnMap.amc];
+    const hasFolio = columnMap.folio !== null && row[columnMap.folio];
+    const hasMFIndicators = (
+      hasFolio ||
+      hasAMC ||
+      (isin && isin.startsWith('INF')) ||
+      /\b(fund|scheme|plan)\b/i.test(name)
+    );
+    
+    // If MF indicators present, sector column describes MF category, not asset type
+    if (hasMFIndicators) {
+      console.log(`[Detection] Row "${name}" has MF indicators - ignoring Sector="${sectorValue}"`);
+      // Don't set sectorSignal - let other signals handle it
+    }
+    // If NO MF indicators, sector column might describe asset type
+    else {
+      // Only match VERY EXPLICIT asset type values (exact match)
+      if (sectorValue === 'etf') {
+        signals.sectorSignal = 'etf';
+        confidence = Math.max(confidence, 95);
+        console.log(`[Detection] Sector="ETF" for ${name}`);
+      }
+      else if (sectorValue === 'mutual fund' || sectorValue === 'mf' || 
+               sectorValue === 'mutualfund' || sectorValue === 'mutual') {
+        signals.sectorSignal = 'mutual_fund';
+        confidence = Math.max(confidence, 95);
+        console.log(`[Detection] Sector="Mutual Fund" for ${name}`);
+      }
+      else if (sectorValue === 'stock' || sectorValue === 'stocks') {
+        signals.sectorSignal = 'equity';
+        confidence = Math.max(confidence, 90);
+        console.log(`[Detection] Sector="Stock" for ${name}`);
+      }
+      // Only match "equity" if it's combined with "stock"
+      else if (sectorValue.includes('equity') && sectorValue.includes('stock')) {
+        signals.sectorSignal = 'equity';
+        confidence = Math.max(confidence, 85);
+      }
+    }
+  }
+  
+  // SIGNAL 2: ISIN Classification
+  if (isin) {
+    const isinResult = classifyByISIN(isin);
+    signals.isinSignal = isinResult.type;
+    
+    if (isinResult.type !== 'ambiguous') {
+      confidence = Math.max(confidence, isinResult.confidence);
+      
+      // If ISIN is definitive (equity or other), return immediately (unless sector signal says otherwise)
+      if (isinResult.type === 'equity' || isinResult.type === 'other') {
+        if (signals.sectorSignal === 'ambiguous') {
+          return {
+            assetType: isinResult.type,
+            confidence: isinResult.confidence,
+            signals,
+            rowIndex,
+            name
+          };
+        }
+      }
+      
+      // If ISIN says MF/ETF (ambiguous), continue to other signals
+    }
+  }
+  
+  // SIGNAL 3: Column Pattern Detection
+  const hasAMC = columnMap.amc !== null && row[columnMap.amc];
+  const hasFolio = columnMap.folio !== null && row[columnMap.folio];
+  const hasSymbol = columnMap.symbol !== null && row[columnMap.symbol];
+  const hasExchange = columnMap.exchange !== null && row[columnMap.exchange];
+  
+  if (hasFolio || hasAMC) {
+    signals.columnSignal = 'mutual_fund';
+    confidence = Math.max(confidence, 85);
+  } else if (hasSymbol || hasExchange) {
+    signals.columnSignal = 'equity';
+    confidence = Math.max(confidence, 75);
+  }
+  
+  // SIGNAL 4: Name Pattern Detection
+  if (name) {
+    const nameLower = name.toLowerCase();
+    
+    // ETF patterns (high confidence)
+    if (/\b(etf|bees|ees)\b/i.test(name) || 
+        /(nifty|sensex|gold|bank|silver|liquid)(bees|etf)/i.test(nameLower)) {
+      signals.nameSignal = 'etf';
+      confidence = Math.max(confidence, 80);
+    }
+    // Mutual Fund patterns (medium-high confidence) - includes index funds!
+    else if (/\b(fund|scheme|plan|index)\b/i.test(nameLower) ||
+             /\b(growth|dividend|idcw|direct|regular)\b/i.test(nameLower)) {
+      signals.nameSignal = 'mutual_fund';
+      confidence = Math.max(confidence, 70);
+    }
+    // Stock patterns (lower confidence - less reliable)
+    else if (nameLower.split(/\s+/).length <= 3 && 
+             !/fund|scheme|plan|etf/i.test(nameLower)) {
+      signals.nameSignal = 'equity';
+      confidence = Math.max(confidence, 50);
+    }
+  }
+  
+  // RESOLVE: Priority - Sector (if no MF indicators) > ISIN > Column > Name
+  let finalType: AssetType = 'other';
+  
+  if (signals.sectorSignal !== 'ambiguous') {
+    finalType = signals.sectorSignal;
+  } else if (signals.isinSignal !== 'ambiguous') {
+    finalType = signals.isinSignal;
+  } else if (signals.columnSignal !== 'ambiguous') {
+    finalType = signals.columnSignal;
+  } else if (signals.nameSignal !== 'ambiguous') {
+    finalType = signals.nameSignal;
+  }
+  
+  // ETF disambiguation
+  if (signals.sectorSignal === 'ambiguous' && 
+      signals.isinSignal === 'ambiguous' && 
+      isin?.startsWith('INF') && 
+      signals.nameSignal === 'etf') {
+    finalType = 'etf';
+    confidence = 90;
+  }
+  
+  // MF disambiguation
+  if (signals.sectorSignal === 'ambiguous' && 
+      signals.isinSignal === 'ambiguous' && 
+      isin?.startsWith('INF') && 
+      (signals.columnSignal === 'mutual_fund' || signals.nameSignal === 'mutual_fund')) {
+    finalType = 'mutual_fund';
+    confidence = 85;
+  }
+  
+  // Index funds are classified as 'mutual_fund' - no separate type needed
+  
+  return {
+    assetType: finalType,
+    confidence,
+    signals,
+    rowIndex,
+    name
+  };
+}
+
+/**
+ * Validation result for upload
+ */
+interface ValidationResult {
+  valid: boolean;
+  detections: AssetDetection[];
+  assetTypeCounts: Record<'mutual_fund' | 'etf' | 'equity' | 'other', number>;
+  ambiguousCount: number;
+  ambiguousPercent: number;
+  error?: string;
+  warning?: string;
+}
+
+/**
+ * Validate upload based on confidence scores
+ * Reject if 80%+ rows are ambiguous
+ */
+function validateUpload(detections: AssetDetection[], headers: string[]): ValidationResult {
+  const total = detections.length;
+  const confident = detections.filter(d => d.confidence >= 70).length;
+  const ambiguous = total - confident;
+  const ambiguousPercent = (ambiguous / total) * 100;
+  
+  // Count asset types (only the 4 supported types)
+  const counts: Record<'mutual_fund' | 'etf' | 'equity' | 'other', number> = {
+    mutual_fund: 0,
+    etf: 0,
+    equity: 0,
+    other: 0
+  };
+  
+  detections.forEach(d => {
+    if (d.confidence >= 70) {
+      // Map index_fund to mutual_fund (index funds are mutual funds)
+      const mappedType = d.assetType === 'index_fund' ? 'mutual_fund' : d.assetType;
+      if (mappedType === 'mutual_fund' || mappedType === 'etf' || mappedType === 'equity' || mappedType === 'other') {
+        counts[mappedType]++;
+      }
+    }
+  });
+  
+  // REJECT: If 80%+ rows are ambiguous
+  if (ambiguousPercent >= 80) {
+    return {
+      valid: false,
+      detections,
+      assetTypeCounts: counts,
+      ambiguousCount: ambiguous,
+      ambiguousPercent,
+      error: `Cannot confidently detect asset types. ${ambiguous} out of ${total} rows are ambiguous.`,
+      warning: `Please ensure your CSV file contains clear column headers:
+        • For Mutual Funds: Include 'Scheme Name', 'Units', 'Invested Amount', and optionally 'ISIN'
+        • For Stocks: Include 'Stock Name' or 'Symbol', 'Quantity', 'Average Price'
+        • For ETFs: Include 'ETF Name' (with 'ETF' in the name), 'Quantity', 'Average Price'
+        
+        Your file headers: ${headers.join(', ')}`
+    };
+  }
+  
+  // ACCEPT with warning: If 20-80% rows are ambiguous
+  if (ambiguousPercent > 20) {
+    return {
+      valid: true,
+      detections,
+      assetTypeCounts: counts,
+      ambiguousCount: ambiguous,
+      ambiguousPercent,
+      warning: `${ambiguous} out of ${total} rows have low confidence and were assigned best-guess asset types. Please review after upload.`
+    };
+  }
+  
+  // ACCEPT: If <20% rows are ambiguous
+  return {
+    valid: true,
+    detections,
+    assetTypeCounts: counts,
+    ambiguousCount: ambiguous,
+    ambiguousPercent
+  };
+}
+
+/**
+ * Normalize a column header for comparison (legacy function - kept for compatibility)
  */
 function normalizeHeader(header: string): string {
   return header
@@ -221,252 +655,6 @@ function isBlacklisted(header: string): { blacklisted: boolean; reason?: string 
   }
   
   return { blacklisted: false };
-}
-
-/**
- * Score a column header against a target field
- */
-function scoreColumnHeader(header: string, field: TargetField): { score: number; matchType: string } {
-  const normalized = normalizeHeader(header);
-  const patterns = COLUMN_PATTERNS[field];
-  
-  // Check exact matches (highest confidence)
-  for (const exact of patterns.exact) {
-    if (normalized === exact || normalized === exact.replace(/_/g, '')) {
-      return { score: 1.0, matchType: 'exact' };
-    }
-  }
-  
-  // Check if header contains exact pattern
-  for (const exact of patterns.exact) {
-    if (normalized.includes(exact) || exact.includes(normalized)) {
-      return { score: 0.9, matchType: 'exact_partial' };
-    }
-  }
-  
-  // Check strong matches
-  for (const strong of patterns.strong) {
-    if (normalized === strong || normalized.includes(strong)) {
-      return { score: 0.7, matchType: 'strong' };
-    }
-  }
-  
-  // Check weak matches
-  for (const weak of patterns.weak) {
-    if (normalized === weak || normalized.includes(weak)) {
-      return { score: 0.4, matchType: 'weak' };
-    }
-  }
-  
-  return { score: 0, matchType: 'none' };
-}
-
-/**
- * Data validators - validate sample data matches expected field type
- */
-const DATA_VALIDATORS: Record<TargetField, (samples: string[]) => boolean> = {
-  isin: (samples) => {
-    // ISIN: 12 chars, starts with 2 letters (IN for India)
-    const validCount = samples.filter(s => {
-      const clean = s.trim().toUpperCase();
-      return clean.length === 12 && /^[A-Z]{2}[A-Z0-9]{10}$/.test(clean);
-    }).length;
-    return validCount >= samples.length * 0.8;
-  },
-  
-  symbol: (samples) => {
-    // Symbol: Short alphanumeric
-    const validCount = samples.filter(s => {
-      const clean = s.trim();
-      return clean.length >= 1 && clean.length <= 30 && /^[A-Za-z0-9\-&.]+$/.test(clean);
-    }).length;
-    return validCount >= samples.length * 0.7;
-  },
-  
-  name: (samples) => {
-    // Name: Contains letters
-    const validCount = samples.filter(s => {
-      const clean = s.trim();
-      return clean.length >= 2 && /[a-zA-Z]/.test(clean);
-    }).length;
-    return validCount >= samples.length * 0.7;
-  },
-  
-  quantity: (samples) => {
-    // Quantity: Positive numbers in reasonable range
-    const validCount = samples.filter(s => {
-      const num = parseQuantity(s);
-      return num !== null && num > 0 && num <= 10000000;
-    }).length;
-    return validCount >= samples.length * 0.7;
-  },
-  
-  average_price: (samples) => {
-    // Price: Positive numbers in reasonable price range
-    const validCount = samples.filter(s => {
-      const num = parsePrice(s);
-      return num !== null && num > 0 && num <= 500000; // Max ₹5L per unit (reasonable for any asset)
-    }).length;
-    return validCount >= samples.length * 0.7;
-  },
-  
-  asset_type: (samples) => {
-    // Asset type: Categorical with limited unique values
-    const uniqueValues = new Set(samples.map(s => s.toLowerCase().trim()));
-    return uniqueValues.size <= 20 && uniqueValues.size < samples.length * 0.5;
-  },
-};
-
-/**
- * Intelligent column mapping
- * Returns map of target fields to detected columns
- */
-interface ColumnMapping {
-  header: string;
-  field: TargetField;
-  confidence: number;
-  matchType: string;
-}
-
-function detectColumnMappings(
-  headers: string[],
-  sampleRows: RawUploadRow[]
-): {
-  mappings: Map<TargetField, ColumnMapping | null>;
-  ignoredColumns: { header: string; reason: string }[];
-} {
-  const mappings = new Map<TargetField, ColumnMapping | null>();
-  const usedHeaders = new Set<string>();
-  const ignoredColumns: { header: string; reason: string }[] = [];
-  
-  // Priority order: ISIN first (most reliable), then symbol, name, quantity, price
-  const targetFields: TargetField[] = ['isin', 'symbol', 'name', 'quantity', 'average_price', 'asset_type'];
-  
-  // First pass: Identify blacklisted columns
-  for (const header of headers) {
-    const { blacklisted, reason } = isBlacklisted(header);
-    if (blacklisted) {
-      ignoredColumns.push({ header, reason: reason || 'Calculated value - we compute this ourselves' });
-      usedHeaders.add(header);
-    }
-  }
-  
-  // Second pass: Find matches for each target field
-  const allMatches: { header: string; field: TargetField; score: number; matchType: string; dataValid: boolean }[] = [];
-  
-  for (const header of headers) {
-    if (usedHeaders.has(header)) continue;
-    
-    // Get sample data for validation
-    const samples = sampleRows
-      .slice(0, 20)
-      .map(row => String(row[header] || ''))
-      .filter(s => s.trim() !== '');
-    
-    for (const field of targetFields) {
-      const { score, matchType } = scoreColumnHeader(header, field);
-      
-      if (score > 0) {
-        const dataValid = samples.length > 0 ? DATA_VALIDATORS[field](samples) : true;
-        
-        allMatches.push({
-          header,
-          field,
-          score: dataValid ? score : score * 0.3,
-          matchType,
-          dataValid,
-        });
-      }
-    }
-  }
-  
-  // Sort by score descending
-  allMatches.sort((a, b) => b.score - a.score);
-  
-  // Assign mappings greedily
-  for (const match of allMatches) {
-    if (mappings.has(match.field) || usedHeaders.has(match.header)) continue;
-    
-    const minScore = match.matchType === 'weak' ? 0.3 : 0.4;
-    if (match.score >= minScore) {
-      mappings.set(match.field, {
-        header: match.header,
-        field: match.field,
-        confidence: match.score,
-        matchType: match.matchType,
-      });
-      usedHeaders.add(match.header);
-    }
-  }
-  
-  // Fill missing fields with null
-  for (const field of targetFields) {
-    if (!mappings.has(field)) {
-      mappings.set(field, null);
-    }
-  }
-  
-  // Log results for debugging
-  console.log('\n=== Column Detection Results ===');
-  console.log('Ignored columns (calculated values we don\'t trust):');
-  ignoredColumns.forEach(c => console.log(`  - "${c.header}": ${c.reason}`));
-  console.log('\nDetected mappings:');
-  for (const [field, mapping] of mappings) {
-    if (mapping) {
-      console.log(`  ${field}: "${mapping.header}" (confidence: ${(mapping.confidence * 100).toFixed(0)}%)`);
-    } else {
-      console.log(`  ${field}: NOT FOUND`);
-    }
-  }
-  
-  return { mappings, ignoredColumns };
-}
-
-/**
- * Infer asset type from name/symbol
- */
-function inferAssetType(name: string, symbol?: string): AssetType {
-  const searchText = `${name} ${symbol || ''}`.toLowerCase();
-  
-  for (const { pattern, type } of ASSET_TYPE_PATTERNS) {
-    if (pattern.test(searchText)) {
-      return type;
-    }
-  }
-  
-  return 'equity';
-}
-
-/**
- * Map raw asset type string to valid AssetType
- */
-function mapAssetType(rawType: string | undefined): AssetType {
-  if (!rawType) return 'equity';
-  
-  const normalized = rawType.toLowerCase().trim();
-  
-  const mapping: Record<string, AssetType> = {
-    'equity': 'equity',
-    'stock': 'equity',
-    'share': 'equity',
-    'mutual fund': 'mutual_fund',
-    'mutual_fund': 'mutual_fund',
-    'mf': 'mutual_fund',
-    'index fund': 'index_fund',
-    'index_fund': 'index_fund',
-    'etf': 'etf',
-    'fd': 'fd',
-    'fixed deposit': 'fd',
-    'bond': 'bond',
-    'gold': 'gold',
-    'sgb': 'gold',
-    'ppf': 'ppf',
-    'epf': 'epf',
-    'nps': 'nps',
-    'cash': 'cash',
-  };
-  
-  return mapping[normalized] || 'other';
 }
 
 /**
@@ -505,78 +693,144 @@ async function parseFile(buffer: Buffer, fileName: string): Promise<{ rows: RawU
  * 
  * CRITICAL: invested_value is ALWAYS computed from quantity × average_price
  * We NEVER trust invested_value from the file
+ * 
+ * NEW DETECTION SYSTEM:
+ * - Uses fuzzy column matching to handle ANY CSV format
+ * - Uses ISIN as PRIMARY classifier when available
+ * - Uses multi-signal detection (ISIN + columns + name patterns)
+ * - Validates confidence scores and rejects if 80%+ ambiguous
  */
 function transformRows(rows: RawUploadRow[], headers: string[]): {
   holdings: ParsedHolding[];
   warnings: string[];
-  columnMappings: Record<string, string | null>;
+  columnMappings: {
+    symbol: string | null;
+    isin: string | null;
+    name: string | null;
+    quantity: string | null;
+    average_price: string | null;
+    invested_value: string | null;
+    asset_type: string | null;
+  };
   ignoredColumns: { header: string; reason: string }[];
+  validation?: ValidationResult;
 } {
   const holdings: ParsedHolding[] = [];
   const warnings: string[] = [];
   
-  // Detect column mappings
-  const { mappings, ignoredColumns } = detectColumnMappings(headers, rows);
+  console.log(`[Upload] Parsed ${rows.length} rows with headers:`, headers);
   
-  // Extract column names
-  const symbolCol = mappings.get('symbol')?.header || null;
-  const isinCol = mappings.get('isin')?.header || null;
-  const nameCol = mappings.get('name')?.header || null;
-  const quantityCol = mappings.get('quantity')?.header || null;
-  const avgPriceCol = mappings.get('average_price')?.header || null;
-  const assetTypeCol = mappings.get('asset_type')?.header || null;
+  // STEP 1: Detect columns using fuzzy matching
+  const columnMap = detectColumns(headers);
   
-  // Build column mappings for response
-  const columnMappings: Record<string, string | null> = {
-    symbol: symbolCol,
-    isin: isinCol,
-    name: nameCol,
-    quantity: quantityCol,
-    average_price: avgPriceCol,
-    asset_type: assetTypeCol,
+  // Validate required columns
+  if (columnMap.name === null || columnMap.quantity === null || 
+      (columnMap.totalInvested === null && columnMap.averagePrice === null)) {
+    const missing = [];
+    if (columnMap.name === null) missing.push('Name/Scheme');
+    if (columnMap.quantity === null) missing.push('Quantity/Units');
+    if (columnMap.totalInvested === null && columnMap.averagePrice === null) {
+      missing.push('Invested Amount OR Average Price');
+    }
+    
+    warnings.push(`Missing required columns: ${missing.join(', ')}. Your headers: ${headers.join(', ')}`);
+  }
+  
+  console.log(`[Upload] Detected columns:`, {
+    name: columnMap.name !== null ? headers[columnMap.name] : 'Not found',
+    quantity: columnMap.quantity !== null ? headers[columnMap.quantity] : 'Not found',
+    totalInvested: columnMap.totalInvested !== null ? headers[columnMap.totalInvested] : 'Not found',
+    averagePrice: columnMap.averagePrice !== null ? headers[columnMap.averagePrice] : 'Not found',
+    isin: columnMap.isin !== null ? headers[columnMap.isin] : 'Not found',
+    folio: columnMap.folio !== null ? headers[columnMap.folio] : 'Not found',
+    symbol: columnMap.symbol !== null ? headers[columnMap.symbol] : 'Not found'
+  });
+  
+  // STEP 2: Detect asset type for each row
+  const detections: AssetDetection[] = [];
+  
+  // Convert rows to arrays for processing
+  const rowArrays = rows.map(row => headers.map(header => row[header]));
+  
+  for (let i = 0; i < rowArrays.length; i++) {
+    const row = rowArrays[i];
+    const detection = detectAssetTypeFromRow(row, columnMap, i + 2);
+    detections.push(detection);
+    
+    console.log(`[Upload] Row ${i + 1}: "${detection.name}" → ${detection.assetType} (${detection.confidence}% confidence)`);
+  }
+  
+  // STEP 3: Validate upload
+  const validation = validateUpload(detections, headers);
+  
+  if (!validation.valid) {
+    // Validation failed - return validation result for handler to reject
+    // Don't process rows if validation fails
+    return { 
+      holdings: [], 
+      warnings: [validation.error || 'Validation failed', validation.warning || ''].filter(Boolean),
+      columnMappings: {
+        symbol: null,
+        isin: null,
+        name: null,
+        quantity: null,
+        average_price: null,
+        invested_value: null,
+        asset_type: null,
+      },
+      ignoredColumns: [],
+      validation 
+    };
+  }
+  
+  if (validation.warning) {
+    warnings.push(validation.warning);
+    console.warn(`[Upload] Warning: ${validation.warning}`);
+  }
+  
+  console.log(`[Upload] Asset type distribution:`, validation.assetTypeCounts);
+  console.log(`[Upload] Confidence: High=${detections.filter(d => d.confidence >= 70).length}, Medium=${detections.filter(d => d.confidence >= 50 && d.confidence < 70).length}, Low=${detections.filter(d => d.confidence < 50).length}`);
+  
+  // Identify ignored columns (calculated values we don't use)
+  const ignoredColumns: { header: string; reason: string }[] = [];
+  headers.forEach(header => {
+    const { blacklisted, reason } = isBlacklisted(header);
+    if (blacklisted) {
+      ignoredColumns.push({ header, reason: reason || 'Calculated value - we compute this ourselves' });
+    }
+  });
+  
+  // Build column mappings for response (using column indices)
+  const columnMappings = {
+    symbol: columnMap.symbol !== null ? headers[columnMap.symbol] : null,
+    isin: columnMap.isin !== null ? headers[columnMap.isin] : null,
+    name: columnMap.name !== null ? headers[columnMap.name] : null,
+    quantity: columnMap.quantity !== null ? headers[columnMap.quantity] : null,
+    average_price: columnMap.averagePrice !== null ? headers[columnMap.averagePrice] : null,
+    invested_value: columnMap.totalInvested !== null ? headers[columnMap.totalInvested] : null,
+    asset_type: null, // NO LONGER USING CATEGORY COLUMN
   };
   
-  // Generate warnings
-  if (!nameCol && !symbolCol && !isinCol) {
-    warnings.push('Could not identify a name, symbol, or ISIN column. Please check your file format.');
-  }
-  
-  if (!quantityCol) {
-    warnings.push('Could not identify a quantity column. Using default value of 1.');
-  }
-  
-  if (!avgPriceCol) {
-    warnings.push('Could not identify a buy price column. Investment values will be set to ₹0.');
-  }
-  
-  // Add note about ignored columns
-  if (ignoredColumns.length > 0) {
-    const ignoredNames = ignoredColumns.slice(0, 3).map(c => `"${c.header}"`).join(', ');
-    const more = ignoredColumns.length > 3 ? ` and ${ignoredColumns.length - 3} more` : '';
-    warnings.push(`Ignored calculated columns: ${ignoredNames}${more}. We compute values from quantity × buy price for accuracy.`);
-  }
-  
-  // Process each row
-  rows.forEach((row, index) => {
-    const rowIndex = index + 2; // +2 for 1-based indexing and header row
+  // STEP 4: Process each row and create holdings
+  for (let i = 0; i < rowArrays.length; i++) {
+    const row = rowArrays[i];
+    const detection = detections[i];
+    const rowIndex = i + 2; // +2 for 1-based indexing and header row
     
-    // Extract values
-    const symbol = symbolCol ? String(row[symbolCol] || '').trim() : undefined;
-    const isin = isinCol ? String(row[isinCol] || '').trim() : undefined;
-    const rawName = nameCol ? String(row[nameCol] || '').trim() : (symbol || isin || '');
-    const rawAssetType = assetTypeCol ? String(row[assetTypeCol] || '').trim() : undefined;
+    const name = columnMap.name !== null ? String(row[columnMap.name] || '').trim() : '';
+    const quantity = columnMap.quantity !== null ? parseQuantity(row[columnMap.quantity]) : null;
+    const isin = columnMap.isin !== null ? String(row[columnMap.isin] || '').trim() : undefined;
+    const symbol = columnMap.symbol !== null ? String(row[columnMap.symbol] || '').trim() : undefined;
     
-    // Parse quantity using our robust parser (handles Indian formats)
-    const quantity = quantityCol ? parseQuantity(row[quantityCol]) : 1;
-    
-    // Parse average price using our robust parser (handles ₹, L, Cr, commas)
-    const avgPrice = avgPriceCol ? parsePrice(row[avgPriceCol]) : null;
+    // Parse totalInvested and averagePrice
+    const totalInvested = columnMap.totalInvested !== null ? parsePrice(row[columnMap.totalInvested]) : null;
+    const averagePrice = columnMap.averagePrice !== null ? parsePrice(row[columnMap.averagePrice]) : null;
     
     // Validate row
     let isValid = true;
     let validationNote: string | undefined;
     
-    if (!rawName && !symbol && !isin) {
+    if (!name && !symbol && !isin) {
       isValid = false;
       validationNote = 'Missing name, symbol, or ISIN';
     }
@@ -586,39 +840,60 @@ function transformRows(rows: RawUploadRow[], headers: string[]): {
       validationNote = validationNote || 'Invalid or missing quantity';
     }
     
-    // CORE CALCULATION: invested_value = quantity × average_price
-    // This is ALWAYS computed, NEVER trusted from the file
+    // CORE CALCULATION: Handle both cases
+    let computedAvgPrice = 0;
     let computedInvestedValue = 0;
-    const computedAvgPrice = avgPrice ?? 0;
+    const computedQuantity = quantity ?? 0;
     
-    if (computedAvgPrice > 0 && quantity !== null && quantity > 0) {
-      computedInvestedValue = calculateInvestedValue(quantity, computedAvgPrice);
+    // CASE 1: CSV has total invested amount
+    if (totalInvested !== null && totalInvested > 0) {
+      computedInvestedValue = totalInvested;
+      if (computedQuantity > 0) {
+        computedAvgPrice = totalInvested / computedQuantity;
+      }
+      console.log(`[Parse] Row ${i + 1}: Using totalInvested: ${totalInvested}, calculated avgPrice: ${computedAvgPrice.toFixed(2)}`);
+    }
+    // CASE 2: CSV has average price per unit
+    else if (averagePrice !== null && averagePrice > 0) {
+      computedAvgPrice = averagePrice;
+      if (computedQuantity > 0) {
+        computedInvestedValue = calculateInvestedValue(computedQuantity, computedAvgPrice);
+      }
+      console.log(`[Parse] Row ${i + 1}: Using avgPrice: ${averagePrice}, calculated totalInvested: ${computedInvestedValue}`);
+    }
+    else {
+      if (isValid) {
+        validationNote = 'Price/Investment amount not found - investment value set to ₹0';
+      }
     }
     
-    if (computedAvgPrice === 0 && isValid) {
-      validationNote = 'Price not found - investment value set to ₹0';
+    if (computedInvestedValue <= 0 && isValid) {
+      isValid = false;
+      validationNote = validationNote || 'Invalid or missing investment amount';
     }
-    
-    // Determine asset type
-    const assetType = rawAssetType 
-      ? mapAssetType(rawAssetType)
-      : inferAssetType(rawName, symbol);
     
     holdings.push({
       symbol: symbol || undefined,
       isin: isin || undefined,
-      name: rawName || symbol || isin || `Unknown (Row ${rowIndex})`,
-      quantity: quantity ?? 0,
+      name: name || symbol || isin || `Unknown (Row ${rowIndex})`,
+      quantity: computedQuantity,
       average_price: computedAvgPrice,
       invested_value: computedInvestedValue,
-      asset_type: assetType,
+      asset_type: detection.assetType,
       isValid,
       validationNote,
       rowIndex,
     });
-  });
+  }
   
-  return { holdings, warnings, columnMappings, ignoredColumns };
+  // Add note about ignored columns
+  if (ignoredColumns.length > 0) {
+    const ignoredNames = ignoredColumns.slice(0, 3).map(c => `"${c.header}"`).join(', ');
+    const more = ignoredColumns.length > 3 ? ` and ${ignoredColumns.length - 3} more` : '';
+    warnings.push(`Ignored calculated columns: ${ignoredNames}${more}. We compute values from quantity × buy price for accuracy.`);
+  }
+  
+  return { holdings, warnings, columnMappings, ignoredColumns, validation };
 }
 
 // ============================================================================
@@ -698,7 +973,19 @@ export async function POST(request: NextRequest) {
     }
     
     // Transform to normalized holdings
-    const { holdings, warnings, columnMappings, ignoredColumns } = transformRows(rows, headers);
+    const { holdings, warnings, columnMappings, ignoredColumns, validation } = transformRows(rows, headers);
+    
+    // Check validation result - reject if 80%+ ambiguous
+    if (validation && !validation.valid) {
+      return NextResponse.json<UploadErrorResponse>(
+        {
+          success: false,
+          error: validation.error || 'Cannot confidently detect asset types',
+          details: validation.warning
+        },
+        { status: 400 }
+      );
+    }
     
     // Filter valid holdings for grouping
     const validHoldings = holdings.filter(h => h.isValid);

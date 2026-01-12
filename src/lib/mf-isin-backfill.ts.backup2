@@ -1,0 +1,594 @@
+/**
+ * MF ISIN Backfill - PRODUCTION-GRADE with RPC + GUARDRAILS
+ * 
+ * MAJOR REFACTOR:
+ * - Uses Postgres RPC (pg_trgm) for candidate pre-filtering
+ * - 500x fewer comparisons (25 candidates vs 14,209 schemes)
+ * - AMC guardrail prevents wrong fund house matches
+ * - Product type scoring (ETF, FoF, Index detection)
+ * - Relative margin rule prevents ambiguous matches
+ * - Confidence + source tracking for auditability
+ */
+
+import { createAdminClient } from '@/lib/supabase/server';
+import type { Database } from '@/types/database';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+type AssetRow = Database['public']['Tables']['assets']['Row'];
+type AssetUpdate = Database['public']['Tables']['assets']['Update'];
+
+interface SchemeCandidate {
+  scheme_code: string;
+  scheme_name: string;
+  fund_house: string | null;
+  isin_growth: string | null;
+  isin_div_payout: string | null;
+  isin_div_reinvest: string | null;
+  scheme_status: string | null;
+  last_updated: string | null;
+  similarity_score: number;
+}
+
+interface MatchResult {
+  scheme: SchemeCandidate;
+  confidence: number;
+  matchType: string;
+  rejectReason?: string;
+}
+
+// ============================================
+// UNCHANGED: String Similarity Functions
+// ============================================
+
+function levenshteinDistance(str1: string, str2: string): number {
+  const len1 = str1.length;
+  const len2 = str2.length;
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[len1][len2];
+}
+
+function stringSimilarity(str1: string, str2: string): number {
+  const longer = str1.length > str2.length ? str1 : str2;
+  const shorter = str1.length > str2.length ? str2 : str1;
+  
+  if (longer.length === 0) return 100;
+  
+  const distance = levenshteinDistance(longer, shorter);
+  return ((longer.length - distance) / longer.length) * 100;
+}
+
+// ============================================
+// UNCHANGED: Tokenization Functions
+// ============================================
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[+\-_().,]/g, ' ')
+    .split(/\s+/)
+    .filter(token => token.length > 0)
+    .map(token => token.trim());
+}
+
+function filterInsignificantWords(tokens: string[]): string[] {
+  const insignificant = new Set([
+    'of', 'the', 'and', 'a', 'an', 'in', 'on', 'at', 'to', 'for'
+  ]);
+  
+  return tokens.filter(token => !insignificant.has(token));
+}
+
+function separateTokens(tokens: string[]): { core: string[], metadata: string[] } {
+  const metadataKeywords = new Set([
+    'direct', 'regular',
+    'growth', 'dividend', 'idcw', 'iddr', 'payout', 'reinvest', 'reinvestment',
+    'plan', 'option', 'scheme',
+    'fund', 'mf', 'mutual',
+    'etf', 'fof', 'index'
+  ]);
+  
+  const core: string[] = [];
+  const metadata: string[] = [];
+  
+  for (const token of tokens) {
+    if (metadataKeywords.has(token)) {
+      metadata.push(token);
+    } else {
+      core.push(token);
+    }
+  }
+  
+  return { core, metadata };
+}
+
+function jaccardSimilarity(set1: string[], set2: string[]): number {
+  const s1 = new Set(set1);
+  const s2 = new Set(set2);
+  
+  const intersection = new Set([...s1].filter(x => s2.has(x)));
+  const union = new Set([...s1, ...s2]);
+  
+  if (union.size === 0) return 0;
+  
+  return (intersection.size / union.size) * 100;
+}
+
+function extractPlanType(tokens: string[]): 'direct' | 'regular' | null {
+  if (tokens.includes('direct')) return 'direct';
+  if (tokens.includes('regular')) return 'regular';
+  return null;
+}
+
+function extractOptionType(tokens: string[]): 'growth' | 'dividend' | 'idcw' | null {
+  if (tokens.includes('growth')) return 'growth';
+  if (tokens.includes('idcw') || tokens.includes('iddr')) return 'idcw';
+  if (tokens.includes('dividend')) return 'dividend';
+  return null;
+}
+
+function schemeHasOption(scheme: SchemeCandidate, option: 'growth' | 'dividend' | 'idcw' | null): boolean {
+  if (!option) return true;
+  
+  const schemeTokens = tokenize(scheme.scheme_name);
+  
+  if (option === 'growth') {
+    return schemeTokens.includes('growth') && !!scheme.isin_growth;
+  } else if (option === 'dividend' || option === 'idcw') {
+    const hasDividendKeyword = schemeTokens.some(t => ['dividend', 'idcw', 'iddr'].includes(t));
+    const hasDividendIsin = !!scheme.isin_div_payout || !!scheme.isin_div_reinvest;
+    return hasDividendKeyword && hasDividendIsin;
+  }
+  
+  return true;
+}
+
+// ============================================
+// NEW: AMC Guardrail
+// ============================================
+
+const AMC_KEYWORDS = [
+  'hdfc', 'icici', 'sbi', 'axis', 'kotak', 'mirae', 'nippon', 
+  'dsp', 'aditya', 'birla', 'uti', 'tata', 'baroda', 'bnp', 'paribas',
+  'whiteoak', 'quant', 'motilal', 'hsbc', 'franklin', 'templeton',
+  'invesco', 'edelweiss', 'principal', 'sundaram', 'canara', 'robeco',
+  'mahindra', 'manulife', 'pgim', 'quantum', 'union', 'bok', 'ppfas',
+  'jm', 'shriram', 'idbi', 'indiabulls', 'ltfs', 'navi'
+];
+
+function extractAMC(name: string, fundHouse: string | null | undefined): string | null {
+  const nameLower = name.toLowerCase();
+  
+  // If fund_house is provided and looks valid, use it
+  if (fundHouse && fundHouse.length > 2) {
+    const fundHouseLower = fundHouse.toLowerCase();
+    for (const keyword of AMC_KEYWORDS) {
+      if (fundHouseLower.includes(keyword)) {
+        return keyword;
+      }
+    }
+  }
+  
+  // Extract from name using keywords
+  for (const keyword of AMC_KEYWORDS) {
+    if (nameLower.includes(keyword)) {
+      // Handle special cases
+      if (keyword === 'aditya' && nameLower.includes('aditya birla')) {
+        return 'aditya birla';
+      }
+      if (keyword === 'birla' && nameLower.includes('aditya birla')) {
+        return 'aditya birla';
+      }
+      if (keyword === 'baroda' && nameLower.includes('baroda bnp')) {
+        return 'baroda bnp';
+      }
+      if (keyword === 'bnp' && nameLower.includes('baroda bnp')) {
+        return 'baroda bnp';
+      }
+      return keyword;
+    }
+  }
+  
+  return null;
+}
+
+function isSameAMC(assetName: string, schemeName: string, assetFundHouse?: string, schemeFundHouse?: string): boolean {
+  const assetAMC = extractAMC(assetName, assetFundHouse);
+  const schemeAMC = extractAMC(schemeName, schemeFundHouse);
+  
+  // If we can't determine either AMC, allow the match (assume same)
+  if (!assetAMC || !schemeAMC) return true;
+  
+  return assetAMC === schemeAMC;
+}
+
+// ============================================
+// NEW: Product Type Scoring
+// ============================================
+
+type ProductType = 'etf' | 'fof' | 'index' | 'equity';
+
+function classifyProductType(name: string): ProductType {
+  const tokens = tokenize(name);
+  const nameLower = name.toLowerCase();
+  
+  // ETF detection
+  if (tokens.includes('etf')) return 'etf';
+  
+  // FoF detection
+  if (tokens.includes('fof')) return 'fof';
+  if (nameLower.includes('fund of fund')) return 'fof';
+  if (nameLower.includes('fund-of-fund')) return 'fof';
+  
+  // Index fund detection
+  if (tokens.includes('index')) return 'index';
+  
+  // Default to equity
+  return 'equity';
+}
+
+// ============================================
+// MODIFIED: Calculate Match Confidence with Product Type Scoring
+// ============================================
+
+function calculateMatchConfidence(
+  assetName: string,
+  scheme: SchemeCandidate,
+  assetFundHouse?: string
+): number {
+  const assetTokens = tokenize(assetName);
+  const schemeTokens = tokenize(scheme.scheme_name);
+  
+  const assetParts = separateTokens(assetTokens);
+  const schemeParts = separateTokens(schemeTokens);
+  
+  const assetSignificant = filterInsignificantWords(assetParts.core);
+  const schemeSignificant = filterInsignificantWords(schemeParts.core);
+  
+  // Factor 1: Core token similarity (40 points)
+  const coreTokenScore = jaccardSimilarity(assetSignificant, schemeSignificant) * 0.4;
+  
+  // Factor 2: Full string similarity (30 points)
+  const fullStringSimilarity = stringSimilarity(
+    assetName.toLowerCase(),
+    scheme.scheme_name.toLowerCase()
+  ) * 0.3;
+  
+  // Factor 3: Plan type match (15 points)
+  const assetPlan = extractPlanType(assetTokens);
+  const schemePlan = extractPlanType(schemeTokens);
+  let planScore = 0;
+  if (!assetPlan || !schemePlan) {
+    planScore = 7.5;
+  } else if (assetPlan === schemePlan) {
+    planScore = 15;
+  } else {
+    planScore = 0;
+  }
+  
+  // Factor 4: Option type match (15 points)
+  const assetOption = extractOptionType(assetTokens);
+  let optionScore = 0;
+  if (!assetOption) {
+    optionScore = 7.5;
+  } else if (schemeHasOption(scheme, assetOption)) {
+    optionScore = 15;
+  } else {
+    optionScore = 0;
+  }
+  
+  let totalScore = coreTokenScore + fullStringSimilarity + planScore + optionScore;
+  
+  // NEW: Product type scoring (bonus/penalty)
+  const assetType = classifyProductType(assetName);
+  const schemeType = classifyProductType(scheme.scheme_name);
+  
+  if (assetType === schemeType) {
+    totalScore += 15;  // Bonus for exact product type match
+  } else if (assetType === 'etf' && schemeType !== 'etf') {
+    totalScore -= 100;  // Heavy penalty - ETF must match ETF
+  } else if (assetType !== 'equity' && schemeType !== assetType) {
+    totalScore -= 20;  // Moderate penalty for other type mismatches
+  }
+  
+  return Math.round(totalScore * 100) / 100;
+}
+
+// ============================================
+// MODIFIED: Find Best Fuzzy Match with Guardrails
+// ============================================
+
+function findBestFuzzyMatch(
+  assetName: string,
+  candidates: SchemeCandidate[],
+  assetFundHouse?: string,
+  minConfidence: number = 55
+): MatchResult | null {
+  
+  console.log(`[FuzzyMatch] Analyzing: "${assetName}"`);
+  console.log(`[FuzzyMatch] Received ${candidates.length} candidates from RPC`);
+  console.log(`[FuzzyMatch] Confidence threshold: ${minConfidence}%`);
+  
+  const assetTokens = tokenize(assetName);
+  const assetParts = separateTokens(assetTokens);
+  const assetSignificant = filterInsignificantWords(assetParts.core);
+  
+  console.log(`[FuzzyMatch] Asset tokens: ${assetTokens.join(', ')}`);
+  console.log(`[FuzzyMatch] Core tokens (significant): ${assetSignificant.join(', ')}`);
+  
+  const scored: MatchResult[] = [];
+  
+  // Calculate confidence for all candidates
+  for (const scheme of candidates) {
+    const confidence = calculateMatchConfidence(assetName, scheme, assetFundHouse);
+    
+    if (confidence >= minConfidence) {
+      scored.push({
+        scheme,
+        confidence,
+        matchType: 'fuzzy_rpc'
+      });
+    }
+  }
+  
+  if (scored.length === 0) {
+    console.log(`[FuzzyMatch] ✗ No candidates above ${minConfidence}% confidence`);
+    return { scheme: candidates[0], confidence: 0, matchType: 'none', rejectReason: 'low_confidence' } as any;
+  }
+  
+  // Sort by confidence (descending)
+  scored.sort((a, b) => b.confidence - a.confidence);
+  
+  const best = scored[0];
+  const second = scored[1];
+  
+  console.log(`[FuzzyMatch] ✓ Found ${scored.length} candidates above threshold`);
+  console.log(`[FuzzyMatch] Top 3:`);
+  for (let i = 0; i < Math.min(3, scored.length); i++) {
+    console.log(`  ${i + 1}. "${scored[i].scheme.scheme_name}" (${scored[i].confidence}%)`);
+  }
+  
+  // NEW: Relative margin rule
+  if (second && (best.confidence - second.confidence < 5)) {
+    const margin = Math.round((best.confidence - second.confidence) * 100) / 100;
+    console.log(`[FuzzyMatch] ⚠️ REJECT: Ambiguous match`);
+    console.log(`  Best: ${best.confidence}% - "${best.scheme.scheme_name}"`);
+    console.log(`  Second: ${second.confidence}% - "${second.scheme.scheme_name}"`);
+    console.log(`  Margin: ${margin}% (required: 5%+)`);
+    best.rejectReason = `ambiguous_margin_${margin}`;
+    return null;
+  }
+  
+  // NEW: AMC guardrail
+  const sameAMC = isSameAMC(assetName, best.scheme.scheme_name, assetFundHouse, best.scheme.fund_house || undefined);
+  
+  if (!sameAMC) {
+    console.log(`[FuzzyMatch] ⚠️ AMC mismatch detected`);
+    console.log(`  Asset: "${assetName}"`);
+    console.log(`  Scheme: "${best.scheme.scheme_name}" (${best.scheme.fund_house})`);
+    
+    if (best.confidence < 85) {
+      console.log(`[FuzzyMatch] ✗ REJECT: AMC mismatch + confidence < 85%`);
+      best.rejectReason = `amc_mismatch_low_confidence_${best.confidence}`;
+      return null;
+    } else if (second && (best.confidence - second.confidence < 10)) {
+      const margin = Math.round((best.confidence - second.confidence) * 100) / 100;
+      console.log(`[FuzzyMatch] ✗ REJECT: AMC mismatch + insufficient margin`);
+      console.log(`  Confidence: ${best.confidence}% (≥85% ✓)`);
+      console.log(`  Margin: ${margin}% (required: 10%+ for AMC mismatch)`);
+      best.rejectReason = `amc_mismatch_low_margin_${margin}`;
+      return null;
+    } else {
+      console.log(`[FuzzyMatch] ⚠️ ACCEPT with caution: AMC mismatch but high confidence (${best.confidence}%) and margin (${second ? best.confidence - second.confidence : 'N/A'}%)`);
+    }
+  }
+  
+  console.log(`[FuzzyMatch] ✓ BEST MATCH: "${best.scheme.scheme_name}" (${best.confidence}%)`);
+  
+  return best;
+}
+
+// ============================================
+// MAIN: Backfill Function with RPC
+// ============================================
+
+export interface BackfillResult {
+  scanned: number;
+  resolved: number;
+  unresolved: number;
+  sample_unresolved: string[];
+  rejection_reasons: Record<string, number>;
+}
+
+export async function backfillMFISINs(): Promise<BackfillResult> {
+  const supabase: SupabaseClient<Database> = createAdminClient();
+  const result: BackfillResult = {
+    scanned: 0,
+    resolved: 0,
+    unresolved: 0,
+    sample_unresolved: [],
+    rejection_reasons: {},
+  };
+  
+  try {
+    console.log('========================================');
+    console.log('[MF ISIN Backfill] RPC-BASED FUZZY MATCHING + GUARDRAILS');
+    console.log('[MF ISIN Backfill] Features: pg_trgm, AMC guard, Product type, Margin rule');
+    console.log('========================================');
+    
+    // Fetch assets without ISIN
+    console.log('[MF ISIN Backfill] Fetching assets...');
+    const { data: assetsData, error: fetchError } = await supabase
+      .from('assets')
+      .select('id, name, asset_type, isin, symbol')
+      .eq('asset_type', 'mutual_fund')
+      .eq('is_active', true)
+      .is('isin', null);
+    
+    if (fetchError) {
+      console.error('[MF ISIN Backfill] ❌ Error fetching assets:', fetchError);
+      throw fetchError;
+    }
+    
+    const assets: Pick<AssetRow, 'id' | 'name' | 'asset_type' | 'isin' | 'symbol'>[] = assetsData || [];
+    
+    if (assets.length === 0) {
+      console.log('[MF ISIN Backfill] ✓ No assets need resolution');
+      return result;
+    }
+    
+    result.scanned = assets.length;
+    console.log(`[MF ISIN Backfill] Found ${assets.length} assets`);
+    
+    // Process each asset with RPC
+    console.log('========================================');
+    console.log('[MF ISIN Backfill] Processing with RPC + INTELLIGENT MATCHING...');
+    console.log('========================================');
+    
+    for (let i = 0; i < assets.length; i++) {
+      const asset = assets[i];
+      console.log(`\n[${i + 1}/${assets.length}] "${asset.name}"`);
+      
+      try {
+        // NEW: Call RPC to get top 25 candidates
+        const { data: candidates, error: rpcError } = await supabase.rpc('mf_match_candidates', {
+          p_asset_name: asset.name
+        });
+        
+        if (rpcError) {
+          console.error(`  ❌ RPC error: ${rpcError.message}`);
+          result.unresolved++;
+          result.rejection_reasons['rpc_error'] = (result.rejection_reasons['rpc_error'] || 0) + 1;
+          continue;
+        }
+        
+        if (!candidates || candidates.length === 0) {
+          console.warn(`  ⚠️ No candidates returned by RPC`);
+          result.unresolved++;
+          result.rejection_reasons['no_candidates'] = (result.rejection_reasons['no_candidates'] || 0) + 1;
+          if (result.sample_unresolved.length < 10) {
+            result.sample_unresolved.push(asset.name);
+          }
+          continue;
+        }
+        
+        console.log(`[RPC] Returned ${candidates.length} candidates (top similarity: ${candidates[0]?.similarity_score?.toFixed(3)})`);
+        
+        // Find best match using intelligent scoring
+        const matchResult = findBestFuzzyMatch(asset.name, candidates as SchemeCandidate[], undefined, 55);
+        
+        if (!matchResult) {
+          result.unresolved++;
+          const reason = 'match_rejected';
+          result.rejection_reasons[reason] = (result.rejection_reasons[reason] || 0) + 1;
+          console.warn(`  ❌ No match found (rejected by guardrails)`);
+          if (result.sample_unresolved.length < 10) {
+            result.sample_unresolved.push(asset.name);
+          }
+          continue;
+        }
+        
+        const { scheme: matchedScheme, confidence } = matchResult;
+        
+        // Get ISIN (prefer Growth)
+        const resolvedIsin = matchedScheme.isin_growth || 
+                            matchedScheme.isin_div_payout || 
+                            matchedScheme.isin_div_reinvest;
+        
+        if (!resolvedIsin) {
+          result.unresolved++;
+          result.rejection_reasons['no_isin'] = (result.rejection_reasons['no_isin'] || 0) + 1;
+          console.warn(`  ⚠️ Matched scheme has no ISIN`);
+          if (result.sample_unresolved.length < 10) {
+            result.sample_unresolved.push(asset.name);
+          }
+          continue;
+        }
+        
+        // NEW: Update asset with confidence and source metadata
+        const updateData: AssetUpdate = {
+          isin: resolvedIsin.toUpperCase(),
+          symbol: matchedScheme.scheme_code,
+          isin_confidence: Math.round(confidence * 100) / 100,
+          isin_source: 'auto_backfill',
+          updated_at: new Date().toISOString(),
+        };
+        
+        const { error: updateError } = await (supabase
+          .from('assets') as any)
+          .update(updateData)
+          .eq('id', asset.id);
+        
+        if (updateError) {
+          result.unresolved++;
+          result.rejection_reasons['update_error'] = (result.rejection_reasons['update_error'] || 0) + 1;
+          console.error(`  ❌ Update failed: ${updateError.message}`);
+          if (result.sample_unresolved.length < 10) {
+            result.sample_unresolved.push(asset.name);
+          }
+        } else {
+          result.resolved++;
+          console.log(`  ✅ SUCCESS (${confidence}% confidence)`);
+          console.log(`     Matched: "${matchedScheme.scheme_name}"`);
+          console.log(`     ISIN: ${resolvedIsin}`);
+          console.log(`     Scheme Code: ${matchedScheme.scheme_code}`);
+          console.log(`     Source: auto_backfill`);
+        }
+      } catch (error) {
+        result.unresolved++;
+        result.rejection_reasons['exception'] = (result.rejection_reasons['exception'] || 0) + 1;
+        console.error(`  ❌ Error: ${error}`);
+        if (result.sample_unresolved.length < 10) {
+          result.sample_unresolved.push(asset.name);
+        }
+      }
+    }
+    
+    // Summary
+    console.log('\n========================================');
+    console.log('[MF ISIN Backfill] FINAL SUMMARY');
+    console.log('========================================');
+    console.log(`  Scanned: ${result.scanned}`);
+    console.log(`  Resolved: ${result.resolved} ✓`);
+    console.log(`  Unresolved: ${result.unresolved} ✗`);
+    console.log(`  Success Rate: ${result.scanned > 0 ? ((result.resolved / result.scanned) * 100).toFixed(1) : 0}%`);
+    
+    if (Object.keys(result.rejection_reasons).length > 0) {
+      console.log(`\n  Rejection Reasons:`);
+      for (const [reason, count] of Object.entries(result.rejection_reasons)) {
+        console.log(`    ${reason}: ${count}`);
+      }
+    }
+    
+    if (result.sample_unresolved.length > 0) {
+      console.log(`\n  Sample Unresolved Assets:`);
+      result.sample_unresolved.forEach(name => console.log(`    - ${name}`));
+    }
+    
+    console.log('========================================\n');
+    
+    return result;
+  } catch (error) {
+    console.error('[MF ISIN Backfill] ❌ FATAL ERROR:', error);
+    throw error;
+  }
+}

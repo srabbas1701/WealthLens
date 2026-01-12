@@ -170,8 +170,23 @@ export default function DemoDashboardPage() {
                 <div className="relative w-48 h-48">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                     {portfolio.allocation.map((item, i) => {
-                      const startAngle = portfolio.allocation.slice(0, i).reduce((sum, a) => sum + (a.percentage / 100) * 360, 0);
                       const angle = (item.percentage / 100) * 360;
+                      
+                      // Handle single asset (100% or very close to 100%)
+                      if (angle >= 359.9 || portfolio.allocation.length === 1) {
+                        // Draw a full circle for single asset
+                        return (
+                          <circle
+                            key={i}
+                            cx={50}
+                            cy={50}
+                            r={40}
+                            fill={item.color}
+                          />
+                        );
+                      }
+                      
+                      const startAngle = portfolio.allocation.slice(0, i).reduce((sum, a) => sum + (a.percentage / 100) * 360, 0);
                       const startRad = (startAngle * Math.PI) / 180;
                       const endRad = ((startAngle + angle) * Math.PI) / 180;
                       const largeArc = angle > 180 ? 1 : 0;

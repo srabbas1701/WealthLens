@@ -121,21 +121,22 @@ interface PortfolioDataResponse {
 // ============================================================================
 
 // Colors for allocation chart - distinct, accessible colors
+// Using distinct colors to avoid similar shades (especially greens)
 const ALLOCATION_COLORS: Record<string, string> = {
-  'equity': '#10b981',      // Emerald - Stocks
-  'mutual_fund': '#059669', // Emerald darker - Mutual Funds
-  'index_fund': '#14b8a6',  // Teal - Index Funds
-  'etf': '#06b6d4',         // Cyan - ETFs
-  'debt': '#6366f1',        // Indigo - Debt category
-  'fd': '#818cf8',          // Indigo lighter - FDs
-  'bond': '#8b5cf6',        // Violet - Bonds
-  'gold': '#f59e0b',        // Amber - Gold
-  'ppf': '#a78bfa',         // Purple lighter - PPF
-  'epf': '#a855f7',         // Purple - EPF
-  'nps': '#ec4899',         // Pink - NPS
-  'cash': '#94a3b8',        // Slate - Cash
-  'hybrid': '#f472b6',      // Pink lighter - Hybrid
-  'other': '#64748b',       // Gray - Other
+  'equity': '#2563EB',      // Blue - Stocks (changed from green)
+  'mutual_fund': '#7C3AED', // Purple - Mutual Funds (changed from green)
+  'index_fund': '#7C3AED',  // Purple - Index Funds (changed from teal)
+  'etf': '#10B981',         // Emerald - ETFs (only green, kept distinct)
+  'debt': '#6366F1',        // Indigo - Debt category
+  'fd': '#F59E0B',          // Amber - FDs (changed from indigo)
+  'bond': '#6366F1',        // Indigo - Bonds
+  'gold': '#DC2626',        // Red - Gold (changed from amber)
+  'ppf': '#8B5CF6',         // Violet - PPF
+  'epf': '#8B5CF6',         // Violet - EPF (changed from purple)
+  'nps': '#EC4899',         // Pink - NPS
+  'cash': '#64748B',        // Slate - Cash
+  'hybrid': '#F472B6',      // Pink lighter - Hybrid
+  'other': '#64748B',       // Gray - Other
 };
 
 // Human-readable asset type names
@@ -222,7 +223,11 @@ export async function GET(request: NextRequest) {
       .single();
     
     // 3. Get ALL holdings with asset details
-    const { data: rawHoldings, error: holdingsError } = await supabase
+    // Try nested query first (more efficient), fallback to separate queries if 406 error
+    let rawHoldings: any[] = [];
+    let holdingsError: any = null;
+    
+    const { data: nestedHoldings, error: nestedError } = await supabase
       .from('holdings')
       .select(`
         id,
@@ -244,11 +249,96 @@ export async function GET(request: NextRequest) {
       .eq('portfolio_id', portfolio.id)
       .order('invested_value', { ascending: false });
     
-    if (holdingsError) {
-      console.error('Error fetching holdings:', holdingsError);
+    if (nestedError) {
+      console.warn('[Portfolio Data API] Nested query failed, trying separate queries:', {
+        error: nestedError,
+        code: nestedError.code,
+        message: nestedError.message
+      });
+      
+      // Fallback: Query holdings and assets separately (handles 406 errors)
+      const { data: holdingsOnly, error: holdingsOnlyError } = await supabase
+        .from('holdings')
+        .select('id, asset_id, quantity, invested_value, current_value, average_price, notes')
+        .eq('portfolio_id', portfolio.id)
+        .order('invested_value', { ascending: false });
+      
+      if (holdingsOnlyError) {
+        console.error('[Portfolio Data API] Error fetching holdings (fallback):', holdingsOnlyError);
+        return NextResponse.json<PortfolioDataResponse>(
+          { success: false, error: `Failed to fetch holdings: ${holdingsOnlyError.message}` },
+          { status: 500 }
+        );
+      }
+      
+      if (holdingsOnly && holdingsOnly.length > 0) {
+        // Fetch assets separately
+        const assetIds = [...new Set(holdingsOnly.map((h: any) => h.asset_id).filter(Boolean))];
+        const { data: assets, error: assetsError } = await supabase
+          .from('assets')
+          .select('id, name, asset_type, symbol, isin, sector, asset_class')
+          .in('id', assetIds);
+        
+        if (assetsError) {
+          console.error('[Portfolio Data API] Error fetching assets:', assetsError);
+          return NextResponse.json<PortfolioDataResponse>(
+            { success: false, error: `Failed to fetch assets: ${assetsError.message}` },
+            { status: 500 }
+          );
+        }
+        
+        // Combine holdings with assets
+        const assetsMap = new Map((assets || []).map((a: any) => [a.id, a]));
+        rawHoldings = (holdingsOnly || []).map((h: any) => ({
+          ...h,
+          assets: assetsMap.get(h.asset_id) || null
+        }));
+      }
+      
+      holdingsError = null; // Reset error since fallback succeeded
+    } else {
+      rawHoldings = nestedHoldings || [];
     }
     
     const holdings = rawHoldings || [];
+    console.log(`[Portfolio Data API] Fetched ${holdings.length} holdings for portfolio ${portfolio.id}`);
+    
+    // Log MF holdings specifically
+    const mfHoldings = holdings.filter((h: any) => {
+      const asset = h.assets as any;
+      return asset?.asset_type === 'mutual_fund' || asset?.asset_type === 'index_fund';
+    });
+    if (mfHoldings.length > 0) {
+      console.log(`[Portfolio Data API] Found ${mfHoldings.length} MF holdings:`, 
+        mfHoldings.map((h: any) => ({
+          name: h.assets?.name || 'UNKNOWN',
+          asset_type: h.assets?.asset_type || 'MISSING',
+          isin: h.assets?.isin || 'NONE',
+          invested_value: h.invested_value,
+          quantity: h.quantity,
+          asset_id: h.asset_id,
+          has_asset: !!h.assets
+        }))
+      );
+    } else if (holdings.length > 0) {
+      console.log(`[Portfolio Data API] No MF holdings found. Total holdings: ${holdings.length}`);
+      console.log(`[Portfolio Data API] Holdings asset types:`, 
+        holdings.map((h: any) => ({
+          asset_type: h.assets?.asset_type || 'NULL',
+          name: h.assets?.name || 'NO ASSET',
+          has_asset: !!h.assets,
+          asset_id: h.asset_id
+        }))
+      );
+      
+      // Check if there are holdings with null assets (might indicate linking issue)
+      const holdingsWithNullAssets = holdings.filter((h: any) => !h.assets);
+      if (holdingsWithNullAssets.length > 0) {
+        console.warn(`[Portfolio Data API] Found ${holdingsWithNullAssets.length} holdings with null assets:`, 
+          holdingsWithNullAssets.map((h: any) => ({ holding_id: h.id, asset_id: h.asset_id }))
+        );
+      }
+    }
     
     // 3.5. Fetch stock prices for equity and ETF holdings (batch query for performance)
     // ETFs trade on exchanges like stocks, so they need real-time prices (like MF NAVs)
@@ -302,6 +392,16 @@ export async function GET(request: NextRequest) {
     });
     
     // Note: MF holdings without ISINs need backfill (run POST /api/mf/isin/backfill)
+    if (mfHoldingsWithoutISIN.length > 0) {
+      console.log(`[Portfolio Data API] Found ${mfHoldingsWithoutISIN.length} MF holdings without ISINs (will use invested_value as fallback):`, 
+        mfHoldingsWithoutISIN.map((h: any) => ({
+          name: h.assets?.name,
+          asset_type: h.assets?.asset_type,
+          invested_value: h.invested_value,
+          quantity: h.quantity
+        }))
+      );
+    }
     
     // Fetch NAVs for MF holdings WITH ISINs
     if (mfHoldingsWithISIN.length > 0) {
@@ -349,6 +449,8 @@ export async function GET(request: NextRequest) {
       const investedValue = h.invested_value || 0;
       
       let valueToUse = investedValue;
+      const isPPF = assetType === 'ppf';
+      const isEPF = assetType === 'epf';
       
       if (isMF) {
         // MF: Compute current_value from units × latest_nav (NAV-driven)
@@ -378,12 +480,37 @@ export async function GET(request: NextRequest) {
             valueToUse = investedValue;
           }
         }
+      } else if (isPPF || isEPF) {
+        // PPF/EPF: Use currentBalance from notes (user-entered current balance)
+        // This is the actual current value, not invested value
+        try {
+          const notes = h.notes ? JSON.parse(h.notes) : {};
+          const currentBalance = notes.currentBalance;
+          
+          if (currentBalance !== null && currentBalance !== undefined && currentBalance > 0) {
+            valueToUse = currentBalance;
+          } else {
+            // Fallback to current_value from database, then invested_value
+            if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
+              valueToUse = h.current_value;
+            } else {
+              valueToUse = investedValue;
+            }
+          }
+        } catch (e) {
+          // If notes parsing fails, use current_value from database, then invested_value
+          if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
+            valueToUse = h.current_value;
+          } else {
+            valueToUse = investedValue;
+          }
+        }
       }
       
       // Add to total
       totalValue += valueToUse;
       
-      // Add to allocation map (use computed value for equity/MF, invested_value for others)
+      // Add to allocation map (use computed value for equity/MF/PPF/EPF, invested_value for others)
       allocationMap.set(assetType, (allocationMap.get(assetType) || 0) + valueToUse);
     });
     
@@ -406,17 +533,26 @@ export async function GET(request: NextRequest) {
     }
     
     // 6. Format all holdings with full details
+    // IMPORTANT: Include ALL holdings, even if assets are null (they should be linked, but handle gracefully)
     const formattedHoldings: HoldingDetail[] = holdings.map(h => {
       const asset = h.assets as any;
       const assetType = asset?.asset_type || 'other';
       const investedValue = h.invested_value || 0;
       
+      // Log if asset is null (indicates linking issue)
+      if (!asset && process.env.NODE_ENV === 'development') {
+        console.warn(`[Portfolio Data API] Holding ${h.id} has null asset (asset_id: ${(h as any).asset_id})`);
+      }
+      
       // CRITICAL: Mutual Funds and ETFs/Equity use real-time computation (like MF NAVs)
       // For MF: current_value = units × latest_nav (computed at read-time)
       // For Stocks & ETFs: current_value = quantity × latest_price (computed at read-time)
+      // For PPF/EPF: current_value = currentBalance from notes (user-entered current balance)
       let currentValue = investedValue;
       const isMF = assetType === 'mutual_fund' || assetType === 'index_fund';
       const isEquity = assetType === 'equity' || assetType === 'etf';
+      const isPPF = assetType === 'ppf';
+      const isEPF = assetType === 'epf';
       
       if (isMF) {
         // MF: Compute from NAV (single source of truth)
@@ -446,10 +582,35 @@ export async function GET(request: NextRequest) {
             currentValue = investedValue;
           }
         }
+      } else if (isPPF || isEPF) {
+        // PPF/EPF: Use currentBalance from notes (user-entered current balance)
+        // This is the actual current value, not invested value
+        try {
+          const notes = h.notes ? JSON.parse(h.notes) : {};
+          const currentBalance = notes.currentBalance;
+          
+          if (currentBalance !== null && currentBalance !== undefined && currentBalance > 0) {
+            currentValue = currentBalance;
+          } else {
+            // Fallback to current_value from database, then invested_value
+            if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
+              currentValue = h.current_value;
+            } else {
+              currentValue = investedValue;
+            }
+          }
+        } catch (e) {
+          // If notes parsing fails, use current_value from database, then invested_value
+          if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
+            currentValue = h.current_value;
+          } else {
+            currentValue = investedValue;
+          }
+        }
       }
       
-      // Calculate allocation based on current_value for equity/MF (if available), invested_value for others
-      const valueForAllocation = (isMF || isEquity) && currentValue !== investedValue && currentValue > investedValue
+      // Calculate allocation based on current_value for equity/MF/PPF/EPF (if available), invested_value for others
+      const valueForAllocation = (isMF || isEquity || isPPF || isEPF) && currentValue !== investedValue && currentValue > investedValue
         ? currentValue
         : investedValue;
       

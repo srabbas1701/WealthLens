@@ -40,6 +40,12 @@ interface FloatingCopilotProps {
   onInitialMessageSent?: () => void;
   /** Number of issues to display as a badge (e.g., validation issues) */
   issueCount?: number;
+  /** External trigger to open/close the copilot (e.g., from header button) */
+  externalIsOpen?: boolean;
+  /** Callback when copilot state changes */
+  onStateChange?: (isOpen: boolean) => void;
+  /** Position of the floating button - 'top-right' (default, conventional) or 'bottom-right' */
+  position?: 'top-right' | 'bottom-right';
 }
 
 interface Message {
@@ -111,8 +117,21 @@ export default function FloatingCopilot({
   initialMessage,
   onInitialMessageSent,
   issueCount = 0,
+  externalIsOpen,
+  onStateChange,
+  position = 'top-right',
 }: FloatingCopilotProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  
+  // Use external state if provided, otherwise use internal state
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
+  
+  const setIsOpen = (value: boolean) => {
+    if (externalIsOpen === undefined) {
+      setInternalIsOpen(value);
+    }
+    onStateChange?.(value);
+  };
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -127,6 +146,24 @@ export default function FloatingCopilot({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Listen for custom event to open copilot from header button
+  useEffect(() => {
+    const handleOpenCopilot = () => {
+      if (externalIsOpen === undefined) {
+        // Only handle event if not externally controlled
+        setIsOpen(true);
+      } else {
+        // If externally controlled, trigger the state change callback
+        onStateChange?.(true);
+      }
+    };
+
+    window.addEventListener('openCopilot', handleOpenCopilot);
+    return () => {
+      window.removeEventListener('openCopilot', handleOpenCopilot);
+    };
+  }, [externalIsOpen, onStateChange]);
 
   // Handle initial message - open copilot and send the message
   useEffect(() => {
@@ -230,7 +267,7 @@ export default function FloatingCopilot({
     <>
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 w-[400px] max-h-[560px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden z-50">
+        <div className={`fixed ${position === 'top-right' ? 'top-24 right-6' : 'bottom-24 right-6'} w-[400px] max-h-[560px] bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl border border-gray-200 dark:border-[#334155] flex flex-col overflow-hidden z-50`}>
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
             <div className="flex items-center gap-3">
@@ -358,30 +395,33 @@ export default function FloatingCopilot({
         </div>
       )}
 
-      {/* Floating Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3 rounded-full shadow-lg transition-all relative ${
-          isOpen
-            ? 'bg-gray-800 text-white hover:bg-gray-700'
-            : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-xl hover:scale-105'
-        }`}
-      >
-        {isOpen ? (
-          <XIcon className="w-5 h-5" />
-        ) : (
-          <>
-            <SparklesIcon className="w-5 h-5" />
-            <span className="font-medium text-sm">Get Help</span>
-          </>
-        )}
-        {/* Issue Badge */}
-        {issueCount > 0 && (
-          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">
-            {issueCount}
-          </span>
-        )}
-      </button>
+      {/* Floating Button - Hidden when controlled externally, or show as smaller icon-only button in top-right */}
+      {externalIsOpen === undefined && (
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className={`fixed ${position === 'top-right' ? 'top-20 right-6' : 'bottom-6 right-6'} z-50 flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg transition-all relative ${
+            isOpen
+              ? 'bg-gray-800 dark:bg-gray-700 text-white hover:bg-gray-700 dark:hover:bg-gray-600'
+              : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-xl hover:scale-105'
+          }`}
+          aria-label="Open Portfolio Analyst"
+        >
+          {isOpen ? (
+            <XIcon className="w-5 h-5" />
+          ) : (
+            <>
+              <SparklesIcon className="w-5 h-5" />
+              <span className="font-medium text-sm hidden sm:inline">Get Help</span>
+            </>
+          )}
+          {/* Issue Badge */}
+          {issueCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">
+              {issueCount}
+            </span>
+          )}
+        </button>
+      )}
     </>
   );
 }

@@ -3,7 +3,7 @@
 import { createContext, useState, useEffect, ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { WalletIcon, FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon } from '@/components/icons';
+import { WalletIcon, FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, SparklesIcon } from '@/components/icons';
 import { useAuthSession, useAuthAppData } from '@/lib/auth';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
 import { type CurrencyFormat } from '@/lib/currency/formatCurrency';
@@ -117,8 +117,16 @@ export function AppHeader({
     const handleLogout = async () => {
       setShowLogoutModal(false);
       setShowUserMenu(false);
-      await signOut();
-      router.replace('/');
+      try {
+        await signOut();
+      } catch (error) {
+        console.error('[AppHeader] Error during logout:', error);
+        // Continue with redirect even if signOut fails
+      } finally {
+        // Force immediate full page navigation to login to ensure clean state
+        // This ensures redirect happens even if signOut() throws an error
+        window.location.href = '/login';
+      }
     };
 
     // Return landing/demo header (no portfolio dependencies)
@@ -243,13 +251,19 @@ export function AppHeader({
     setShowLogoutModal(false);
     setShowUserMenu(false);
     
-    // LOGOUT FLOW:
-    // 1. Call signOut (clears state and cache)
-    // 2. Redirect happens after state is cleared
-    await signOut();
-    
-    // Redirect to home after logout completes
-    router.replace('/');
+    try {
+      // LOGOUT FLOW:
+      // 1. Call signOut (clears state and cache)
+      // 2. Redirect to login immediately to avoid conflicts with page guards
+      await signOut();
+    } catch (error) {
+      console.error('[AppHeader] Error during logout:', error);
+      // Continue with redirect even if signOut fails
+    } finally {
+      // Force immediate full page navigation to login to ensure clean state
+      // This ensures redirect happens even if signOut() throws an error
+      window.location.href = '/login';
+    }
   };
 
   return (
@@ -334,6 +348,25 @@ export function AppHeader({
               >
                 Dashboard
               </Link>
+              
+              {/* Help / Portfolio Analyst Button - Prominent placement in header */}
+              <button
+                onClick={() => {
+                  // Always dispatch event first (works if copilot is already mounted)
+                  window.dispatchEvent(new CustomEvent('openCopilot'));
+                  
+                  // If not on dashboard, navigate to dashboard - the URL param will trigger copilot
+                  if (!pathname?.startsWith('/dashboard')) {
+                    router.push('/dashboard?openHelp=true');
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 dark:bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 dark:hover:bg-emerald-700 transition-colors shadow-sm hover:shadow-md"
+                aria-label="Open Portfolio Analyst Help"
+                title="Get help with your portfolio"
+              >
+                <SparklesIcon className="w-4 h-4" />
+                <span className="hidden sm:inline">Help</span>
+              </button>
               
               {/* User Menu */}
               <div className="relative" ref={userMenuRef}>

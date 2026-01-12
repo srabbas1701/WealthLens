@@ -472,6 +472,35 @@ async function createAsset(
     ? ((holding as any)._schemeCode || null) // Use scheme_code from resolution
     : (holding.symbol?.toUpperCase() || null); // ETFs and stocks use trading symbols
   
+  // Get asset_class, but ensure it's valid for database constraint
+  // Database only allows: 'equity', 'debt', 'gold', 'cash', 'hybrid'
+  // getAssetClass can return 'other' for unknown types, which violates the constraint
+  let assetClass = getAssetClass(holding.asset_type);
+  
+  // Ensure asset_class is always valid - convert 'other' to a safe default
+  if (!assetClass || assetClass === 'other') {
+    // Default based on asset_type
+    if (isMF || holding.asset_type === 'index_fund') {
+      assetClass = 'equity'; // Most MFs/index funds are equity-oriented
+    } else if (holding.asset_type === 'fd' || holding.asset_type === 'bond' || holding.asset_type === 'ppf' || holding.asset_type === 'epf') {
+      assetClass = 'debt';
+    } else if (holding.asset_type === 'gold') {
+      assetClass = 'gold';
+    } else if (holding.asset_type === 'cash') {
+      assetClass = 'cash';
+    } else if (holding.asset_type === 'nps') {
+      assetClass = 'hybrid';
+    } else if (holding.asset_type === 'etf') {
+      assetClass = 'equity'; // ETFs are typically equity-oriented
+    } else {
+      // Safe fallback for completely unknown types
+      assetClass = 'hybrid';
+    }
+  }
+  
+  // Type cast to ensure TypeScript knows it's valid
+  const validAssetClass = assetClass as 'equity' | 'debt' | 'gold' | 'cash' | 'hybrid';
+
   const { data: newAsset, error } = await supabase
     .from('assets')
     .insert({
@@ -479,7 +508,7 @@ async function createAsset(
       asset_type: holding.asset_type,
       symbol: symbol, // scheme_code for MF, symbol for others
       isin: holding.isin?.toUpperCase() || null, // ISIN from scheme master (ONLY source of truth)
-      asset_class: getAssetClassFromType(holding.asset_type),
+      asset_class: validAssetClass, // Ensure valid value for database constraint
       risk_bucket: getRiskBucket(holding.asset_type),
       is_active: true,
     })

@@ -34,7 +34,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   SparklesIcon, 
   CheckCircleIcon, 
@@ -60,6 +60,7 @@ import PortfolioUploadModal from '@/components/PortfolioUploadModal';
 import ManualInvestmentModal from '@/components/ManualInvestmentModal';
 import PPFAddModal from '@/components/PPFAddModal';
 import NPSAddModal from '@/components/NPSAddModal';
+import EPFAddModal from '@/components/EPFAddModal';
 import VerificationBanner from '@/components/VerificationBanner';
 import InsightsLimitBanner from '@/components/InsightsLimitBanner';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
@@ -196,6 +197,7 @@ const EMPTY_PORTFOLIO: PortfolioData = {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, profile, authStatus, hasPortfolio, portfolioCheckComplete, signOut } = useAuth();
   const { formatCurrency } = useCurrency();
   const redirectAttemptedRef = useRef(false);
@@ -220,6 +222,7 @@ export default function DashboardPage() {
   
   // Copilot state
   const [copilotInitialMessage, setCopilotInitialMessage] = useState<string | undefined>(undefined);
+  const [copilotIsOpen, setCopilotIsOpen] = useState(false);
   
   // Upload modal state
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -236,6 +239,9 @@ export default function DashboardPage() {
   
   // NPS Add modal state
   const [isNPSModalOpen, setIsNPSModalOpen] = useState(false);
+  
+  // EPF Add modal state
+  const [isEPFModalOpen, setIsEPFModalOpen] = useState(false);
   
   // User dropdown state
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -347,11 +353,28 @@ export default function DashboardPage() {
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {
+          console.log('[Dashboard] Portfolio data fetched:', {
+            totalHoldings: result.data.summary?.totalHoldings || 0,
+            mfHoldings: result.data.holdings?.filter((h: any) => 
+              h.assetType === 'Mutual Funds' || h.assetType === 'Index Funds'
+            ).length || 0,
+            allocation: result.data.allocation?.map((a: any) => `${a.name}: ${a.percentage.toFixed(1)}%`).join(', ') || 'none'
+          });
           setPortfolioData(result.data);
+        } else {
+          console.warn('[Dashboard] Portfolio data fetch returned success=false:', result);
         }
+      } else {
+        console.error('[Dashboard] Portfolio data fetch failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url
+        });
+        const errorText = await response.text().catch(() => 'Unable to read error response');
+        console.error('[Dashboard] Error response body:', errorText);
       }
     } catch (error) {
-      console.error('Failed to fetch portfolio data:', error);
+      console.error('[Dashboard] Failed to fetch portfolio data:', error);
     } finally {
       setPortfolioLoading(false);
       fetchingRef.current = false;
@@ -489,15 +512,26 @@ export default function DashboardPage() {
     setCopilotInitialMessage(undefined);
   };
 
-  const handleSignOut = async () => {
-    await signOut();
-    router.push('/');
-  };
+  // Handle openHelp URL parameter - open copilot when navigating from header help button
+  useEffect(() => {
+    const openHelp = searchParams?.get('openHelp');
+    if (openHelp === 'true') {
+      setCopilotIsOpen(true);
+      // Clean up URL parameter
+      router.replace('/dashboard', { scroll: false });
+    }
+  }, [searchParams, router]);
 
   const handleUploadSuccess = () => {
+    console.log('[Dashboard] Upload success - refreshing portfolio data...');
     if (user?.id) {
-      fetchPortfolioData(user.id);
-      fetchAiSummary(user.id);
+      // Force refresh by resetting loading state
+      setPortfolioLoading(true);
+      // Small delay to ensure database write is complete
+      setTimeout(() => {
+        fetchPortfolioData(user.id);
+        fetchAiSummary(user.id);
+      }, 500);
     }
   };
 
@@ -737,91 +771,141 @@ export default function DashboardPage() {
         </OnboardingHint>
 
         {/* ============================================================================ */}
-        {/* ZONE 3: ASSET OVERVIEW TILES (Above the Fold) */}
+        {/* ZONE 3: ASSET OVERVIEW TILES (Above the Fold) - Dynamic Layout */}
         {/* ============================================================================ */}
         {isDataConsistent && (
-        <section className="mb-12 grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Mutual Funds Tile */}
-          <Link 
-            href="/portfolio/mutualfunds"
-            className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
-          >
-            <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6">Mutual Funds</p>
-            {portfolioLoading ? (
-              <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
-            ) : (
-              <>
-                <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
-                  {formatCurrency(portfolio.allocation.find(a => a.name === 'Mutual Funds')?.value || 0)}
-                </p>
-                <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
-                  {portfolio.allocation.find(a => a.name === 'Mutual Funds')?.percentage.toFixed(0) || '0'}%
-                </p>
-              </>
-            )}
-          </Link>
+        <section className="mb-12">
+          {(() => {
+            // Helper function to get route for each asset type
+            const getAssetRoute = (assetName: string): string => {
+              const routeMap: Record<string, string> = {
+                'Stocks': '/portfolio/equity',
+                'Equity': '/portfolio/equity',
+                'Mutual Funds': '/portfolio/mutualfunds',
+                'Fixed Deposits': '/portfolio/fixeddeposits',
+                'Fixed Deposit': '/portfolio/fixeddeposits',
+                'Cash': '/portfolio/cash',
+                'Bonds': '/portfolio/bonds',
+                'Bond': '/portfolio/bonds',
+                'ETFs': '/portfolio/etfs',
+                'ETF': '/portfolio/etfs',
+                'PPF': '/portfolio/ppf',
+                'EPF': '/portfolio/epf',
+                'NPS': '/portfolio/nps',
+                'Index Funds': '/portfolio/mutualfunds',
+                'Gold': '/portfolio/summary',
+                'Other': '/portfolio/summary',
+              };
+              return routeMap[assetName] || '/portfolio/summary';
+            };
 
-          {/* Stocks Tile */}
-          <Link 
-            href="/portfolio/equity"
-            className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
-          >
-            <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6">Stocks</p>
-            {portfolioLoading ? (
-              <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
-            ) : (
-              <>
-                <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
-                  {formatCurrency(
-                    portfolio.allocation.find(a => a.name === 'Equity' || a.name === 'Stocks')?.value || 0
-                  )}
-                </p>
-                <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
-                  {portfolio.allocation.find(a => a.name === 'Equity' || a.name === 'Stocks')?.percentage.toFixed(0) || '0'}%
-                </p>
-              </>
-            )}
-          </Link>
+            // Helper function to determine if an asset is stock-based (priority for tiles)
+            const isStockBasedAsset = (assetName: string): boolean => {
+              const stockBasedAssets = [
+                'Equity',
+                'Stocks',
+                'Mutual Funds',
+                'ETFs',
+                'ETF',
+                'Index Funds',
+              ];
+              return stockBasedAssets.includes(assetName);
+            };
 
-          {/* Fixed Deposits Tile */}
-          <Link 
-            href="/portfolio/fixeddeposits"
-            className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
-          >
-            <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6">Fixed Deposits</p>
-            {portfolioLoading ? (
-              <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
-            ) : (
-              <>
-                <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
-                  {formatCurrency(portfolio.allocation.find(a => a.name === 'Fixed Deposit' || a.name === 'Fixed Deposits')?.value || 0)}
-                </p>
-                <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
-                  {portfolio.allocation.find(a => a.name === 'Fixed Deposit' || a.name === 'Fixed Deposits')?.percentage.toFixed(0) || '0'}%
-                </p>
-              </>
-            )}
-          </Link>
+            // Sort allocation with secondary priority for stock-based assets when percentages are equal
+            // portfolio.allocation is already sorted by value, but we need to handle ties by percentage
+            const sortedAllocation = [...portfolio.allocation].sort((a, b) => {
+              // Primary sort: by percentage (descending) - more accurate for tie-breaking
+              if (Math.abs(b.percentage - a.percentage) > 0.01) {
+                return b.percentage - a.percentage;
+              }
+              // Secondary sort: prioritize stock-based assets when percentages are equal (e.g., all at 3%)
+              const aIsStock = isStockBasedAsset(a.name);
+              const bIsStock = isStockBasedAsset(b.name);
+              if (aIsStock && !bIsStock) return -1; // Stock-based assets come first
+              if (!aIsStock && bIsStock) return 1;
+              return 0; // Keep original order if both are same type
+            });
 
-          {/* Others Tile */}
-          <Link 
-            href="/portfolio/summary"
-            className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
-          >
-            <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6">Others</p>
-            {portfolioLoading ? (
-              <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
-            ) : (
-              <>
-                <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
-                  {formatCurrency(portfolio.allocation.filter(a => !['Mutual Funds', 'Equity', 'Stocks', 'Fixed Deposit', 'Fixed Deposits'].includes(a.name)).reduce((sum, a) => sum + a.value, 0))}
-                </p>
-                <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
-                  {portfolio.allocation.filter(a => !['Mutual Funds', 'Equity', 'Stocks', 'Fixed Deposit', 'Fixed Deposits'].includes(a.name)).reduce((sum, a) => sum + a.percentage, 0).toFixed(0)}%
-                </p>
-              </>
-            )}
-          </Link>
+            const totalAssets = sortedAllocation.length;
+            
+            // Determine how many tiles to show
+            let tilesToShow: AllocationItem[];
+            let showOthers: boolean;
+            
+            if (totalAssets <= 8) {
+              // Show top 3 + Others (4 tiles total in 1 row)
+              tilesToShow = sortedAllocation.slice(0, 3);
+              showOthers = totalAssets > 3;
+            } else {
+              // Show top 7 + Others (8 tiles total in 2 rows of 4 each)
+              tilesToShow = sortedAllocation.slice(0, 7);
+              showOthers = true;
+            }
+
+            // Calculate Others aggregate if needed
+            let othersData: AllocationItem | null = null;
+            if (showOthers) {
+              const othersAssets = totalAssets <= 8 
+                ? sortedAllocation.slice(3)
+                : sortedAllocation.slice(7);
+              
+              if (othersAssets.length > 0) {
+                othersData = {
+                  name: 'Others',
+                  value: othersAssets.reduce((sum, a) => sum + a.value, 0),
+                  percentage: othersAssets.reduce((sum, a) => sum + a.percentage, 0),
+                  color: '#64748B', // Default gray for Others (matches pie chart)
+                };
+              }
+            }
+
+            const allTiles = showOthers && othersData 
+              ? [...tilesToShow, othersData]
+              : tilesToShow;
+
+            // Grid layout: 1 row (4 cols) if <= 8 assets, 2 rows (4 cols each) if > 8 assets
+            const gridCols = 'grid-cols-1 md:grid-cols-4';
+
+            return (
+              <div className={`grid ${gridCols} gap-4`}>
+                {allTiles.map((asset, index) => {
+                  const isOthers = asset.name === 'Others';
+                  
+                  return (
+                    <Link 
+                      key={`${asset.name}-${index}`}
+                      href={getAssetRoute(asset.name)}
+                      className="relative bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
+                    >
+                      {/* Color Dot - Top Right Corner (matches pie chart) */}
+                      <div 
+                        className="absolute top-4 right-4 w-6 h-6 rounded-full border-2 border-white dark:border-[#1E293B] shadow-sm"
+                        style={{ backgroundColor: asset.color }}
+                        aria-label={`${asset.name} color indicator`}
+                      />
+                      
+                      <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6 pr-10">
+                        {asset.name}
+                      </p>
+                      {portfolioLoading ? (
+                        <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
+                      ) : (
+                        <>
+                          <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
+                            {formatCurrency(asset.value)}
+                          </p>
+                          <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
+                            {asset.percentage.toFixed(0)}%
+                          </p>
+                        </>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </section>
         )}
 
@@ -855,6 +939,35 @@ export default function DashboardPage() {
 
                       return portfolio.allocation.map((item, index) => {
                         const angle = (item.percentage / 100) * 360;
+                        
+                        // Handle single asset (100% or very close to 100%)
+                        if (angle >= 359.9 || portfolio.allocation.length === 1) {
+                          // Draw a full circle for single asset
+                          const slice = (
+                            <circle
+                              key={index}
+                              cx={centerX}
+                              cy={centerY}
+                              r={radius}
+                              fill={item.color}
+                              className={`transition-all duration-300 cursor-pointer ${
+                                hoveredIndex === index 
+                                  ? 'opacity-100 scale-110' 
+                                  : hoveredIndex === null 
+                                    ? 'opacity-100' 
+                                    : 'opacity-30 blur-[2px]'
+                              }`}
+                              style={{
+                                transformOrigin: '100px 100px',
+                                filter: hoveredIndex === index ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))' : 'none'
+                              }}
+                              onMouseEnter={() => setHoveredIndex(index)}
+                              onMouseLeave={() => setHoveredIndex(null)}
+                            />
+                          );
+                          return slice;
+                        }
+                        
                         const endAngle = startAngle + angle;
                         
                         // Convert angles to radians
@@ -1104,13 +1217,16 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* Floating Copilot */}
+      {/* Floating Copilot - Positioned top-right for better visibility */}
       <FloatingCopilot 
         source="dashboard" 
         userId={user?.id || ''} 
         initialMessage={copilotInitialMessage}
         onInitialMessageSent={handleInitialMessageSent}
         issueCount={0}
+        externalIsOpen={copilotIsOpen}
+        onStateChange={setCopilotIsOpen}
+        position="top-right"
       />
 
       {/* Portfolio Upload Modal */}
@@ -1137,6 +1253,10 @@ export default function DashboardPage() {
           setIsManualModalOpen(false);
           setIsNPSModalOpen(true);
         }}
+        onEPFSelected={() => {
+          setIsManualModalOpen(false);
+          setIsEPFModalOpen(true);
+        }}
       />
 
       {/* PPF Add Modal */}
@@ -1152,6 +1272,15 @@ export default function DashboardPage() {
       <NPSAddModal
         isOpen={isNPSModalOpen}
         onClose={() => setIsNPSModalOpen(false)}
+        userId={user?.id || ''}
+        onSuccess={handleUploadSuccess}
+        existingHolding={null}
+      />
+
+      {/* EPF Add Modal */}
+      <EPFAddModal
+        isOpen={isEPFModalOpen}
+        onClose={() => setIsEPFModalOpen(false)}
         userId={user?.id || ''}
         onSuccess={handleUploadSuccess}
         existingHolding={null}

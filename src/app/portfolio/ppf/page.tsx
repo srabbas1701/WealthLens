@@ -249,8 +249,8 @@ export default function PPFHoldingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
       </div>
     );
   }
@@ -258,7 +258,7 @@ export default function PPFHoldingsPage() {
   const hasData = holdings.length > 0 && totalBalance > 0;
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB]">
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
         backHref="/dashboard"
@@ -470,32 +470,32 @@ export default function PPFHoldingsPage() {
 
         {/* Contribution History (Collapsed by default) */}
         {hasData && (
-          <div className="bg-white rounded-xl border border-[#E5E7EB] mb-6">
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] mb-6">
             <button
               onClick={() => setShowContributionHistory(!showContributionHistory)}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-[#F6F8FB] transition-colors text-left"
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left"
             >
               <div className="flex items-center gap-3">
-                <CalendarIcon className="w-5 h-5 text-[#6B7280]" />
-                <span className="text-sm font-medium text-[#0F172A]">Contribution History</span>
+                <CalendarIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+                <span className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">Contribution History</span>
               </div>
               {showContributionHistory ? (
-                <ChevronUpIcon className="w-5 h-5 text-[#6B7280]" />
+                <ChevronUpIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
               ) : (
-                <ChevronDownIcon className="w-5 h-5 text-[#6B7280]" />
+                <ChevronDownIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
               )}
             </button>
             
             {showContributionHistory && (
-              <div className="px-6 py-4 border-t border-[#E5E7EB]">
-                <p className="text-sm text-[#6B7280] mb-4">
+              <div className="px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155]">
+                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-4">
                   Contribution history details will be available here. This feature tracks your annual PPF contributions over time.
                 </p>
-                <div className="bg-[#F6F8FB] rounded-lg p-4 border border-[#E5E7EB]">
+                <div className="bg-[#F6F8FB] dark:bg-[#334155] rounded-lg p-4 border border-[#E5E7EB] dark:border-[#334155]">
                   <div className="flex items-start gap-3">
-                    <InfoIcon className="w-5 h-5 text-[#6B7280] flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-[#475569]">
-                      <p className="font-medium text-[#0F172A] mb-1">PPF Contribution Limits</p>
+                    <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-[#475569] dark:text-[#94A3B8]">
+                      <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-1">PPF Contribution Limits</p>
                       <p className="mb-2">
                         Minimum annual contribution: ₹500. Maximum annual contribution: ₹1.5 Lakhs.
                       </p>
@@ -512,14 +512,14 @@ export default function PPFHoldingsPage() {
 
         {/* Light AI Insights */}
         {hasData && (
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-6">
-            <h2 className="text-lg font-semibold text-[#0F172A] mb-4">Insights</h2>
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+            <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Insights</h2>
             <div className="space-y-4">
               {summary.latestMaturityYear && (
                 <div className="flex items-start gap-3">
-                  <InfoIcon className="w-5 h-5 text-[#6B7280] flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-[#475569]">
-                    <p className="font-medium text-[#0F172A] mb-1">Maturity Awareness</p>
+                  <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-[#475569] dark:text-[#94A3B8]">
+                    <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-1">Maturity Awareness</p>
                     <p>
                       Your PPF accounts mature in {summary.latestMaturityYear}. 
                       {summary.latestMaturityYear > new Date().getFullYear() 
@@ -531,9 +531,9 @@ export default function PPFHoldingsPage() {
               )}
               
               <div className="flex items-start gap-3">
-                <InfoIcon className="w-5 h-5 text-[#6B7280] flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-[#475569]">
-                  <p className="font-medium text-[#0F172A] mb-1">Tax Benefits</p>
+                <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-[#475569] dark:text-[#94A3B8]">
+                  <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-1">Tax Benefits</p>
                   <p>
                     PPF contributions qualify for tax deduction under Section 80C up to ₹1.5 Lakhs per financial year. 
                     Interest earned is tax-free, and withdrawals are also tax-exempt.
@@ -543,9 +543,9 @@ export default function PPFHoldingsPage() {
 
               {summary.averageInterestRate && (
                 <div className="flex items-start gap-3">
-                  <InfoIcon className="w-5 h-5 text-[#6B7280] flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-[#475569]">
-                    <p className="font-medium text-[#0F172A] mb-1">Interest Rate</p>
+                  <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-[#475569] dark:text-[#94A3B8]">
+                    <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-1">Interest Rate</p>
                     <p>
                       Your PPF accounts earn interest at an average rate of {summary.averageInterestRate.toFixed(2)}%. 
                       Interest is compounded annually and credited at the end of each financial year.
