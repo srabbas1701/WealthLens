@@ -4,10 +4,10 @@
  * Helper functions for risk-related mappings and calculations
  */
 
-import { RiskLevel, RISK_COLORS, scoreToRiskLevel, getRiskColors } from '@/constants/riskColors';
+import { RiskLevel, RISK_COLORS, scoreToRiskLevel, getRiskColors, getRiskColorsByLevel } from '@/constants/riskColors';
 
 // Re-export from riskColors for convenience
-export { scoreToRiskLevel, getRiskColors };
+export { scoreToRiskLevel, getRiskColors, getRiskColorsByLevel };
 
 /**
  * Map severity string to risk level

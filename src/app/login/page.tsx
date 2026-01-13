@@ -1,10 +1,12 @@
+'use client';
+
 /**
  * Login Page
- * 
+ *
  * Authentication page with multiple login options:
  * - Mobile Number + OTP (primary for India)
  * - Email Magic Link (passwordless, low friction)
- * 
+ *
  * DESIGN PHILOSOPHY:
  * - Clean, trust-first UI
  * - Low-friction, India-friendly mobile OTP login
@@ -12,19 +14,19 @@
  * - Clear error messages (calm, not scary)
  * - Smooth transitions between login methods
  * - No dark patterns
- * 
+ *
  * USER FLOW:
  * - User chooses ONE method (mobile OR email)
  * - After successful login → middleware handles redirect
  * - New users → /onboarding
  * - Existing users → /dashboard
- * 
+ *
  * AUTH METHODS:
  * - Mobile OTP: Phone-based auth via Supabase SMS
  * - Email Magic Link: Passwordless email auth
  */
 
-'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';

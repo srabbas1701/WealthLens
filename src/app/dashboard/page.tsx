@@ -1,28 +1,30 @@
+'use client';
+
 /**
  * Dashboard Page
- * 
+ *
  * The main portfolio view - answers three questions:
  * 1. "Am I okay?"
  * 2. "What changed?"
  * 3. "Do I need to do anything?"
- * 
+ *
  * USER FLOW:
  * - Only accessible to authenticated users WITH a portfolio
  * - Users without portfolio are redirected to /onboarding
  * - Uses real Supabase authentication
- * 
+ *
  * DESIGN PRINCIPLES:
  * - Calm, neutral, reassuring
  * - No urgency or red/green flashing
  * - No trading language
  * - AI-first summary at top
  * - TRANSPARENT: All investments visible for verification
- * 
+ *
  * DATA FLOW:
  * - Portfolio data fetched from /api/portfolio/data
  * - AI summaries fetched from /api/copilot/daily-summary and weekly-summary
  * - Frontend renders API responses VERBATIM (no recalculation)
- * 
+ *
  * TRANSPARENCY FEATURES:
  * - "All Investments" section shows every holding
  * - Grouped views by Asset Type, Instrument, Sector
@@ -30,7 +32,7 @@
  * - Users can verify totals match sum of holdings
  */
 
-'use client';
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';

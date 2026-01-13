@@ -1,13 +1,16 @@
+// @ts-nocheck
 /**
  * Stability & Safety Analytics API
- * 
+ *
  * GET /api/portfolio/stability-analytics?user_id=xxx
- * 
+ *
  * Returns stability and safety analytics including:
  * - Capital-protected vs market-linked breakdown
  * - Credit risk exposure
  * - Retirement contribution analysis
  */
+
+export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';

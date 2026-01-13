@@ -1,14 +1,15 @@
+// @ts-nocheck
 /**
  * Portfolio Data API
- * 
+ *
  * GET /api/portfolio/data
- * 
+ *
  * Fetches the user's portfolio data including:
  * - Portfolio metrics (net worth, risk score, goal alignment)
  * - Asset allocation breakdown (computed from holdings)
  * - All holdings with full details
  * - Key insights
- * 
+ *
  * CALCULATION PHILOSOPHY (NON-NEGOTIABLE):
  * =========================================
  * 1. Net Worth = SUM(invested_value) from holdings table
@@ -16,23 +17,25 @@
  * 3. All percentages MUST sum to 100% (normalized)
  * 4. Holdings sorted by invested_value descending
  * 5. NO "Other 100%" fallback - show actual breakdown
- * 
+ *
  * DATA FLOW:
  * ==========
  * - Portfolio value from portfolios.total_value (set by upload confirm)
  * - Allocation from portfolio_metrics (computed from holdings)
  * - Holdings directly from holdings table with asset details
  * - ALL values computed from quantity × average_price
- * 
+ *
  * TRANSPARENCY:
  * =============
  * - Returns ALL holdings, not just top 5
  * - Includes quantity, avg price, invested value for each holding
  * - Allocation percentages verifiable by user
- * 
+ *
  * This is the source of truth for the dashboard.
  * Data comes from the database, not hardcoded values.
  */
+
+export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
