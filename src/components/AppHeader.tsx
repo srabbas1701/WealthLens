@@ -3,12 +3,13 @@
 import { createContext, useState, useEffect, ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { WalletIcon, FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, SparklesIcon } from '@/components/icons';
+import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, SparklesIcon } from '@/components/icons';
 import { useAuthSession, useAuthAppData } from '@/lib/auth';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
 import { type CurrencyFormat } from '@/lib/currency/formatCurrency';
 import { useCurrency } from '@/lib/currency/useCurrency';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LogoLockup } from '@/components/LogoLockup';
 
 interface CurrencyContextType {
   format: CurrencyFormat;
@@ -135,12 +136,7 @@ export function AppHeader({
         <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
           {/* Left: Logo */}
           <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#0A2540] flex items-center justify-center">
-                <WalletIcon className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">WealthLens</span>
-            </Link>
+            <LogoLockup />
           </div>
 
           {/* Center: Navigation Links */}
@@ -271,12 +267,7 @@ export function AppHeader({
       <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
         {/* Left: Logo and Back Button */}
         <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#0A2540] flex items-center justify-center">
-              <WalletIcon className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">WealthLens</span>
-          </Link>
+          <LogoLockup />
           
           {showBackButton && (
             <Link 

@@ -36,8 +36,9 @@ export const COMMON_DISCLAIMERS = {
  */
 export const PAGE_TITLES = {
   healthScore: 'Portfolio Health Score',
-  stabilityAnalytics: 'Stability & Capital Protection',
+  stabilityAnalytics: 'Stability & Downside Protection',
   liquidityAnalytics: 'Liquidity & Accessibility',
+  scenarioAnalytics: 'Scenario Impact Analysis',
   analyticsOverview: 'Portfolio Analytics',
 };
 

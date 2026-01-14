@@ -336,7 +336,6 @@ export default function DashboardPage() {
   const fetchPortfolioData = useCallback(async (userId: string) => {
     // Prevent duplicate simultaneous fetches (React 18 dev mode causes double-calls)
     if (fetchingRef.current) {
-      console.log('[Dashboard] Skipping duplicate portfolio fetch');
       return;
     }
     
@@ -353,13 +352,6 @@ export default function DashboardPage() {
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {
-          console.log('[Dashboard] Portfolio data fetched:', {
-            totalHoldings: result.data.summary?.totalHoldings || 0,
-            mfHoldings: result.data.holdings?.filter((h: any) => 
-              h.assetType === 'Mutual Funds' || h.assetType === 'Index Funds'
-            ).length || 0,
-            allocation: result.data.allocation?.map((a: any) => `${a.name}: ${a.percentage.toFixed(1)}%`).join(', ') || 'none'
-          });
           setPortfolioData(result.data);
         } else {
           console.warn('[Dashboard] Portfolio data fetch returned success=false:', result);
@@ -385,7 +377,6 @@ export default function DashboardPage() {
   const fetchAiSummary = useCallback(async (userId: string) => {
     // Prevent duplicate simultaneous fetches
     if (fetchingAiSummaryRef.current) {
-      console.log('[Dashboard] Skipping duplicate AI summary fetch');
       return;
     }
     
@@ -419,7 +410,6 @@ export default function DashboardPage() {
   const fetchWeeklySummary = useCallback(async (userId: string) => {
     // Prevent duplicate simultaneous fetches
     if (fetchingWeeklySummaryRef.current) {
-      console.log('[Dashboard] Skipping duplicate weekly summary fetch');
       return;
     }
     
@@ -464,7 +454,6 @@ export default function DashboardPage() {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('[Dashboard] Price update result:', result);
         
         // Show success message
         setPriceUpdateSuccess(true);
@@ -523,7 +512,6 @@ export default function DashboardPage() {
   }, [searchParams, router]);
 
   const handleUploadSuccess = () => {
-    console.log('[Dashboard] Upload success - refreshing portfolio data...');
     if (user?.id) {
       // Force refresh by resetting loading state
       setPortfolioLoading(true);

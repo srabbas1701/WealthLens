@@ -219,8 +219,6 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
         tier2: tier2Data,
       };
       
-      console.log('[NPS Modal] Saving payload:', JSON.stringify(payload, null, 2));
-      
       const response = await fetch('/api/nps/holdings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -234,7 +232,6 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
         // Show appropriate message in success state based on whether it was update or create
         if (result.message?.includes('updated')) {
           // Account was updated (Tier II added to existing PRAN)
-          console.log('Updated existing NPS account');
         }
         onSuccess();
         setTimeout(() => {

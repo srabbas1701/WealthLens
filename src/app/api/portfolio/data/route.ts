@@ -301,43 +301,13 @@ export async function GET(request: NextRequest) {
     }
     
     const holdings = rawHoldings || [];
-    console.log(`[Portfolio Data API] Fetched ${holdings.length} holdings for portfolio ${portfolio.id}`);
     
-    // Log MF holdings specifically
-    const mfHoldings = holdings.filter((h: any) => {
-      const asset = h.assets as any;
-      return asset?.asset_type === 'mutual_fund' || asset?.asset_type === 'index_fund';
-    });
-    if (mfHoldings.length > 0) {
-      console.log(`[Portfolio Data API] Found ${mfHoldings.length} MF holdings:`, 
-        mfHoldings.map((h: any) => ({
-          name: h.assets?.name || 'UNKNOWN',
-          asset_type: h.assets?.asset_type || 'MISSING',
-          isin: h.assets?.isin || 'NONE',
-          invested_value: h.invested_value,
-          quantity: h.quantity,
-          asset_id: h.asset_id,
-          has_asset: !!h.assets
-        }))
+    // Check if there are holdings with null assets (might indicate linking issue)
+    const holdingsWithNullAssets = holdings.filter((h: any) => !h.assets);
+    if (holdingsWithNullAssets.length > 0 && process.env.NODE_ENV === 'development') {
+      console.warn(`[Portfolio Data API] Found ${holdingsWithNullAssets.length} holdings with null assets:`, 
+        holdingsWithNullAssets.map((h: any) => ({ holding_id: h.id, asset_id: h.asset_id }))
       );
-    } else if (holdings.length > 0) {
-      console.log(`[Portfolio Data API] No MF holdings found. Total holdings: ${holdings.length}`);
-      console.log(`[Portfolio Data API] Holdings asset types:`, 
-        holdings.map((h: any) => ({
-          asset_type: h.assets?.asset_type || 'NULL',
-          name: h.assets?.name || 'NO ASSET',
-          has_asset: !!h.assets,
-          asset_id: h.asset_id
-        }))
-      );
-      
-      // Check if there are holdings with null assets (might indicate linking issue)
-      const holdingsWithNullAssets = holdings.filter((h: any) => !h.assets);
-      if (holdingsWithNullAssets.length > 0) {
-        console.warn(`[Portfolio Data API] Found ${holdingsWithNullAssets.length} holdings with null assets:`, 
-          holdingsWithNullAssets.map((h: any) => ({ holding_id: h.id, asset_id: h.asset_id }))
-        );
-      }
     }
     
     // 3.5. Fetch stock prices for equity and ETF holdings (batch query for performance)
@@ -392,15 +362,9 @@ export async function GET(request: NextRequest) {
     });
     
     // Note: MF holdings without ISINs need backfill (run POST /api/mf/isin/backfill)
-    if (mfHoldingsWithoutISIN.length > 0) {
-      console.log(`[Portfolio Data API] Found ${mfHoldingsWithoutISIN.length} MF holdings without ISINs (will use invested_value as fallback):`, 
-        mfHoldingsWithoutISIN.map((h: any) => ({
-          name: h.assets?.name,
-          asset_type: h.assets?.asset_type,
-          invested_value: h.invested_value,
-          quantity: h.quantity
-        }))
-      );
+    // Log warning only in development for missing ISINs
+    if (mfHoldingsWithoutISIN.length > 0 && process.env.NODE_ENV === 'development') {
+      console.warn(`[Portfolio Data API] Found ${mfHoldingsWithoutISIN.length} MF holdings without ISINs (will use invested_value as fallback)`);
     }
     
     // Fetch NAVs for MF holdings WITH ISINs

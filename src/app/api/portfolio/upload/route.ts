@@ -851,7 +851,6 @@ function transformRows(rows: RawUploadRow[], headers: string[]): {
       if (computedQuantity > 0) {
         computedAvgPrice = totalInvested / computedQuantity;
       }
-      console.log(`[Parse] Row ${i + 1}: Using totalInvested: ${totalInvested}, calculated avgPrice: ${computedAvgPrice.toFixed(2)}`);
     }
     // CASE 2: CSV has average price per unit
     else if (averagePrice !== null && averagePrice > 0) {
@@ -859,7 +858,6 @@ function transformRows(rows: RawUploadRow[], headers: string[]): {
       if (computedQuantity > 0) {
         computedInvestedValue = calculateInvestedValue(computedQuantity, computedAvgPrice);
       }
-      console.log(`[Parse] Row ${i + 1}: Using avgPrice: ${averagePrice}, calculated totalInvested: ${computedInvestedValue}`);
     }
     else {
       if (isValid) {

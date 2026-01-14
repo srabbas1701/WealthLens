@@ -164,7 +164,6 @@ export default function ETFHoldingsPage() {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('[ETF Page] Price update result:', result);
         
         // Refresh data
         if (user?.id) {

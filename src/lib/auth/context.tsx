@@ -83,9 +83,6 @@ interface AuthState extends AuthSessionState, AuthAppDataState {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // TEMPORARY: Log when AuthProvider mounts
-  console.log("🔁 AuthProvider mounted");
-  
   // SESSION STATE: Fast initialization (no database queries)
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
   const [user, setUser] = useState<User | null>(null);

@@ -84,31 +84,31 @@ export function generateStabilityScoreExplanation(stabilityData: StabilityAnalys
   
   // Analyze stability metrics
   if (capitalProtected.percentage >= 30) {
-    contributingFactors.push(`${capitalProtected.percentage.toFixed(0)}% in stability-oriented assets provides downside resilience`);
+    contributingFactors.push(`${capitalProtected.percentage.toFixed(0)}% in stability-oriented assets typically reduces portfolio volatility during market stress`);
   } else if (capitalProtected.percentage < 20) {
-    considerations.push(`Portfolio has ${capitalProtected.percentage.toFixed(0)}% in stability-oriented assets (lower stability contribution)`);
+    considerations.push(`Portfolio has ${capitalProtected.percentage.toFixed(0)}% in stability-oriented assets, which may result in higher volatility during market stress`);
   }
   
   if (marketLinked.percentage >= 70) {
-    considerations.push(`High market-linked exposure (${marketLinked.percentage.toFixed(0)}%) increases volatility`);
+    considerations.push(`High market-linked exposure (${marketLinked.percentage.toFixed(0)}%) means portfolio value fluctuates more with market conditions`);
   } else if (marketLinked.percentage < 50) {
-    contributingFactors.push(`Moderate market-linked exposure (${marketLinked.percentage.toFixed(0)}%) balances growth and stability`);
+    contributingFactors.push(`Moderate market-linked exposure (${marketLinked.percentage.toFixed(0)}%) balances growth potential with stability`);
   }
   
   // Credit risk analysis
   if (creditRisk.totalExposure > 0) {
     if (creditRisk.riskLevel === 'Low') {
-      contributingFactors.push('Credit risk exposure is well-managed');
+      contributingFactors.push('Credit risk exposure in debt instruments is well-managed');
     } else if (creditRisk.riskLevel === 'High') {
-      considerations.push('Elevated credit risk exposure in debt instruments');
+      considerations.push('Elevated credit risk exposure in debt instruments may affect safety of those investments');
     }
   }
   
   // Retirement contribution
   if (retirement.totalValue > 0 && retirement.percentage >= 15) {
-    contributingFactors.push(`Significant retirement allocation (${retirement.percentage.toFixed(0)}%) provides tax efficiency and stability`);
+    contributingFactors.push(`Significant retirement allocation (${retirement.percentage.toFixed(0)}%) through long-term instruments provides tax efficiency and stability`);
   } else if (retirement.percentage < 10 && stabilityData.metadata.totalPortfolioValue > 1000000) {
-    considerations.push('Limited retirement allocation may reduce tax efficiency');
+    considerations.push('Limited retirement allocation may reduce potential tax efficiency benefits from long-term instruments');
   }
   
   // Generate summary
@@ -124,7 +124,7 @@ export function generateStabilityScoreExplanation(stabilityData: StabilityAnalys
       summary += `While ${contributingFactors.length} factor${contributingFactors.length > 1 ? 's support' : ' supports'} stability, ${considerations.length} consideration${considerations.length > 1 ? 's' : ''} ${considerations.length > 1 ? 'have' : 'has'} been identified.`;
     }
   } else {
-    summary = `Your stability score of ${stabilityScore} reflects a portfolio that is primarily market-linked. `;
+    summary = `Your stability score of ${stabilityScore} reflects a portfolio that is primarily market-linked, which means portfolio value may fluctuate more with market conditions. `;
     if (considerations.length > 0) {
       summary += `${considerations.length} key factor${considerations.length > 1 ? 's contribute' : ' contributes'} to this assessment.`;
     }

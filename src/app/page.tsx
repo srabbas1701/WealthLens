@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { 
   ShieldCheckIcon, 
   CheckCircleIcon, 
@@ -9,12 +8,12 @@ import {
   TargetIcon, 
   ChartIcon, 
   InfoIcon,
-  WalletIcon,
   ArrowRightIcon,
   ChevronDownIcon,
 } from '@/components/icons';
 import { useAuthSession } from '@/lib/auth';
 import { AppHeader } from '@/components/AppHeader';
+import { LogoLockup } from '@/components/LogoLockup';
 
 /**
  * Landing Page - Professional Fintech Design
@@ -54,17 +53,15 @@ export default function HomePage() {
             {/* Left - Value Proposition */}
             <div>
               <h1 className="text-4xl md:text-5xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] leading-tight mb-6">
-                Complete Portfolio Visibility
-                <span className="block text-[#2563EB] dark:text-[#3B82F6] mt-2">For Indian Investors</span>
+                Portfolio Intelligence for Indian Investors
               </h1>
               
               <p className="text-lg text-[#475569] dark:text-[#CBD5E1] leading-relaxed mb-6 max-w-lg">
-                See all your investments—stocks, mutual funds, fixed deposits, and more—in one professional dashboard. 
-                Understand your portfolio with clarity and control.
+                See beyond balances. Understand exposure, stability, and how your portfolio may behave across market scenarios — explained clearly, without advice or execution.
               </p>
 
               <p className="text-base text-[#6B7280] dark:text-[#94A3B8] mb-8">
-                Read-only access. No trading. No commissions. No advice.
+                Read-only access • No trading • No commissions • No recommendations
               </p>
 
               {/* CTA */}
@@ -115,34 +112,68 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Right - Dashboard Preview */}
+            {/* Right - Analytics Preview */}
             <div className="relative">
               <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-sm overflow-hidden">
-                {/* Dashboard Header */}
+                {/* Header */}
                 <div className="px-6 py-4 bg-[#F6F8FB] dark:bg-[#334155] border-b border-[#E5E7EB] dark:border-[#334155]">
-                  <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Dashboard</h2>
+                  <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Portfolio Intelligence</h2>
                 </div>
                 
-                {/* Dashboard Content */}
+                {/* Analytics Content */}
                 <div className="p-6 space-y-6">
-                  {/* Net Worth Hero */}
-                  <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8">
-                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-3">Total Portfolio Value</p>
-                    <p className="text-5xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-4">₹45,20,000</p>
-                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">↑ 2.3% this week</p>
+                  {/* Health Score Gauge */}
+                  <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-4 text-center">Portfolio Health Score</p>
+                    <div className="flex justify-center mb-3">
+                      <div className="relative w-32 h-32">
+                        <svg width="128" height="128" className="transform -rotate-90" viewBox="0 0 128 128">
+                          <circle cx="64" cy="64" r="56" fill="none" stroke="#E5E7EB" strokeWidth="8" className="dark:stroke-[#334155]" />
+                          <circle cx="64" cy="64" r="56" fill="none" stroke="#2563EB" strokeWidth="8" strokeDasharray="352" strokeDashoffset="105" strokeLinecap="round" />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-3xl font-bold text-[#2563EB]">72</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] text-center">Good • Balanced structure</p>
                   </div>
                   
-                  {/* Asset Tiles */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
-                      <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-6">Mutual Funds</p>
-                      <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">₹18,50,000</p>
-                      <p className="text-base text-[#6B7280] dark:text-[#94A3B8]">41%</p>
+                  {/* Stability vs Market-linked Bar */}
+                  <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-4">Stability Analysis</p>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">
+                          <span>Stability-oriented</span>
+                          <span>42%</span>
+                        </div>
+                        <div className="h-2 bg-[#E5E7EB] dark:bg-[#334155] rounded-full overflow-hidden">
+                          <div className="h-full bg-[#16A34A] dark:bg-[#22C55E] rounded-full" style={{ width: '42%' }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">
+                          <span>Market-linked</span>
+                          <span>58%</span>
+                        </div>
+                        <div className="h-2 bg-[#E5E7EB] dark:bg-[#334155] rounded-full overflow-hidden">
+                          <div className="h-full bg-[#2563EB] dark:bg-[#3B82F6] rounded-full" style={{ width: '58%' }}></div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
-                      <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-6">Equity</p>
-                      <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">₹12,80,000</p>
-                      <p className="text-base text-[#6B7280] dark:text-[#94A3B8]">28%</p>
+                  </div>
+                  
+                  {/* Scenario Insight Card */}
+                  <div className="bg-[#EFF6FF] dark:bg-[#1E3A8A] rounded-xl border border-[#BFDBFE] dark:border-[#3B82F6] p-4">
+                    <div className="flex items-start gap-3">
+                      <InfoIcon className="w-5 h-5 text-[#2563EB] dark:text-[#60A5FA] flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-[#1E40AF] dark:text-[#DBEAFE] mb-1">Scenario Insight</p>
+                        <p className="text-xs text-[#1E40AF] dark:text-[#BFDBFE] leading-relaxed">
+                          In a market decline scenario, your 58% market-linked exposure suggests moderate impact, with stability assets providing cushioning.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -165,8 +196,11 @@ export default function HomePage() {
             <h2 className="text-2xl md:text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
               Trusted by Indian Investors
             </h2>
-            <p className="text-lg text-[#6B7280] dark:text-[#94A3B8]">
+            <p className="text-lg text-[#6B7280] dark:text-[#94A3B8] mb-2">
               Join 10,000+ investors tracking their complete portfolio
+            </p>
+            <p className="text-base text-[#6B7280] dark:text-[#94A3B8]">
+              Trusted for clarity, transparency, and analyst-grade portfolio insights.
             </p>
           </div>
 
@@ -183,13 +217,10 @@ export default function HomePage() {
                 key={brand.name}
                 className="flex items-center justify-center h-8 md:h-10 opacity-80 hover:opacity-100 transition-all duration-200"
               >
-                <Image
+                <img
                   src={brand.logo}
                   alt={brand.name}
-                  width={120}
-                  height={40}
                   className="h-8 md:h-10 w-auto object-contain"
-                  priority={false}
                 />
               </div>
             ))}
@@ -220,7 +251,7 @@ export default function HomePage() {
         <div className="max-w-[1280px] mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-              Professional Portfolio Management
+              Professional-Grade Portfolio Intelligence
             </h2>
             <p className="text-lg text-[#6B7280] dark:text-[#94A3B8] max-w-2xl mx-auto">
               Tools designed for clarity, transparency, and control.
@@ -228,52 +259,51 @@ export default function HomePage() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
-            {/* All Assets in One View */}
+            {/* Unified Asset Structure */}
             <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8">
               <div className="w-12 h-12 rounded-lg bg-[#EFF6FF] dark:bg-[#1E3A8A] flex items-center justify-center mb-6">
                 <ChartIcon className="w-6 h-6 text-[#2563EB] dark:text-[#3B82F6]" />
               </div>
               <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-                All Assets, One View
+                Unified Asset Structure
               </h3>
               <p className="text-[#475569] dark:text-[#CBD5E1] leading-relaxed text-sm">
-                Stocks, mutual funds, fixed deposits, PPF, NPS, gold—see everything in one professional dashboard. 
-                No more scattered statements or multiple apps.
+                Stocks, mutual funds, fixed deposits, PPF, NPS, gold—all assets consolidated into one unified view. 
+                Understand your complete portfolio structure, not just individual holdings.
               </p>
             </div>
 
-            {/* Intelligent Insights */}
+            {/* Analyst-Style Insights */}
             <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8">
               <div className="w-12 h-12 rounded-lg bg-[#EFF6FF] dark:bg-[#1E3A8A] flex items-center justify-center mb-6">
-                <InfoIcon className="w-6 h-6 text-[#2563EB] dark:text-[#3B82F6]" />
+                <ShieldCheckIcon className="w-6 h-6 text-[#2563EB] dark:text-[#3B82F6]" />
               </div>
               <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-                Intelligent Insights
+                Analyst-Style Insights
               </h3>
               <p className="text-[#475569] dark:text-[#CBD5E1] leading-relaxed text-sm">
-                Get portfolio summaries, risk flags, and clear explanations. 
-                Insights are provided automatically—no chat interface required. We never execute trades or modify your data.
+                Portfolio Health Score, Stability Analysis, and scenario-linked insights explain exposure, risks, and potential behavior—without recommendations or execution.
               </p>
             </div>
 
-            {/* Accuracy and Transparency */}
+            {/* Transparent Calculations */}
             <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8">
               <div className="w-12 h-12 rounded-lg bg-[#EFF6FF] dark:bg-[#1E3A8A] flex items-center justify-center mb-6">
                 <TargetIcon className="w-6 h-6 text-[#2563EB] dark:text-[#3B82F6]" />
               </div>
               <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-                Accuracy and Transparency
+                Transparent Calculations
               </h3>
               <p className="text-[#475569] dark:text-[#CBD5E1] leading-relaxed text-sm">
-                Every number is verifiable. See all holdings, verify totals, and understand exactly 
-                how your portfolio is calculated. No hidden calculations.
+                Every metric is verifiable. See how scores are calculated, verify allocations, and understand exactly 
+                how your portfolio structure is analyzed. No black boxes.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* AI Explained - Text-Based Only */}
+      {/* Portfolio Insights - Structure & Risk Focus */}
       <section className="py-16 px-6 bg-[#F6F8FB] dark:bg-[#0F172A]">
         <div className="max-w-[1280px] mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-start">
@@ -282,63 +312,62 @@ export default function HomePage() {
                 Portfolio Insights That Work Like an Analyst
               </h2>
               <p className="text-lg text-[#475569] dark:text-[#CBD5E1] mb-8 leading-relaxed">
-                Get intelligent insights that observe, explain, and flag important changes—but never take action on your behalf.
+                Understand your portfolio structure, identify structural risks, and make complexity understandable—without recommendations or execution.
               </p>
               
               <div className="space-y-4">
                 <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
                   <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    Summarizes Your Portfolio
+                    Explains Portfolio Structure
                   </h3>
                   <p className="text-sm text-[#475569] dark:text-[#CBD5E1]">
-                    Daily and weekly summaries of your portfolio performance, allocation changes, and key insights. 
-                    Inline insights appear on your dashboard—no chat interface required.
+                    Clear breakdown of asset allocation, sector exposure, and stability characteristics. 
+                    Understand how your portfolio is structured across different asset classes and risk profiles.
                   </p>
                 </div>
                 
                 <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
                   <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    Flags Risks and Opportunities
+                    Highlights Structural Risks
                   </h3>
                   <p className="text-sm text-[#475569] dark:text-[#CBD5E1]">
-                    Alerts you to concentration risks, upcoming maturities, and portfolio imbalances—with clear explanations. 
-                    Click "Why?" to understand the reasoning.
+                    Identifies concentration risks, exposure imbalances, and portfolio structure concerns—with explanations of why they matter. 
+                    No recommendations, just clear observations.
                   </p>
                 </div>
                 
                 <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
                   <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    Explains Complex Concepts
+                    Makes Complexity Understandable
                   </h3>
                   <p className="text-sm text-[#475569] dark:text-[#CBD5E1]">
-                    Expandable explanations for metrics like XIRR, sector exposure, or allocation. 
-                    Text-based explanations—no chatbot interface. Insights never modify your financial data.
+                    Explanations for Health Score calculations, Stability Analysis metrics, and scenario-linked insights. 
+                    Clear, educational language—no jargon or hidden meanings.
                   </p>
                 </div>
               </div>
             </div>
             
-            {/* Example Insights */}
+            {/* Example Scenario Insight */}
             <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8">
-              <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-6">Example Insights</h3>
+              <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-6">Example Scenario Insight</h3>
               <div className="space-y-4">
                 <div className="bg-[#F9FAFB] dark:bg-[#334155] rounded-lg border border-[#E5E7EB] dark:border-[#334155] p-4">
-                  <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">Portfolio Summary</p>
+                  <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">Market Drawdown Scenario</p>
                   <p className="text-sm text-[#0F172A] dark:text-[#F8FAFC] leading-relaxed">
-                    Your portfolio shows strong performance this quarter, with equity holdings up 12.5%. 
-                    However, there's concentration risk in the Banking sector at 29%, which exceeds the recommended 25% limit.
+                    Your portfolio has 58% market-linked exposure. In a hypothetical 20% market decline scenario, this exposure suggests moderate portfolio impact, with stability-oriented assets (42%) providing cushioning.
                   </p>
                 </div>
                 
-                <div className="bg-[#FEF3C7] dark:bg-[#78350F] border border-[#F59E0B]/20 dark:border-[#FBBF24]/20 rounded-lg p-4">
+                <div className="bg-[#EFF6FF] dark:bg-[#1E3A8A] border border-[#BFDBFE] dark:border-[#3B82F6] rounded-lg p-4">
                   <div className="flex items-start gap-3">
-                    <InfoIcon className="w-5 h-5 text-[#F59E0B] dark:text-[#FBBF24] flex-shrink-0 mt-0.5" />
+                    <InfoIcon className="w-5 h-5 text-[#2563EB] dark:text-[#60A5FA] flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-semibold text-[#92400E] dark:text-[#FCD34D] mb-1">
-                        Concentration Risk
+                      <p className="text-sm font-semibold text-[#1E40AF] dark:text-[#DBEAFE] mb-1">
+                        Structure-Based Analysis
                       </p>
-                      <p className="text-sm text-[#92400E] dark:text-[#FCD34D]">
-                        Banking sector: 29% (above 25% recommended limit)
+                      <p className="text-sm text-[#1E40AF] dark:text-[#BFDBFE]">
+                        Scenarios illustrate potential portfolio behavior based on current structure—not predictions or recommendations.
                       </p>
                     </div>
                   </div>
@@ -366,7 +395,7 @@ export default function HomePage() {
               { 
                 icon: <ShieldCheckIcon className="w-6 h-6 text-[#2563EB] dark:text-[#3B82F6]" />,
                 title: "Read-Only Access", 
-                desc: "We never execute trades, modify your data, or take any actions on your behalf. This is a read-only portfolio tracker—you maintain full control over your investments."
+                desc: "We never execute trades, modify your data, or take any actions on your behalf. This is a read-only portfolio intelligence platform—you maintain full control over your investments."
               },
               { 
                 icon: <LockIcon className="w-6 h-6 text-[#2563EB] dark:text-[#3B82F6]" />,
@@ -484,19 +513,23 @@ export default function HomePage() {
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircleIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-[#475569] dark:text-[#CBD5E1]">Portfolio Health Score with detailed breakdown</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircleIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-[#475569] dark:text-[#CBD5E1]">Stability & downside analysis</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircleIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-[#475569] dark:text-[#CBD5E1]">Scenario-linked impact insights</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircleIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
                   <span className="text-sm text-[#475569] dark:text-[#CBD5E1]">Advanced analytics (sector, market cap, geography)</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircleIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
                   <span className="text-sm text-[#475569] dark:text-[#CBD5E1]">Unlimited portfolio analyst queries</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircleIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-[#475569] dark:text-[#CBD5E1]">Advanced insights (unlimited)</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircleIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-[#475569] dark:text-[#CBD5E1]">Weekly deep dives & performance attribution</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircleIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
@@ -533,10 +566,10 @@ export default function HomePage() {
       <section className="py-20 px-6 bg-white dark:bg-[#1E293B]">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            Ready to See Your Complete Portfolio?
+            Ready to Understand Your Portfolio — Clearly?
           </h2>
           <p className="text-lg text-[#6B7280] dark:text-[#94A3B8] mb-8">
-            Get started in minutes. Upload your portfolio data and see everything in one place.
+            Get started in minutes. Upload your portfolio data and see beyond balances with portfolio intelligence.
           </p>
           <Link
             href="/onboarding"
@@ -556,10 +589,7 @@ export default function HomePage() {
         <div className="max-w-[1280px] mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#0A2540] dark:bg-[#1E40AF] flex items-center justify-center">
-                <WalletIcon className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">WealthLens</span>
+              <LogoLockup linkToHome={true} />
             </div>
             
             <div className="flex items-center gap-6 text-sm text-[#6B7280] dark:text-[#94A3B8]">

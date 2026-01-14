@@ -129,11 +129,6 @@ export default function MutualFundsPage() {
               const currentValue = h.currentValue || h.investedValue;
               const latestNav = units > 0 ? currentValue / units : 0;
               
-              // Debug logging for NAV calculation (log first 3 holdings to avoid spam)
-              if (idx < 3 && units > 0) {
-                console.log(`[MF Page] Holding ${h.name}: currentValue=${currentValue.toFixed(2)}, units=${units.toFixed(4)}, latestNav=${latestNav.toFixed(4)}, investedValue=${h.investedValue.toFixed(2)}, avgBuyNav=${avgBuyNav.toFixed(4)}`);
-              }
-              
               return {
                 id: h.id,
                 name: h.name,
@@ -204,20 +199,15 @@ export default function MutualFundsPage() {
       
       if (response.ok) {
         const data = await response.json();
-        console.log('[MF Page] NAV update response:', data);
-        console.log('[MF Page] Response details - success:', data.success, 'updated:', data.updated, 'failed:', data.failed);
         
         if (data.success && data.updated > 0) {
           // Refresh data to show updated NAVs
-          console.log('[MF Page] ✅ NAV update succeeded, refreshing data...');
           if (user?.id) {
             await fetchData(user.id);
-            console.log('[MF Page] ✅ Data refreshed after NAV update');
           }
           alert(`NAVs updated successfully! ${data.updated} schemes updated.`);
         } else if (data.success && data.updated === 0) {
           // Success but no NAVs updated - might be because they're already up to date
-          console.log('[MF Page] ⚠️ NAV update succeeded but no NAVs were updated (may already be up to date)');
           // Still refresh to ensure we have latest data
           if (user?.id) {
             await fetchData(user.id);

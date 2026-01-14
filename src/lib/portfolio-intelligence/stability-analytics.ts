@@ -280,25 +280,25 @@ export function calculateStabilityAnalysis(
   const insights: string[] = [];
   
   if (metrics.capitalProtected.percentage < 20 && summary.totalValue > 500000) {
-    insights.push('Review stability-oriented assets for portfolio balance');
+    insights.push(`${metrics.capitalProtected.percentage.toFixed(0)}% in stability-oriented assets — consider reviewing allocation for portfolio balance`);
   }
   
   if (metrics.stabilityScore >= 60) {
-    insights.push('Your portfolio has strong stability characteristics');
+    insights.push(`Stability score of ${metrics.stabilityScore} indicates strong stability characteristics`);
   } else if (metrics.stabilityScore < 30) {
-    insights.push('Portfolio is heavily market-linked — review stability balance');
+    insights.push(`Stability score of ${metrics.stabilityScore} — portfolio is primarily market-linked, which may increase volatility`);
   }
   
   if (creditRisk.riskLevel === 'High') {
-    insights.push('Review credit risk exposure in bonds');
+    insights.push(`High credit risk exposure in debt instruments — review to understand potential impact`);
   }
   
   if (retirement.percentage < 10 && summary.totalValue > 1000000) {
-    insights.push('Review retirement allocation for tax efficiency');
+    insights.push(`${retirement.percentage.toFixed(0)}% in retirement instruments — review to understand potential tax efficiency benefits`);
   }
   
   if (retirement.taxBenefits.eeeAssets > 0) {
-    insights.push(`${((retirement.taxBenefits.eeeAssets / summary.totalValue) * 100).toFixed(1)}% in EEE assets (EPF/PPF) provides tax efficiency`);
+    insights.push(`${((retirement.taxBenefits.eeeAssets / summary.totalValue) * 100).toFixed(1)}% in EEE assets (EPF/PPF) provides tax efficiency through long-term savings`);
   }
   
   return {

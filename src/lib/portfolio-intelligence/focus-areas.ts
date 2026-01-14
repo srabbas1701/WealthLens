@@ -7,6 +7,8 @@
 
 import type { Deduction } from './health-score';
 import { getRiskExplanation } from './risk-explanations';
+import { severityToRiskLevel } from '@/utils/riskMapper';
+import type { RiskLevel } from '@/constants/riskColors';
 
 export interface FocusArea {
   title: string;

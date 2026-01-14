@@ -16,8 +16,9 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { WalletIcon, FileIcon } from '@/components/icons';
+import { FileIcon } from '@/components/icons';
 import { useCurrency } from './AppHeader';
+import { LogoLockup } from '@/components/LogoLockup';
 
 interface DemoHeaderProps {
   showBackButton?: boolean;
@@ -43,12 +44,7 @@ export function DemoHeader({
       <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
         {/* Left: Logo and Back Button */}
         <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#0A2540] flex items-center justify-center">
-              <WalletIcon className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-lg font-semibold text-[#0F172A]">WealthLens</span>
-          </Link>
+          <LogoLockup />
           
           {showBackButton && (
             <Link 

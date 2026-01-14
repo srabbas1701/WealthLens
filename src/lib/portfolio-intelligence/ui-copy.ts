@@ -20,25 +20,25 @@ export const HEALTH_SCORE_COPY = {
       label: 'Excellent',
       range: '80–100',
       color: 'green',
-      insight: 'Your portfolio is well-diversified with healthy stability and manageable risk.',
+      insight: 'Your portfolio demonstrates strong diversification, balanced allocation, and manageable risk characteristics.',
     },
     good: {
       label: 'Good',
       range: '65–79',
       color: 'blue',
-      insight: 'Your portfolio is generally healthy, with a few areas that can be optimized.',
+      insight: 'Your portfolio shows healthy structure overall, with specific areas that may benefit from review and optimization.',
     },
     fair: {
       label: 'Fair',
       range: '50–64',
       color: 'amber',
-      insight: 'Your portfolio shows moderate risk concentration and could benefit from better balance.',
+      insight: 'Your portfolio shows moderate risk concentration and structural imbalances that may benefit from review.',
     },
     poor: {
       label: 'Needs Attention',
       range: '<50',
       color: 'red',
-      insight: 'Your portfolio has elevated risk and structural imbalances that need review.',
+      insight: 'Your portfolio shows elevated risk concentration and structural imbalances that warrant review.',
     },
   },
   
@@ -53,21 +53,21 @@ export const HEALTH_SCORE_COPY = {
       },
     },
     concentration_risk: {
-      tooltip: 'Checks over-dependence on a single stock, sector, or asset type.',
+      tooltip: 'Measures over-dependence on a single stock, sector, or asset type that may increase portfolio vulnerability.',
       insights: {
-        excellent: 'No major concentration risks detected.',
-        good: 'Some exposure concentration exists but remains controlled.',
-        fair: 'High concentration in specific areas increases downside risk.',
-        poor: 'Severe concentration may amplify losses during market stress.',
+        excellent: 'No significant concentration risks detected across holdings.',
+        good: 'Some exposure concentration exists but remains within manageable limits.',
+        fair: 'High concentration in specific areas may increase portfolio vulnerability to those assets.',
+        poor: 'Significant concentration detected, which may amplify portfolio impact from individual asset performance.',
       },
     },
     diversification_overlap: {
-      tooltip: 'Identifies overlap across mutual funds and redundancy in holdings.',
+      tooltip: 'Identifies overlap across mutual funds and redundancy in holdings that may reduce diversification benefits.',
       insights: {
-        excellent: 'Your investments are well diversified with minimal overlap.',
-        good: 'Some overlap exists but does not significantly reduce diversification.',
-        fair: 'Multiple funds invest in similar stocks, limiting diversification.',
-        poor: 'High redundancy detected — diversification benefits are reduced.',
+        excellent: 'Your investments are well diversified with minimal overlap across funds.',
+        good: 'Some overlap exists but does not significantly reduce overall diversification benefits.',
+        fair: 'Multiple funds invest in similar stocks, which may limit diversification benefits.',
+        poor: 'High redundancy detected across holdings, which may reduce diversification benefits.',
       },
     },
     market_cap_balance: {
@@ -80,21 +80,21 @@ export const HEALTH_SCORE_COPY = {
       },
     },
     sector_balance: {
-      tooltip: 'Measures dependence on specific sectors.',
+      tooltip: 'Measures dependence on specific sectors, which may increase exposure to sector-specific risks.',
       insights: {
-        excellent: 'Sector exposure is evenly spread.',
-        good: 'Some sectors have higher weight but remain acceptable.',
-        fair: 'Sector concentration may increase cyclical risk.',
-        poor: 'Heavy sector dependence increases vulnerability.',
+        excellent: 'Sector exposure is well distributed across multiple sectors.',
+        good: 'Some sectors have higher weight but remain within acceptable diversification limits.',
+        fair: 'Sector concentration may increase exposure to sector-specific cyclical risks.',
+        poor: 'Heavy sector dependence increases vulnerability to sector-specific market movements.',
       },
     },
     geography_balance: {
-      tooltip: 'Tracks domestic vs international exposure.',
+      tooltip: 'Tracks domestic vs international exposure to assess geographic diversification.',
       insights: {
-        excellent: 'Your portfolio benefits from geographic diversification.',
-        good: 'International exposure exists but is limited.',
-        fair: 'Portfolio is heavily dependent on domestic markets.',
-        poor: 'Lack of global exposure may increase country-specific risk.',
+        excellent: 'Your portfolio benefits from geographic diversification across domestic and international markets.',
+        good: 'International exposure exists but is limited, reducing some diversification benefits.',
+        fair: 'Portfolio is heavily dependent on domestic markets, which may increase country-specific risk exposure.',
+        poor: 'Lack of global exposure may increase vulnerability to country-specific market movements.',
       },
     },
     investment_quality: {
@@ -140,7 +140,8 @@ export const EXPOSURE_COPY = {
   
   sectorExposure: {
     header: 'Sector Exposure (Direct + Mutual Funds)',
-    benchmarkNote: 'Compared against broad market benchmarks.',
+    benchmarkNote: 'Compared against NIFTY 500 benchmark.',
+    benchmarkLabel: 'NIFTY 500',
     concentrationAlerts: {
       high: {
         label: 'High Sector Exposure',
@@ -152,10 +153,35 @@ export const EXPOSURE_COPY = {
       },
     },
     footer: 'High sector exposure can increase portfolio volatility during sector downturns.',
+    sectorClassifications: {
+      defensive: {
+        label: 'Defensive',
+        description: 'Sectors that typically perform relatively stable during market stress (e.g., FMCG, Pharma, Utilities).',
+      },
+      cyclical: {
+        label: 'Cyclical',
+        description: 'Sectors sensitive to economic cycles (e.g., Banking, Auto, Real Estate).',
+      },
+      growth: {
+        label: 'Growth',
+        description: 'Sectors with high growth potential but higher volatility (e.g., Technology, Consumer Discretionary).',
+      },
+    },
+    impactLevels: {
+      low: 'Low impact on portfolio volatility',
+      medium: 'Moderate impact on portfolio volatility',
+      high: 'High impact on portfolio volatility',
+    },
+    focusSection: {
+      title: 'Sector Focus',
+      description: 'Key insights about your sector allocation and its implications.',
+    },
   },
   
   marketCapExposure: {
     header: 'Market Capitalization Exposure',
+    benchmarkNote: 'Compared against market benchmark allocation.',
+    benchmarkLabel: 'Market Average',
     riskProfiles: {
       largeCap: {
         label: 'Large Cap Dominant',
@@ -171,36 +197,64 @@ export const EXPOSURE_COPY = {
       },
     },
     footer: 'Market cap mix influences portfolio volatility more than returns.',
+    volatilityBands: {
+      low: 'Lower volatility range',
+      medium: 'Moderate volatility range',
+      high: 'Higher volatility range',
+    },
+    timeHorizonNote: 'Market cap allocation considerations vary based on investment time horizon and risk tolerance.',
+    focusSection: {
+      title: 'Market Cap Focus',
+      description: 'Understanding your market cap mix and its implications for portfolio behavior.',
+    },
   },
   
   geographyExposure: {
     header: 'Geographic Exposure',
+    benchmarkNote: 'Compared against recommended diversification benchmarks.',
+    benchmarkLabel: 'Diversification Benchmark',
     insights: {
       excellent: 'Your portfolio benefits from international diversification.',
       good: 'Limited international exposure reduces currency diversification.',
       fair: 'Portfolio is almost entirely dependent on domestic markets.',
     },
     sourceNote: 'International exposure typically comes via mutual funds and ETFs.',
+    currencyDiversification: {
+      title: 'Currency Diversification',
+      description: 'International exposure provides currency diversification, which may reduce country-specific currency risk.',
+    },
+    correlationReduction: {
+      title: 'Correlation Reduction',
+      description: 'Geographic diversification helps reduce portfolio correlation, as different markets may respond differently to global events.',
+    },
+    globalSectorAccess: {
+      title: 'Global Sector Access',
+      description: 'International exposure provides access to sectors and companies not available in domestic markets.',
+    },
+    focusSection: {
+      title: 'Geographic Focus',
+      description: 'Key insights about your geographic allocation and its diversification benefits.',
+    },
   },
 };
 
 export const STABILITY_COPY = {
-  header: 'Stability & Capital Protection',
+  header: 'Stability & Downside Protection',
   insights: {
-    excellent: 'A significant portion of your wealth is in stability-oriented assets.',
-    good: 'Stable assets provide downside resilience.',
-    fair: 'Portfolio relies heavily on market-linked assets.',
+    excellent: 'A significant portion of your wealth is in stability-oriented assets, which typically reduce portfolio volatility during market stress.',
+    good: 'Stability-oriented assets provide downside resilience, though returns may vary based on market conditions.',
+    fair: 'Portfolio relies heavily on market-linked assets, which may experience higher volatility.',
   },
-  explanation: 'Stability-oriented assets (FDs, PPF, EPF) help preserve wealth during market stress. Policy-backed instruments like NPS are subject to policy changes and market conditions.',
-  stabilityOrientedTooltip: 'Stability-oriented assets include FDs (bank-guaranteed), PPF/EPF (government-backed), and policy-backed instruments like NPS. Note: Policy-backed instruments are not guaranteed and subject to policy changes and market conditions.',
+  explanation: 'Stability-oriented assets (FDs, PPF, EPF) help reduce portfolio volatility during market stress, though returns may vary. Policy-backed instruments like NPS are long-term retirement savings vehicles subject to policy changes and market conditions.',
+  stabilityOrientedTooltip: 'Stability-oriented assets include FDs (bank-guaranteed up to deposit insurance limits), PPF/EPF (government-backed long-term savings), and policy-backed instruments like NPS (long-term retirement savings subject to policy changes). These assets typically reduce portfolio volatility, though returns are not guaranteed and may vary based on market conditions and policy changes.',
   creditRisk: {
-    low: 'Credit risk exposure is minimal and well-managed.',
-    medium: 'Some credit risk exists but remains acceptable.',
-    high: 'Review credit risk exposure in bonds.',
+    low: 'Credit risk exposure is minimal and well-managed across debt instruments.',
+    medium: 'Some credit risk exists in debt holdings but remains within acceptable limits.',
+    high: 'Review credit risk exposure in bonds and debt instruments to understand potential impact.',
   },
   retirement: {
-    good: 'Your retirement allocation provides tax efficiency and stability.',
-    low: 'Review retirement allocation for tax efficiency.',
+    good: 'Your retirement allocation provides tax efficiency and long-term stability through policy-backed instruments.',
+    low: 'Review retirement allocation to understand potential tax efficiency benefits from long-term instruments like EPF, PPF, and NPS.',
   },
 };
 
@@ -250,13 +304,54 @@ export const QUALITY_COPY = {
 
 export const SCENARIO_COPY = {
   header: 'Scenario Impact Analysis',
-  description: 'Illustrates how your portfolio may behave under different market conditions.',
+  description: 'Explore how your portfolio structure may respond to different hypothetical market conditions. These scenarios are educational and help you understand risk characteristics.',
+  disclaimer: 'All scenarios are hypothetical and for educational purposes only. They illustrate potential portfolio behavior based on current exposure and are not predictions of future performance.',
+  
   scenarios: {
-    marketDecline: 'If markets decline by {percent}%, your portfolio may decline approximately {impact}%.',
-    sectorStress: 'Sector-specific stress could impact your portfolio unevenly.',
-    rateShock: 'Interest rate changes may affect debt and bond holdings.',
+    marketDrawdown: {
+      title: 'Market Drawdown Scenario',
+      description: 'Illustrates portfolio impact if equity markets decline.',
+      percent: -20,
+      explanation: {
+        what: 'In a market decline scenario, market-linked assets (equity, equity mutual funds) typically experience value changes, while stability-oriented assets provide cushioning.',
+        why: 'Your portfolio has {marketLinkedPct}% in market-linked assets, which means {marketLinkedPct}% of your portfolio value is exposed to equity market movements.',
+        meaning: 'Stability-oriented assets ({stabilityPct}%) provide downside protection during market stress, reducing overall portfolio impact compared to a fully equity portfolio.',
+      },
+    },
+    sectorShock: {
+      title: 'Sector Shock Scenario',
+      description: 'Shows impact if your largest sector exposure underperforms.',
+      explanation: {
+        what: 'Sector-specific shocks occur when a particular industry faces challenges, affecting companies within that sector.',
+        why: 'Your largest sector exposure is {sector} at {pct}%, meaning a significant portion of your portfolio is linked to this sector\'s performance.',
+        meaning: 'High sector concentration increases vulnerability to sector-specific risks, while diversified portfolios are less affected by individual sector movements.',
+      },
+    },
+    rateShock: {
+      title: 'Interest Rate Shock Scenario',
+      description: 'Explains how interest rate changes may affect different asset types.',
+      explanation: {
+        what: 'Interest rate changes can affect both market-linked assets (through valuation) and stability-oriented assets (through returns).',
+        why: 'Market-linked assets may experience volatility due to changing valuations, while stability-oriented assets like FDs may see return adjustments but maintain principal stability.',
+        meaning: 'A balanced portfolio with both market-linked and stability-oriented assets may experience moderate volatility during rate changes compared to a single-asset-type portfolio.',
+      },
+    },
+    marketRecovery: {
+      title: 'Market Recovery Scenario',
+      description: 'Illustrates participation in long-term market recovery.',
+      explanation: {
+        what: 'During market recovery, equity markets typically see value appreciation, benefiting market-linked portfolios.',
+        why: 'Your {equityPct}% equity exposure means your portfolio would participate in market recovery, while stability-oriented assets provide stability but lower participation.',
+        meaning: 'A portfolio with equity exposure participates in long-term market growth, while stability-oriented assets preserve capital but may have lower growth participation.',
+      },
+    },
   },
-  disclaimer: 'Scenarios are hypothetical and for risk understanding only.',
+  
+  sections: {
+    whatHappens: 'What Happens',
+    whyThisHappens: 'Why This Happens',
+    whatThisMeans: 'What This Means',
+  },
 };
 
 export const TRUST_STATEMENT = 

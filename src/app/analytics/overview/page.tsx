@@ -17,6 +17,13 @@ import {
   InfoIcon,
   CheckCircleIcon,
   ArrowRightIcon,
+  TargetIcon,
+  ShieldCheckIcon,
+  ChartIcon,
+  LayersIcon,
+  BuildingIcon,
+  TrendingUpIcon,
+  GlobeIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
@@ -306,23 +313,109 @@ export default function AnalyticsOverviewPage() {
           <h2 className="text-lg font-semibold text-[#0F172A] mb-6">Analytics Screens</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* MF Exposure Analytics */}
+            {/* Portfolio Health Score */}
             <Link
-              href="/analytics/mutualfund-exposure"
+              href="/analytics/health"
               className="bg-white rounded-xl border-2 border-[#E5E7EB] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
             >
               <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-semibold text-[#0F172A] mb-2">
-                    Mutual Fund Exposure Analytics
-                  </h3>
-                  <p className="text-sm text-[#6B7280]">
-                    Understanding what your mutual funds are invested in
-                  </p>
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="p-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                    <TargetIcon className="w-5 h-5 text-[#2563EB] dark:text-blue-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Portfolio Health Score
+                    </h3>
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      Overall portfolio balance, diversification, and risk structure
+                    </p>
+                  </div>
                 </div>
-                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
               </div>
-              <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+              <div className="flex items-center gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                <CheckCircleIcon className="w-4 h-4" />
+                <span>7-pillar health assessment with actionable insights</span>
+              </div>
+            </Link>
+
+            {/* Stability & Downside Protection */}
+            <Link
+              href="/analytics/stability"
+              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="p-2 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                    <ShieldCheckIcon className="w-5 h-5 text-[#10B981] dark:text-green-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Stability & Downside Protection
+                    </h3>
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      Portfolio resilience during market stress
+                    </p>
+                  </div>
+                </div>
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                <CheckCircleIcon className="w-4 h-4" />
+                <span>Stability score, credit risk, and liquidity analysis</span>
+              </div>
+            </Link>
+
+            {/* Scenario Impact Analysis */}
+            <Link
+              href="/analytics/scenarios"
+              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="p-2 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
+                    <ChartIcon className="w-5 h-5 text-[#7C3AED] dark:text-purple-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Scenario Impact Analysis
+                    </h3>
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      Explore how your portfolio may respond to different market conditions
+                    </p>
+                  </div>
+                </div>
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                <CheckCircleIcon className="w-4 h-4" />
+                <span>Market drawdown, sector shock, rate shock, and recovery scenarios</span>
+              </div>
+            </Link>
+
+            {/* MF Exposure Analytics */}
+            <Link
+              href="/analytics/mutualfund-exposure"
+              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="p-2 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
+                    <LayersIcon className="w-5 h-5 text-[#F97316] dark:text-orange-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Mutual Fund Exposure Analytics
+                    </h3>
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      Understanding what your mutual funds are invested in
+                    </p>
+                  </div>
+                </div>
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
                 <CheckCircleIcon className="w-4 h-4" />
                 <span>Equity, Debt, Other exposure breakdown</span>
               </div>
@@ -331,20 +424,25 @@ export default function AnalyticsOverviewPage() {
             {/* Sector Exposure */}
             <Link
               href="/analytics/sector-exposure"
-              className="bg-white rounded-xl border-2 border-[#E5E7EB] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
             >
               <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-semibold text-[#0F172A] mb-2">
-                    Sector Exposure Analysis
-                  </h3>
-                  <p className="text-sm text-[#6B7280]">
-                    Which sectors are you exposed to?
-                  </p>
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="p-2 bg-cyan-50 dark:bg-cyan-950/20 rounded-lg">
+                    <BuildingIcon className="w-5 h-5 text-[#06B6D4] dark:text-cyan-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Sector Exposure Analysis
+                    </h3>
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      Which sectors are you exposed to?
+                    </p>
+                  </div>
                 </div>
-                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
               </div>
-              <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+              <div className="flex items-center gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
                 <CheckCircleIcon className="w-4 h-4" />
                 <span>Technology, Banking, FMCG, Pharma, etc.</span>
               </div>
@@ -353,20 +451,25 @@ export default function AnalyticsOverviewPage() {
             {/* Market Cap Exposure */}
             <Link
               href="/analytics/marketcap-exposure"
-              className="bg-white rounded-xl border-2 border-[#E5E7EB] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
             >
               <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-semibold text-[#0F172A] mb-2">
-                    Market Cap Exposure
-                  </h3>
-                  <p className="text-sm text-[#6B7280]">
-                    Large cap, mid cap, or small cap exposure?
-                  </p>
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="p-2 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg">
+                    <TrendingUpIcon className="w-5 h-5 text-[#10B981] dark:text-emerald-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Market Cap Exposure
+                    </h3>
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      Large cap, mid cap, or small cap exposure?
+                    </p>
+                  </div>
                 </div>
-                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
               </div>
-              <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+              <div className="flex items-center gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
                 <CheckCircleIcon className="w-4 h-4" />
                 <span>Large, Mid, Small cap breakdown</span>
               </div>
@@ -375,20 +478,25 @@ export default function AnalyticsOverviewPage() {
             {/* Geography Exposure */}
             <Link
               href="/analytics/geography-exposure"
-              className="bg-white rounded-xl border-2 border-[#E5E7EB] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
             >
               <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-semibold text-[#0F172A] mb-2">
-                    Geography Exposure Analysis
-                  </h3>
-                  <p className="text-sm text-[#6B7280]">
-                    India vs International exposure
-                  </p>
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="p-2 bg-indigo-50 dark:bg-indigo-950/20 rounded-lg">
+                    <GlobeIcon className="w-5 h-5 text-[#6366F1] dark:text-indigo-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Geography Exposure Analysis
+                    </h3>
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      India vs International exposure
+                    </p>
+                  </div>
                 </div>
-                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
+                <ArrowRightIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] group-hover:text-[#2563EB] transition-colors flex-shrink-0" />
               </div>
-              <div className="flex items-center gap-2 text-xs text-[#6B7280]">
+              <div className="flex items-center gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
                 <CheckCircleIcon className="w-4 h-4" />
                 <span>Domestic and international breakdown</span>
               </div>

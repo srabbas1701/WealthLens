@@ -107,33 +107,12 @@ export async function GET() {
         : undefined,
     };
     
-    // Log for debugging
-    console.log('=== OpenAI Key Debug ===');
-    console.log('Process CWD:', processCwd);
-    console.log('.env.local path:', envLocalPath);
-    console.log('.env.local exists:', envLocalExists);
-    if (envFileKey) {
-      console.log('✅ Key from .env.local file:', `${envFileKey.substring(0, 15)}...${envFileKey.substring(envFileKey.length - 4)} (length: ${envFileKey.length})`);
-    }
-    if (process.env.OPENAI_API_KEY) {
-      console.log('⚠️ Key from process.env:', `${process.env.OPENAI_API_KEY.substring(0, 15)}...${process.env.OPENAI_API_KEY.substring(process.env.OPENAI_API_KEY.length - 6)} (length: ${process.env.OPENAI_API_KEY.length})`);
-    }
-    console.log('Using key from:', source);
-    console.log('Clean key starts with:', cleanKey.substring(0, 15));
-    console.log('Clean key ends with:', cleanKey.substring(Math.max(0, cleanKey.length - 6)));
-    
     if (envFileKey && process.env.OPENAI_API_KEY && !envFileKey.includes(process.env.OPENAI_API_KEY.substring(10, 30))) {
       console.error('❌ CRITICAL: Keys do NOT match!');
-      console.error('  .env.local key:', envFileKey.substring(0, 20) + '...');
-      console.error('  process.env key:', process.env.OPENAI_API_KEY.substring(0, 20) + '...');
       console.error('Using key from .env.local file (ignoring process.env)');
     }
   } else {
     console.error('OPENAI_API_KEY not found in .env.local or process.env');
-    console.error('Make sure:');
-    console.error('1. .env.local exists at:', envLocalPath);
-    console.error('2. File contains: OPENAI_API_KEY=sk-...');
-    console.error('3. Server was restarted after adding the key');
   }
 
   // Check if module can be loaded
@@ -162,8 +141,6 @@ export async function GET() {
         .replace(/[\u200B-\u200D\uFEFF]/g, '')
         .trim();
       
-      console.log('Testing API with key:', `${cleanKey.substring(0, 15)}...${cleanKey.substring(cleanKey.length - 4)}`);
-      
       const openai = new OpenAI({
         apiKey: cleanKey,
       });
@@ -179,7 +156,6 @@ export async function GET() {
 
       results.api_test.status = 'success';
       results.api_test.message = response.choices[0]?.message?.content || 'No response';
-      console.log('✅ API test successful!');
     } catch (error: any) {
       results.api_test.status = 'failed';
       results.api_test.error = error.message || 'Unknown error';
@@ -187,9 +163,6 @@ export async function GET() {
       if (error.code === 'invalid_api_key' || error.status === 401) {
         results.api_test.error = `Invalid API Key (401): ${error.message}. The key might be expired, revoked, or incorrect. Check at https://platform.openai.com/account/api-keys`;
         console.error('❌ API Key Error - The key being used is invalid');
-        console.error('Key being tested:', rawKey ? `${rawKey.substring(0, 20)}...${rawKey.substring(rawKey.length - 10)}` : 'null');
-      } else {
-        console.error('API Error:', error.message);
       }
     }
   } else {

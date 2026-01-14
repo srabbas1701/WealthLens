@@ -299,8 +299,6 @@ async function resolveMFScheme(
     return null;
   }
   
-  console.log(`  ✅ Resolved MF scheme: "${holding.name}" → ISIN: ${resolvedIsin}, Scheme Code: ${bestMatch.scheme_code}, Name: ${bestMatch.scheme_name}`);
-  
   return {
     isin: resolvedIsin,
     schemeCode: bestMatch.scheme_code,
@@ -366,7 +364,6 @@ async function findAsset(
       .single();
     
     if (assetByIsin) {
-      console.log(`  Found asset by ISIN: ${isinToSearch} → ${assetByIsin.name}`);
       return assetByIsin;
     }
   }
@@ -380,7 +377,6 @@ async function findAsset(
       .single();
     
     if (assetBySymbol) {
-      console.log(`  Found asset by Symbol: ${holding.symbol} → ${assetBySymbol.name}`);
       return assetBySymbol;
     }
   }
@@ -395,7 +391,6 @@ async function findAsset(
       .maybeSingle();
     
     if (assetByName) {
-      console.log(`  Found asset by exact name: ${holding.name}`);
       return assetByName;
     }
     
@@ -409,12 +404,10 @@ async function findAsset(
       .maybeSingle();
     
     if (assetByFuzzyName) {
-      console.log(`  Found asset by fuzzy name: "${holding.name}" → "${assetByFuzzyName.name}"`);
       return assetByFuzzyName;
     }
   }
   
-  console.log(`  No existing asset found for: ${holding.name || holding.symbol || holding.isin}`);
   return null;
 }
 
@@ -520,18 +513,11 @@ async function createAsset(
   }
   
   if (isMF) {
-    if (newAsset.isin) {
-      console.log(`  ✅ Created MF asset: ${newAsset.name} (${newAsset.asset_type}) with ISIN: ${newAsset.isin}`);
-    } else {
-      console.log(`  ✅ Created MF asset: ${newAsset.name} (${newAsset.asset_type}) without ISIN (will be enriched later)`);
+    if (!newAsset.isin) {
+      // Will be enriched later via ISIN backfill
     }
-  } else if (isETF) {
-    console.log(`  ✅ Created ETF asset: ${newAsset.name} with symbol: ${newAsset.symbol || 'MISSING'}`);
-    if (!newAsset.symbol) {
-      console.warn(`  ⚠️ ETF "${newAsset.name}" created without trading symbol - price updates will fail!`);
-    }
-  } else {
-    console.log(`  Created new asset: ${newAsset.name} (${newAsset.asset_type})`);
+  } else if (isETF && !newAsset.symbol) {
+    console.warn(`  ⚠️ ETF "${newAsset.name}" created without trading symbol - price updates will fail!`);
   }
   
   return newAsset;
@@ -597,7 +583,6 @@ async function mergeHolding(
       const priceData = await getStockPrice(asset.data.symbol);
       if (priceData && priceData.price) {
         currentValue = mergedQty * priceData.price;
-        console.log(`  Using stored price for ${asset.data.symbol}: ₹${priceData.price} (Yahoo EOD: ${priceData.priceDate})`);
       } else {
         // No price available - set to null, will be updated by price update job
         // Do NOT use avg_buy_price as fallback
@@ -625,11 +610,6 @@ async function mergeHolding(
       throw new Error(`Failed to merge holding: ${error.message}`);
     }
     
-    console.log(`  Merged holding: ${holding.name}`);
-    console.log(`    Quantity: ${existingQty} + ${newQty} = ${mergedQty}`);
-    console.log(`    Avg Price: ${formatIndianCurrency(existingPrice)} + ${formatIndianCurrency(newPrice)} → ${formatIndianCurrency(mergedAvgPrice)}`);
-    console.log(`    Invested: ${formatIndianCurrency(mergedInvestedValue)}`);
-    
     return { created: false, merged: true };
   } else {
     // INSERT new holding
@@ -649,7 +629,6 @@ async function mergeHolding(
       const priceData = await getStockPrice(asset.data.symbol);
       if (priceData && priceData.price) {
         currentValue = holding.quantity * priceData.price;
-        console.log(`  Using stored price for ${asset.data.symbol}: ₹${priceData.price} (Yahoo EOD: ${priceData.priceDate})`);
       } else {
         // No price available - set to null, will be updated by price update job
         // Do NOT use avg_buy_price as fallback
@@ -676,11 +655,6 @@ async function mergeHolding(
     if (error) {
       throw new Error(`Failed to create holding: ${error.message}`);
     }
-    
-    console.log(`  Created holding: ${holding.name}`);
-    console.log(`    Quantity: ${holding.quantity}`);
-    console.log(`    Avg Price: ${formatIndianCurrency(holding.average_price)}`);
-    console.log(`    Invested: ${formatIndianCurrency(computedInvestedValue)}`);
     
     return { created: true, merged: false };
   }
@@ -721,7 +695,6 @@ async function recalculateMetrics(
   }
   
   if (!holdings || holdings.length === 0) {
-    console.log('No holdings found, skipping metrics calculation');
     return;
   }
   
@@ -734,16 +707,6 @@ async function recalculateMetrics(
   }));
   
   const metrics = calculatePortfolioMetrics(holdingsForMetrics);
-  
-  console.log('Calculated metrics:');
-  console.log(`  Total Value: ${formatIndianCurrency(metrics.totalInvestedValue)}`);
-  console.log(`  Equity: ${metrics.equityPct.toFixed(1)}%`);
-  console.log(`  Debt: ${metrics.debtPct.toFixed(1)}%`);
-  console.log(`  Gold: ${metrics.goldPct.toFixed(1)}%`);
-  console.log(`  Cash: ${metrics.cashPct.toFixed(1)}%`);
-  console.log(`  Risk Score: ${metrics.riskScore} (${metrics.riskLabel})`);
-  console.log(`  Diversification: ${metrics.diversificationScore}`);
-  console.log(`  Top Holding: ${metrics.topHoldingPct.toFixed(1)}%`);
   
   // Verify percentages sum to ~100%
   const totalPct = metrics.equityPct + metrics.debtPct + metrics.goldPct + 
@@ -774,8 +737,6 @@ async function recalculateMetrics(
   
   if (metricsError) {
     console.error('Failed to update metrics:', metricsError);
-  } else {
-    console.log('Portfolio metrics updated successfully');
   }
   
   // Update portfolio total value
@@ -790,8 +751,6 @@ async function recalculateMetrics(
   
   if (portfolioError) {
     console.error('Failed to update portfolio total:', portfolioError);
-  } else {
-    console.log(`Portfolio total value updated: ${formatIndianCurrency(metrics.totalInvestedValue)}`);
   }
 }
 
@@ -894,10 +853,6 @@ async function generateInsights(
  * - No holding exceeds 100% allocation
  */
 export async function POST(request: NextRequest) {
-  console.log('\n========================================');
-  console.log('Portfolio Upload Confirm');
-  console.log('========================================');
-  
   try {
     const body: ConfirmUploadRequest = await request.json();
     const { user_id, holdings, source } = body;
@@ -927,7 +882,6 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    console.log(`Processing ${validHoldings.length} valid holdings for user ${user_id}`);
     
     // Use admin client for database operations
     const supabase = createAdminClient();
@@ -967,7 +921,6 @@ export async function POST(request: NextRequest) {
         }
         throw userError;
       }
-      console.log('Created user record');
     }
     
     // Get or create user's primary portfolio
@@ -996,7 +949,6 @@ export async function POST(request: NextRequest) {
       }
       
       portfolio = newPortfolio;
-      console.log('Created primary portfolio');
     }
     
     // Process each holding
@@ -1005,7 +957,6 @@ export async function POST(request: NextRequest) {
     let assetsCreated = 0;
     const warnings: string[] = [];
     
-    console.log('\nProcessing holdings:');
     for (const holding of validHoldings) {
       try {
         const isMF = holding.asset_type === 'mutual_fund' || holding.asset_type === 'index_fund';
@@ -1066,18 +1017,10 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    console.log(`\nResults: ${holdingsCreated} created, ${holdingsMerged} merged, ${assetsCreated} new assets`);
-    
-    if (warnings.length > 0) {
-      console.log(`\n⚠️ Warnings (${warnings.length}):`);
-      warnings.forEach(w => console.log(`  - ${w}`));
-    }
-    
     // Recalculate metrics (CRITICAL - ensures consistency)
     await recalculateMetrics(supabase, portfolio.id);
     
     // Generate insights
-    console.log('\nGenerating insights...');
     await generateInsights(supabase, portfolio.id);
     
     // Success response (with warnings if any)

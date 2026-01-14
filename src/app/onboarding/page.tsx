@@ -32,6 +32,7 @@ import {
   EditIcon,
   PlusIcon,
 } from '@/components/icons';
+import { LogoLockup } from '@/components/LogoLockup';
 import PortfolioUploadModal from '@/components/PortfolioUploadModal';
 import ManualInvestmentModal from '@/components/ManualInvestmentModal';
 import { useAuth } from '@/lib/auth';
@@ -276,10 +277,7 @@ export default function OnboardingPage() {
       <header className="px-6 py-4 bg-white border-b border-gray-100">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-              <SparklesIcon className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-semibold text-gray-900">WealthLens</span>
+            <LogoLockup linkToHome={true} />
           </div>
         </div>
       </header>
