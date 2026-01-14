@@ -209,19 +209,19 @@ function LoginContent() {
   const handleVerifyOtp = async () => {
     setError(null);
     setSuccess(null);
-    
+
     const otpValue = otp.join('');
     if (otpValue.length !== 6) {
       setError('Please enter the complete 6-digit OTP');
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     try {
       const fullPhone = `${countryCode}${phoneNumber.replace(/\D/g, '')}`;
       const { error: verifyError } = await verifyOtp(fullPhone, otpValue);
-      
+
       if (verifyError) {
         setError(friendlyErrorMessage(verifyError.message));
         // Clear OTP on error so user can retry
@@ -229,15 +229,16 @@ function LoginContent() {
         if (otpInputRefs.current[0]) {
           otpInputRefs.current[0].focus();
         }
+        setIsLoading(false);
       } else {
         setSuccess('Verified! Please wait...');
-        // Don't redirect here - let onAuthStateChange handle it
-        // The SIGNED_IN event will fire, fetchUserData will run, and then
-        // the redirect useEffect will handle the redirect after isLoading becomes false
+        // Wait a moment for auth state to update, then redirect
+        setTimeout(() => {
+          router.push(redirectUrl);
+        }, 1000);
       }
     } catch {
       setError('Could not verify OTP. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
