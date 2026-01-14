@@ -1,28 +1,30 @@
+'use client';
+
 /**
  * Dashboard Page
- * 
+ *
  * The main portfolio view - answers three questions:
  * 1. "Am I okay?"
  * 2. "What changed?"
  * 3. "Do I need to do anything?"
- * 
+ *
  * USER FLOW:
  * - Only accessible to authenticated users WITH a portfolio
  * - Users without portfolio are redirected to /onboarding
  * - Uses real Supabase authentication
- * 
+ *
  * DESIGN PRINCIPLES:
  * - Calm, neutral, reassuring
  * - No urgency or red/green flashing
  * - No trading language
  * - AI-first summary at top
  * - TRANSPARENT: All investments visible for verification
- * 
+ *
  * DATA FLOW:
  * - Portfolio data fetched from /api/portfolio/data
  * - AI summaries fetched from /api/copilot/daily-summary and weekly-summary
  * - Frontend renders API responses VERBATIM (no recalculation)
- * 
+ *
  * TRANSPARENCY FEATURES:
  * - "All Investments" section shows every holding
  * - Grouped views by Asset Type, Instrument, Sector
@@ -30,9 +32,9 @@
  * - Users can verify totals match sum of holdings
  */
 
-'use client';
+export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
@@ -195,7 +197,7 @@ const EMPTY_PORTFOLIO: PortfolioData = {
 // MAIN COMPONENT
 // ============================================================================
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, profile, authStatus, hasPortfolio, portfolioCheckComplete, signOut } = useAuth();
@@ -1274,5 +1276,20 @@ export default function DashboardPage() {
         existingHolding={null}
       />
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Loading...</p>
+        </div>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }

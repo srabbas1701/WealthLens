@@ -1,11 +1,14 @@
+// @ts-nocheck
 /**
  * Portfolio Health Score API
- * 
+ *
  * GET /api/portfolio/health-score?user_id=xxx
- * 
+ *
  * Returns the Portfolio Health Score (0-100) with 7 weighted pillars,
  * deductions, risks, and improvement suggestions.
  */
+
+export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';

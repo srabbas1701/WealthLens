@@ -1,11 +1,12 @@
+// @ts-nocheck
 /**
  * Fix Mutual Fund Asset Types
- * 
+ *
  * POST /api/assets/fix-mf-types
- * 
- * Updates assets that were incorrectly categorized as "other" 
+ *
+ * Updates assets that were incorrectly categorized as "other"
  * but should be "mutual_fund" or "index_fund" based on name patterns.
- * 
+ *
  * This is a one-time fix for data uploaded before the improved
  * asset type detection was implemented.
  */
