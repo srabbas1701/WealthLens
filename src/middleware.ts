@@ -32,6 +32,17 @@ const PUBLIC_ROUTES = ['/', '/login', '/signup', '/auth/callback'];
 const PROTECTED_ROUTES = ['/dashboard', '/onboarding'];
 
 export async function middleware(request: NextRequest) {
+  // GUARD: Skip Supabase client creation during build or if env vars are missing
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  
+  // If env vars are missing (e.g., during build), skip auth checks
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // During build, just return the response without auth checks
+    // This prevents build errors when environment variables aren't available
+    return NextResponse.next();
+  }
+
   // Create response to potentially modify
   let response = NextResponse.next({
     request,
@@ -39,8 +50,8 @@ export async function middleware(request: NextRequest) {
 
   // Create Supabase client with cookie handling
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
