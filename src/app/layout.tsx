@@ -8,6 +8,9 @@ import { SessionTimeoutProvider } from "@/components/SessionTimeoutProvider";
 import { ThemeProvider } from "@/lib/theme/ThemeProvider";
 import { ToastProvider } from "@/components/Toast";
 
+// Force dynamic rendering to prevent build-time Supabase client creation
+export const dynamic = 'force-dynamic';
+
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
