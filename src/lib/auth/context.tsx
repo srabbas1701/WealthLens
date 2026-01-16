@@ -34,7 +34,7 @@
 
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
@@ -168,14 +168,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       // Fetch primary portfolio
+      // CRITICAL FIX: Use .maybeSingle() instead of .single() to handle 406 errors gracefully
+      // .maybeSingle() returns null instead of error when no rows found
       const { data: portfolioData, error: portfolioError } = await supabase
         .from('portfolios')
         .select('id')
         .eq('user_id', userId)
         .eq('is_primary', true)
-        .single();
+        .maybeSingle();
       
       if (portfolioError) {
+        // Only log if it's not a "not found" error
         const isNotFound = portfolioError.code === 'PGRST116' || portfolioError.code === '406' || portfolioError.message?.includes('406');
         if (!isNotFound) {
           console.error('[Auth] Error fetching portfolio:', portfolioError);
@@ -183,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setHasPortfolio(false);
         setPrimaryPortfolioId(null);
       } else {
+        // .maybeSingle() returns null if no rows found, which is fine
         setHasPortfolio(!!portfolioData);
         setPrimaryPortfolioId(portfolioData?.id || null);
       }
@@ -191,20 +195,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setPortfolioCheckComplete(true);
       
       // Check onboarding completion
+      // CRITICAL FIX: Use .maybeSingle() to handle missing records gracefully
       const { data: onboardingData, error: onboardingError } = await supabase
         .from('onboarding_snapshots')
         .select('is_complete')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
       
       if (onboardingError) {
+        // Only log if it's not a "not found" error
         const isNotFound = onboardingError.code === 'PGRST116' || onboardingError.code === '406' || onboardingError.message?.includes('406');
         if (!isNotFound) {
           console.error('[Auth] Error fetching onboarding status:', onboardingError);
         }
+        setHasCompletedOnboarding(false);
+      } else {
+        // .maybeSingle() returns null if no rows found, which is fine
+        setHasCompletedOnboarding(onboardingData?.is_complete || false);
       }
-      
-      setHasCompletedOnboarding(onboardingData?.is_complete || false);
       
     } catch (error) {
       console.error('[Auth] Error fetching user data:', error);
@@ -213,7 +221,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setHasPortfolio(false);
       setPrimaryPortfolioId(null);
       setHasCompletedOnboarding(false);
-      setPortfolioCheckComplete(true); // Mark as complete even on error
+      // PERMANENT FIX: Always set portfolioCheckComplete to true even on error
+      setPortfolioCheckComplete(true);
     }
   }, [supabase]);
   
@@ -247,6 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     async function initAuthSession() {
       setAuthStatus('loading');
+      sessionStorage.setItem('auth_loading_start', Date.now().toString());
       
       const {
         data: { session },
@@ -258,12 +268,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session.user);
         setAuthStatus('authenticated');
+        sessionStorage.removeItem('auth_loading_start');
         // NOTE: App data (profile, portfolio) is NOT fetched here
         // It will be fetched lazily when useAuthAppData() is called
       } else {
         setSession(null);
         setUser(null);
         setAuthStatus('unauthenticated');
+        sessionStorage.removeItem('auth_loading_start');
       }
     }
     
@@ -275,13 +287,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
       
-      console.log('[Auth] Auth state change:', event);
+      console.log('[Auth] Auth state change:', event, 'Session:', session ? 'present' : 'missing');
       
-      if (session) {
+      if (session && session.user) {
         setSession(session);
         setUser(session.user);
         
+        // PERMANENT FIX: Set authenticated status immediately when we have both session and user
+        // Clear any loading start time
+        sessionStorage.removeItem('auth_loading_start');
         setAuthStatus('authenticated');
+        
         // NOTE: App data is fetched lazily when useAuthAppData() is called
         // If app data was already requested, refresh it after sign in
         if (event === 'SIGNED_IN' && appDataRequested && session.user) {
@@ -291,6 +307,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAuthMethod(determineAuthMethod(session.user));
           } catch (fetchError) {
             console.error('[Auth] Error fetching user data after sign in:', fetchError);
+            // PERMANENT FIX: Ensure portfolioCheckComplete is set even on error
+            setPortfolioCheckComplete(true);
           } finally {
             setAppDataLoading(false);
           }
@@ -320,33 +338,110 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Lazy load app data (profile, portfolio, onboarding)
    * Only called when useAuthAppData() is invoked
+   * PERMANENT FIX: Simplified state management to prevent race conditions
    */
+  const loadingRef = useRef(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   const loadAppData = useCallback(async () => {
-    if (!user?.id || appDataRequested || appDataLoading) {
-      return; // Already loaded or loading
+    // PERMANENT FIX: Clear any existing timeout first
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
     
+    // Prevent duplicate calls using ref
+    if (!user?.id) {
+      console.log('[Auth] loadAppData: No user ID - marking check complete');
+      setPortfolioCheckComplete(true);
+      setAppDataLoading(false);
+      loadingRef.current = false;
+      return;
+    }
+    
+    // PERMANENT FIX: If already loading, check if it's been stuck
+    if (loadingRef.current) {
+      const loadingStartTime = sessionStorage.getItem('loadAppData_start');
+      if (loadingStartTime) {
+        const loadingDuration = Date.now() - parseInt(loadingStartTime);
+        if (loadingDuration > 15000) {
+          // Been loading for more than 15 seconds - force reset
+          console.warn('[Auth] loadAppData: Stuck for', loadingDuration, 'ms - forcing reset');
+          loadingRef.current = false;
+          setPortfolioCheckComplete(true);
+          setAppDataLoading(false);
+          sessionStorage.removeItem('loadAppData_start');
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
+        } else {
+          console.log('[Auth] loadAppData: Already loading - started', Math.round(loadingDuration / 1000), 's ago');
+          return;
+        }
+      } else {
+        // No start time - might be stuck from previous session
+        console.warn('[Auth] loadAppData: Loading ref true but no start time - resetting');
+        loadingRef.current = false;
+      }
+    }
+    
+    console.log('[Auth] loadAppData: Starting load for user:', user.id);
+    loadingRef.current = true;
+    sessionStorage.setItem('loadAppData_start', Date.now().toString());
+    
+    // Mark as requested and start loading
     setAppDataRequested(true);
     setAppDataLoading(true);
     setPortfolioCheckComplete(false);
     
+    // PERMANENT FIX: Set timeout using ref so it can be cleared properly
+    timeoutRef.current = setTimeout(() => {
+      console.warn('[Auth] loadAppData: Timeout (10s) - forcing completion');
+      setPortfolioCheckComplete(true);
+      setAppDataLoading(false);
+      loadingRef.current = false;
+      sessionStorage.removeItem('loadAppData_start');
+      timeoutRef.current = null;
+    }, 10000);
+    
     try {
       await fetchUserData(user.id);
       setAuthMethod(determineAuthMethod(user));
+      console.log('[Auth] loadAppData: Successfully loaded app data');
+      
+      // PERMANENT FIX: Clear timeout on success
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      // PERMANENT FIX: fetchUserData already sets portfolioCheckComplete, but ensure it's set
+      setPortfolioCheckComplete(true);
     } catch (fetchError) {
       console.error('[Auth] Error loading app data:', fetchError);
+      
+      // PERMANENT FIX: Clear timeout on error
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      // PERMANENT FIX: Always set portfolioCheckComplete on error
       setPortfolioCheckComplete(true);
     } finally {
+      // PERMANENT FIX: Always clean up in finally
       setAppDataLoading(false);
+      loadingRef.current = false;
+      sessionStorage.removeItem('loadAppData_start');
+      
+      // PERMANENT FIX: Clear timeout if still active (shouldn't be, but safety check)
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     }
-  }, [user, appDataRequested, appDataLoading, fetchUserData, determineAuthMethod]);
-  
-  // Auto-load app data when user becomes available and app data is requested
-  useEffect(() => {
-    if (user?.id && appDataRequested && !appDataLoading && !portfolioCheckComplete) {
-      loadAppData();
-    }
-  }, [user?.id, appDataRequested, appDataLoading, portfolioCheckComplete, loadAppData]);
+  }, [user?.id, fetchUserData, determineAuthMethod]);
   
   /**
    * Send magic link to email for passwordless login
@@ -420,19 +515,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Verify OTP for mobile number
    * On success, Supabase creates session and onAuthStateChange fires SIGNED_IN
+   * PRODUCTION FIX: Explicitly wait for session to be established
    */
   const verifyOtp = async (phone: string, token: string) => {
     try {
-      const { error } = await supabase.auth.verifyOtp({
+      const { data, error } = await supabase.auth.verifyOtp({
         phone,
         token,
         type: 'sms',
       });
       
+      if (error) {
+        return { error: new Error(error.message) };
+      }
+      
+      // PRODUCTION FIX: Ensure session is established before returning
+      // Wait for session to be available (with timeout)
+      if (data?.session) {
+        // Session is immediately available - great!
+        return { error: null };
+      } else {
+        // Wait a bit for session to be established (can happen on mobile/slow networks)
+        // The onAuthStateChange will handle setting the state, but we want to ensure
+        // the session is in place for immediate redirect
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Verify session exists
+        const { data: { session: verifiedSession } } = await supabase.auth.getSession();
+        if (!verifiedSession) {
+          return { error: new Error('Session not established. Please try again.') };
+        }
+      }
+      
       // If successful, onAuthStateChange will fire SIGNED_IN event
       // which will trigger fetchUserData and set authStatus to 'authenticated'
       
-      return { error: error ? new Error(error.message) : null };
+      return { error: null };
     } catch (error) {
       return { error: error as Error };
     }
@@ -585,6 +703,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     console.log("🔐 authStatus:", authStatus);
   }, [authStatus]);
+
+  // PERMANENT FIX: Ensure authStatus is set correctly when we have a user
+  // This handles edge cases where authStatus might be stuck at 'loading' but we have a valid session
+  // CRITICAL FIX: Add timeout to prevent infinite loading state
+  useEffect(() => {
+    if (authStatus === 'loading' && user && session) {
+      // If we've been loading for more than 5 seconds with a valid session, fix it
+      const loadingStart = sessionStorage.getItem('auth_loading_start');
+      const now = Date.now();
+      
+      if (!loadingStart) {
+        // First time we see loading with user - record start time
+        sessionStorage.setItem('auth_loading_start', now.toString());
+      } else {
+        const loadingDuration = now - parseInt(loadingStart);
+        if (loadingDuration > 5000) {
+          // Been loading for more than 5 seconds - force authenticated
+          console.warn('[Auth] authStatus stuck at loading for', loadingDuration, 'ms - fixing');
+          setAuthStatus('authenticated');
+          sessionStorage.removeItem('auth_loading_start');
+        }
+      }
+    } else if (authStatus !== 'loading') {
+      // Clear loading start time when not loading
+      sessionStorage.removeItem('auth_loading_start');
+    }
+  }, [authStatus, user, session]);
   
   const value: AuthState = {
     authStatus,
@@ -673,11 +818,16 @@ export function useAuthAppData(): AuthAppDataState {
     || pathname?.startsWith('/holdings');
   
   // Trigger lazy loading only on app routes
+  // CRITICAL FIX: Immediate execution + ensure it runs on mount
   useEffect(() => {
     if (isAppRoute && context._loadAppData && context.user?.id) {
+      console.log('[AuthAppData] Triggering app data load for route:', pathname, 'User:', context.user.id);
+      // Call immediately
       context._loadAppData();
+    } else {
+      console.log('[AuthAppData] Not loading - isAppRoute:', isAppRoute, 'hasLoadFn:', !!context._loadAppData, 'hasUser:', !!context.user?.id);
     }
-  }, [isAppRoute, context._loadAppData, context.user?.id]);
+  }, [isAppRoute, context._loadAppData, context.user?.id, pathname]);
   
   return {
     profile: context.profile,

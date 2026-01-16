@@ -31,7 +31,7 @@ export default function LogoutConfirmationModal({
       <div className="relative w-full max-w-md mx-4 bg-white rounded-xl border border-[#E5E7EB] shadow-lg">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB]">
-          <h2 className="text-lg font-semibold text-[#0F172A]">Log out of WealthLens?</h2>
+          <h2 className="text-lg font-semibold text-[#0F172A]">Log out of LensOnWealth?</h2>
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-[#F6F8FB] transition-colors"

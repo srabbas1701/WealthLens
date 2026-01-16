@@ -1,21 +1,17 @@
 /**
- * LogoLockup Component
+ * LogoLockup Component - LensOnWealth
  * 
- * Professional fintech-grade logo lockup.
- * - Displays full logo image (icon + text combined)
+ * Professional fintech-grade logo lockup with SVG logo.
+ * - Displays SVG logo icon + brand text
  * - Proper sizing for header visibility
  * - Automatic light/dark mode support
- * - Uses plain <img> tag (no Next.js Image component)
- * 
- * ASSET REQUIREMENTS:
- * - Full logo asset at /logo.png (contains icon + text)
- * - File should be placed in: public/logo.png
- * - Recommended size: ~140px wide × 32px tall
+ * - Navy blue and green brand colors
  */
 
 'use client';
 
 import Link from 'next/link';
+import { Logo } from './Logo';
 
 interface LogoLockupProps {
   /**
@@ -30,33 +26,36 @@ interface LogoLockupProps {
   className?: string;
   
   /**
-   * Logo height (default: h-24 = 96px for prominent visibility)
-   * @default 'h-24'
+   * Logo icon size
+   * @default 'w-16 h-16'
    */
-  height?: 'h-10' | 'h-12' | 'h-14' | 'h-20' | 'h-24';
+  iconSize?: string;
+  
+  /**
+   * Show tagline below brand name
+   * @default false
+   */
+  showTagline?: boolean;
 }
 
 export function LogoLockup({
   linkToHome = true,
   className = '',
-  height = 'h-24',
+  iconSize = 'w-16 h-16',
+  showTagline = false,
 }: LogoLockupProps) {
-  // Logo height: 96px (h-24) by default for prominent visibility in header
-  // Width is auto to maintain aspect ratio
-  
   const logoContent = (
-    <div className={`flex items-center ${className}`}>
-      <img
-        src="/logo.png"
-        alt="WealthLens"
-        className={`${height} w-auto object-contain`}
-      />
-    </div>
+    <Logo 
+      size={iconSize}
+      showText={true}
+      showTagline={showTagline}
+      className={className}
+    />
   );
 
   if (linkToHome) {
     return (
-      <Link href="/" className="flex items-center">
+      <Link href="/" className="flex items-center group transition-opacity hover:opacity-90">
         {logoContent}
       </Link>
     );

@@ -36,7 +36,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { 
   SparklesIcon, 
   CheckCircleIcon, 
@@ -68,7 +68,7 @@ import InsightsLimitBanner from '@/components/InsightsLimitBanner';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
 import OnboardingHint from '@/components/OnboardingHint';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
-import { useAuth } from '@/lib/auth';
+import { useAuth, useAuthAppData } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { aggregatePortfolioData, validatePortfolioData } from '@/lib/portfolio-aggregation';
 import type { DailySummaryResponse, WeeklySummaryResponse, Status, RiskAlignmentStatus } from '@/types/copilot';
@@ -200,7 +200,11 @@ const EMPTY_PORTFOLIO: PortfolioData = {
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, profile, authStatus, hasPortfolio, portfolioCheckComplete, signOut } = useAuth();
+  const pathname = usePathname();
+  const { user, authStatus, signOut } = useAuth();
+  // CRITICAL: useAuthAppData triggers lazy loading of portfolio/profile data
+  // This MUST be called on dashboard route for hasPortfolio/portfolioCheckComplete to work
+  const { profile, hasPortfolio, portfolioCheckComplete } = useAuthAppData();
   const { formatCurrency } = useCurrency();
   const redirectAttemptedRef = useRef(false);
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous portfolio fetches
@@ -258,6 +262,10 @@ function DashboardContent() {
   // Expanded insights state
   const [expandedInsightId, setExpandedInsightId] = useState<number | null>(null);
 
+  // PERMANENT FIX: Simplified - use portfolioCheckComplete as single source of truth
+  // Removed portfolioCheckTimeout to eliminate race conditions
+  const hasValidSession = !!user && !!user.id;
+
   // Track onboarding progress
   useEffect(() => {
     if (!user) return;
@@ -311,28 +319,104 @@ function DashboardContent() {
   }, [authStatus, router]);
 
   // GUARD: Redirect if no portfolio
-  // RULE: Only redirect after portfolio check is complete
+  // PERMANENT FIX: Simplified redirect logic to prevent race conditions
   useEffect(() => {
-    // GUARD: Block redirects during loading
-    if (authStatus === 'loading') {
+    // CRITICAL: Only run redirect logic if we're actually on the dashboard route
+    if (pathname !== '/dashboard') {
       redirectAttemptedRef.current = false;
       return;
     }
     
-    // GUARD: Must be authenticated to check portfolio
-    if (authStatus !== 'authenticated' || !user) {
+    // GUARD: Must have user and portfolio check must be complete
+    if (!user?.id) {
       redirectAttemptedRef.current = false;
       return;
     }
     
-    // Only redirect if portfolio check has completed AND there's no portfolio
-    if (portfolioCheckComplete && !hasPortfolio && !redirectAttemptedRef.current) {
+    // GUARD: Wait for portfolio check to complete (or timeout)
+    // PERMANENT FIX: Use portfolioCheckComplete from auth context as single source of truth
+    if (!portfolioCheckComplete) {
+      // Portfolio check not complete yet - wait
+      return;
+    }
+    
+    // PERMANENT FIX: Clear redirect state when navigating from home page or header
+    const navigationSource = sessionStorage.getItem('navigation_source');
+    if (navigationSource === 'home' || navigationSource === 'header') {
+      console.log('[Dashboard] Cleared redirect state - navigated from', navigationSource);
+      redirectAttemptedRef.current = false;
+      const redirectKey = `dashboard_redirect_${user.id}`;
+      localStorage.removeItem(redirectKey);
+      sessionStorage.removeItem('navigation_source');
+      
+      // Wait a bit after navigation to let portfolio check complete
+      const navigationTime = sessionStorage.getItem('navigation_time');
+      if (navigationTime) {
+        const timeSinceNavigation = Date.now() - parseInt(navigationTime);
+        if (timeSinceNavigation < 3000) {
+          console.log('[Dashboard] Too soon after navigation - waiting');
+          return;
+        }
+      }
+    }
+    
+    // PERMANENT FIX: Simplified redirect logic - only redirect if:
+    // 1. Portfolio check is complete
+    // 2. No portfolio exists
+    // 3. We haven't redirected recently (prevent loops)
+    const redirectKey = `dashboard_redirect_${user.id}`;
+    const redirectData = localStorage.getItem(redirectKey);
+    const now = Date.now();
+    
+    let lastRedirectTime = 0;
+    let redirectCount = 0;
+    
+    if (redirectData) {
+      try {
+        const parsed = JSON.parse(redirectData);
+        lastRedirectTime = parsed.timestamp || 0;
+        redirectCount = parsed.count || 0;
+        if (parsed.expiresAt && now > parsed.expiresAt) {
+          localStorage.removeItem(redirectKey);
+          lastRedirectTime = 0;
+          redirectCount = 0;
+        }
+      } catch (e) {
+        localStorage.removeItem(redirectKey);
+      }
+    }
+    
+    const timeSinceRedirect = now - lastRedirectTime;
+    
+    // PERMANENT FIX: Simplified conditions
+    if (!hasPortfolio && 
+        portfolioCheckComplete && 
+        !redirectAttemptedRef.current && 
+        timeSinceRedirect > 10000 && // 10 seconds
+        redirectCount < 3) {
+      
       redirectAttemptedRef.current = true;
+      redirectCount += 1;
+      
+      localStorage.setItem(redirectKey, JSON.stringify({
+        timestamp: now,
+        count: redirectCount,
+        expiresAt: now + 60000
+      }));
+      
+      console.log('[Dashboard] Redirecting to onboarding - no portfolio found');
       router.replace('/onboarding');
     } else if (hasPortfolio) {
+      // Clear redirect data if portfolio exists
+      redirectAttemptedRef.current = false;
+      localStorage.removeItem(redirectKey);
+    } else if (redirectCount >= 3) {
+      // Stop redirecting after 3 attempts
+      console.warn('[Dashboard] Too many redirects - stopping loop. Showing dashboard anyway.');
+      localStorage.removeItem(redirectKey);
       redirectAttemptedRef.current = false;
     }
-  }, [authStatus, user, hasPortfolio, portfolioCheckComplete, router]);
+  }, [authStatus, user, hasPortfolio, portfolioCheckComplete, router, pathname]);
 
   // Fetch portfolio data
   const fetchPortfolioData = useCallback(async (userId: string) => {
@@ -475,9 +559,22 @@ function DashboardContent() {
     }
   };
 
+  // DEBUG: Log state to help diagnose loading issues
+  useEffect(() => {
+    console.log('[Dashboard] State:', {
+      authStatus,
+      hasUser: !!user?.id,
+      userId: user?.id,
+      hasPortfolio,
+      portfolioCheckComplete,
+      redirectAttempted: redirectAttemptedRef.current,
+    });
+  }, [authStatus, user?.id, hasPortfolio, portfolioCheckComplete]);
+
   // Fetch data when user is available
   useEffect(() => {
     if (user?.id && hasPortfolio) {
+      console.log('[Dashboard] Fetching portfolio data for user:', user.id);
       fetchPortfolioData(user.id);
       fetchAiSummary(user.id);
       fetchWeeklySummary(user.id);
@@ -512,6 +609,10 @@ function DashboardContent() {
       router.replace('/dashboard', { scroll: false });
     }
   }, [searchParams, router]);
+
+  // PERMANENT FIX: Removed dashboard timeout - rely solely on auth context timeout
+  // This eliminates race conditions between two competing timeouts
+  // The auth context already has a 10s timeout that sets portfolioCheckComplete
 
   const handleUploadSuccess = () => {
     if (user?.id) {
@@ -594,7 +695,8 @@ function DashboardContent() {
   const portfolio = portfolioData;
 
   // GUARD: Show loading while auth state is being determined
-  if (authStatus === 'loading') {
+  // PERMANENT FIX: Simplified loading logic
+  if (authStatus === 'loading' && !hasValidSession) {
     return (
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
@@ -618,8 +720,21 @@ function DashboardContent() {
     );
   }
 
-  // GUARD: Redirect if no portfolio (only after portfolio check has completed)
-  if (authStatus === 'authenticated' && user && portfolioCheckComplete && !hasPortfolio) {
+  // PERMANENT FIX: Show loading only if portfolio check is in progress
+  // Simplified - use portfolioCheckComplete as single source of truth
+  if (user && !portfolioCheckComplete) {
+    return (
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Checking portfolio...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // PERMANENT FIX: Show redirect message only if redirect is actually happening
+  if (user && portfolioCheckComplete && !hasPortfolio && redirectAttemptedRef.current) {
     return (
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">

@@ -123,8 +123,8 @@ export default function AnalyticsOverviewPage() {
   // GUARD: Show loading while auth state is being determined
   if (authStatus === 'loading') {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
       </div>
     );
   }
@@ -136,10 +136,10 @@ export default function AnalyticsOverviewPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-[#6B7280]">Loading analytics...</p>
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Loading analytics...</p>
         </div>
       </div>
     );
@@ -147,12 +147,12 @@ export default function AnalyticsOverviewPage() {
 
   if (!ownership || !exposure) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-[#475569] mb-4">Failed to load analytics data</p>
+          <p className="text-[#475569] dark:text-[#CBD5E1] mb-4">Failed to load analytics data</p>
           <button
             onClick={() => user?.id && fetchData(user.id)}
-            className="px-4 py-2 bg-[#2563EB] text-white rounded-lg text-sm font-medium hover:bg-[#1E40AF]"
+            className="px-4 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]"
           >
             Retry
           </button>
@@ -162,7 +162,7 @@ export default function AnalyticsOverviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB]">
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
         backHref="/dashboard"
@@ -172,21 +172,21 @@ export default function AnalyticsOverviewPage() {
       <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24">
         {/* Page Title */}
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A] mb-2">Portfolio Analytics</h1>
-          <p className="text-sm text-[#6B7280]">
+          <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Portfolio Analytics</h1>
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             Advanced exposure insights for your portfolio
           </p>
         </div>
 
         {/* Warning Banner */}
-        <div className="bg-[#FEF3C7] border border-[#F59E0B]/20 rounded-xl p-4 mb-6">
+        <div className="bg-[#FEF3C7] dark:bg-[#78350F] border border-[#F59E0B]/20 dark:border-[#D97706]/30 rounded-xl p-4 mb-6">
           <div className="flex items-start gap-3">
-            <AlertTriangleIcon className="w-5 h-5 text-[#F59E0B] flex-shrink-0 mt-0.5" />
+            <AlertTriangleIcon className="w-5 h-5 text-[#F59E0B] dark:text-[#FBBF24] flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-[#92400E] mb-1">
+              <p className="text-sm font-semibold text-[#92400E] dark:text-[#FCD34D] mb-1">
                 Analytics View - Exposure Analysis
               </p>
-              <p className="text-xs text-[#92400E]">
+              <p className="text-xs text-[#92400E] dark:text-[#FDE68A]">
                 This screen shows exposure analysis, not asset ownership. Values here may differ from 
                 dashboard and holdings screens. Dashboard values remain authoritative for portfolio value, 
                 asset allocation, and P&L calculations.
@@ -196,17 +196,17 @@ export default function AnalyticsOverviewPage() {
         </div>
 
         {/* Ownership vs Exposure Explanation */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] p-8 mb-6">
-          <h2 className="text-lg font-semibold text-[#0F172A] mb-4">Ownership vs Exposure</h2>
-          <p className="text-sm text-[#475569] mb-6">
+        <section className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8 mb-6">
+          <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Ownership vs Exposure</h2>
+          <p className="text-sm text-[#475569] dark:text-[#CBD5E1] mb-6">
             This view helps you understand what you're <strong>EXPOSED TO</strong>, not just what you <strong>OWN</strong>.
           </p>
           
-          <div className="bg-[#EFF6FF] rounded-lg border border-[#2563EB]/20 p-4 mb-6">
-            <p className="text-sm text-[#1E40AF] mb-3">
+          <div className="bg-[#EFF6FF] dark:bg-[#1E3A8A] rounded-lg border border-[#2563EB]/20 dark:border-[#3B82F6]/30 p-4 mb-6">
+            <p className="text-sm text-[#1E40AF] dark:text-[#93C5FD] mb-3">
               <strong>Example:</strong> You own {formatCurrency(ownership.mutualFunds)} in Mutual Funds.
             </p>
-            <p className="text-sm text-[#1E40AF]">
+            <p className="text-sm text-[#1E40AF] dark:text-[#93C5FD]">
               But 85% of that is invested in equity by the fund. So your equity <strong>EXPOSURE</strong> is {formatCurrency(exposure.equityViaMF)}.
             </p>
           </div>
@@ -215,73 +215,73 @@ export default function AnalyticsOverviewPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider">
+                <tr className="bg-[#F9FAFB] dark:bg-[#334155] border-b border-[#E5E7EB] dark:border-[#334155]">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider">
                     Asset Type
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider">
                     What You Own
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider">
                     Exposure (via MF)
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider">
                     Combined Exposure
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E5E7EB]">
+              <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                 <tr>
                   <td className="px-4 py-3.5">
                     <div>
-                      <p className="font-semibold text-[#0F172A] text-sm">Stocks</p>
-                      <p className="text-xs text-[#6B7280] mt-0.5">Direct stock holdings</p>
+                      <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-sm">Stocks</p>
+                      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">Direct stock holdings</p>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
+                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                     {formatCurrency(ownership.equity)}
                   </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] number-emphasis">
+                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] dark:text-[#94A3B8] number-emphasis">
                     {formatCurrency(exposure.equityViaMF)}
-                    <span className="text-xs text-[#6B7280] block mt-0.5">(via MF)</span>
+                    <span className="text-xs text-[#6B7280] dark:text-[#94A3B8] block mt-0.5">(via MF)</span>
                   </td>
-                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
+                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                     {formatCurrency(exposure.totalEquityExposure)}
-                    <span className="text-xs text-[#6B7280] block mt-0.5">(total exposure)</span>
+                    <span className="text-xs text-[#6B7280] dark:text-[#94A3B8] block mt-0.5">(total exposure)</span>
                   </td>
                 </tr>
                 <tr>
                   <td className="px-4 py-3.5">
                     <div>
-                      <p className="font-semibold text-[#0F172A] text-sm">Debt</p>
-                      <p className="text-xs text-[#6B7280] mt-0.5">Fixed income</p>
+                      <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-sm">Debt</p>
+                      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">Fixed income</p>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] number-emphasis">
+                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] dark:text-[#94A3B8] number-emphasis">
                     —
                   </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] number-emphasis">
+                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] dark:text-[#94A3B8] number-emphasis">
                     {formatCurrency(exposure.debtViaMF)}
-                    <span className="text-xs text-[#6B7280] block mt-0.5">(via MF)</span>
+                    <span className="text-xs text-[#6B7280] dark:text-[#94A3B8] block mt-0.5">(via MF)</span>
                   </td>
-                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
+                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                     {formatCurrency(exposure.debtViaMF)}
                   </td>
                 </tr>
                 <tr>
                   <td className="px-4 py-3.5">
                     <div>
-                      <p className="font-semibold text-[#0F172A] text-sm">Mutual Funds</p>
-                      <p className="text-xs text-[#6B7280] mt-0.5">As asset class</p>
+                      <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-sm">Mutual Funds</p>
+                      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">As asset class</p>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
+                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                     {formatCurrency(ownership.mutualFunds)}
                   </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280]">
+                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] dark:text-[#94A3B8]">
                     —
                   </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280]">
+                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] dark:text-[#94A3B8]">
                     —
                   </td>
                 </tr>
@@ -289,14 +289,14 @@ export default function AnalyticsOverviewPage() {
             </table>
           </div>
 
-          <div className="mt-6 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB] p-4">
+          <div className="mt-6 bg-[#F9FAFB] dark:bg-[#334155] rounded-lg border border-[#E5E7EB] dark:border-[#334155] p-4">
             <div className="flex items-start gap-3">
-              <InfoIcon className="w-5 h-5 text-[#2563EB] flex-shrink-0 mt-0.5" />
+              <InfoIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-[#0F172A] mb-1">
+                <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-1">
                   Important: Analytics are for insights only
                 </p>
-                <p className="text-xs text-[#6B7280]">
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
                   Your dashboard shows: Stocks {formatCurrency(ownership.equity)} (direct holdings), 
                   Mutual Funds {formatCurrency(ownership.mutualFunds)} (total MF value). 
                   Analytics adds exposure data: Equity Exposure (via MF) {formatCurrency(exposure.equityViaMF)}, 
@@ -309,14 +309,14 @@ export default function AnalyticsOverviewPage() {
         </section>
 
         {/* Quick Links */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] p-8">
-          <h2 className="text-lg font-semibold text-[#0F172A] mb-6">Analytics Screens</h2>
+        <section className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8">
+          <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-6">Analytics Screens</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Portfolio Health Score */}
             <Link
               href="/analytics/health"
-              className="bg-white rounded-xl border-2 border-[#E5E7EB] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all group"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-start gap-3 flex-1">

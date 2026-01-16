@@ -77,10 +77,39 @@ export default function SignupPage() {
   
   // GUARD: Redirect if already authenticated
   // RULE: Never redirect while authStatus === 'loading'
+  // PRODUCTION FIX: Ensure session is established before redirecting
   useEffect(() => {
     if (authStatus === 'loading') return;
     if (authStatus === 'authenticated' && user) {
-      router.replace('/onboarding');
+      // PRODUCTION FIX: Add a small delay to ensure session cookies are set
+      const redirectTimer = setTimeout(() => {
+        if (authStatus === 'authenticated' && user) {
+          try {
+            const redirectResult = router.replace('/onboarding');
+            // Check if router.replace returns a Promise
+            if (redirectResult && typeof redirectResult.catch === 'function') {
+              redirectResult.catch((err) => {
+                console.error('[Signup] Redirect failed:', err);
+                setTimeout(() => {
+                  window.location.href = '/onboarding';
+                }, 500);
+              });
+            } else {
+              // router.replace didn't return a promise, check if redirect worked
+              setTimeout(() => {
+                if (window.location.pathname !== '/onboarding') {
+                  window.location.href = '/onboarding';
+                }
+              }, 100);
+            }
+          } catch (err) {
+            console.error('[Signup] Redirect error:', err);
+            window.location.href = '/onboarding';
+          }
+        }
+      }, 300);
+      
+      return () => clearTimeout(redirectTimer);
     }
   }, [authStatus, user, router]);
   
@@ -161,6 +190,7 @@ export default function SignupPage() {
   
   /**
    * Handle OTP verification
+   * PRODUCTION FIX: Wait for authentication before redirecting
    */
   const handleVerifyOtp = async () => {
     setError(null);
@@ -185,13 +215,21 @@ export default function SignupPage() {
         if (otpInputRefs.current[0]) {
           otpInputRefs.current[0].focus();
         }
+        setIsLoading(false);
       } else {
+        // PRODUCTION FIX: Show success message
+        // The redirect useEffect will handle navigation once authStatus becomes 'authenticated'
         setSuccess('Account created! Redirecting...');
-        router.push('/onboarding');
+        
+        // Clear loading after a short delay to allow auth state to update
+        // The redirect will happen via the useEffect that watches authStatus
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 500);
       }
-    } catch {
+    } catch (err) {
+      console.error('[Signup] OTP verification error:', err);
       setError('Could not verify OTP. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };

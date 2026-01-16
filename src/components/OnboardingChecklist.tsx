@@ -274,7 +274,7 @@ export default function OnboardingChecklist({ onDismiss }: OnboardingChecklistPr
           {allCompleted && (
             <div className="mt-4 p-4 bg-[#F0FDF4] dark:bg-[#166534]/20 border border-[#D1FAE5] dark:border-[#22C55E]/30 rounded-lg">
               <p className="text-sm text-[#166534] dark:text-[#22C55E] text-center">
-                Great! You're all set. Explore your portfolio and insights to get the most out of WealthLens.
+                Great! You're all set. Explore your portfolio and insights to get the most out of LensOnWealth.
               </p>
             </div>
           )}

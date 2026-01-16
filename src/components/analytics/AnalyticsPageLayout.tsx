@@ -26,8 +26,8 @@ interface AnalyticsPageLayoutProps {
 export function AnalyticsPageLayout({
   title,
   description,
-  backHref = '/dashboard',
-  backLabel = 'Back to Dashboard',
+  backHref = '/analytics/overview',
+  backLabel = 'Back to Analytics',
   children,
   showDisclaimer = true,
   disclaimerText,

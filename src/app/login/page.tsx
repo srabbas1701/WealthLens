@@ -114,16 +114,67 @@ function LoginContent() {
   
   // GUARD: Redirect if already authenticated
   // RULE: Never redirect while authStatus === 'loading'
+  // PRODUCTION FIX: Ensure session is established before redirecting
   useEffect(() => {
     // GUARD: Block redirects during loading
     if (authStatus === 'loading') return;
     
     // Auth state resolved - check if authenticated
     if (authStatus === 'authenticated' && user) {
-      // User is authenticated - redirect to appropriate page
-      // Middleware will handle dashboard vs onboarding logic
-      // Use the redirectUrl from query params or default to dashboard
-      router.replace(redirectUrl);
+      // PRODUCTION FIX: Add a small delay to ensure session cookies are set
+      // This helps with mobile/production environments where cookies might propagate slower
+      const redirectTimer = setTimeout(() => {
+        // Double-check user is still authenticated before redirect
+        if (authStatus === 'authenticated' && user) {
+          // User is authenticated - redirect to appropriate page
+          // Middleware will handle dashboard vs onboarding logic
+          // Use the redirectUrl from query params or default to dashboard
+          try {
+            const redirectResult = router.replace(redirectUrl);
+            // Check if router.replace returns a Promise (it might not in some Next.js versions)
+            if (redirectResult && typeof redirectResult.catch === 'function') {
+              redirectResult.catch((err) => {
+                console.error('[Login] Redirect failed:', err);
+                // Fallback: try again after a short delay
+                setTimeout(() => {
+                  try {
+                    const retryResult = router.replace(redirectUrl);
+                    if (retryResult && typeof retryResult.catch === 'function') {
+                      retryResult.catch(() => {
+                        // Last resort: force reload if redirect still fails
+                        window.location.href = redirectUrl;
+                      });
+                    } else {
+                      // If no promise returned, redirect succeeded or use fallback
+                      setTimeout(() => {
+                        if (window.location.pathname !== redirectUrl) {
+                          window.location.href = redirectUrl;
+                        }
+                      }, 100);
+                    }
+                  } catch (retryErr) {
+                    console.error('[Login] Retry redirect failed:', retryErr);
+                    window.location.href = redirectUrl;
+                  }
+                }, 500);
+              });
+            } else {
+              // router.replace didn't return a promise, check if redirect worked
+              setTimeout(() => {
+                if (window.location.pathname !== redirectUrl) {
+                  window.location.href = redirectUrl;
+                }
+              }, 100);
+            }
+          } catch (err) {
+            console.error('[Login] Redirect error:', err);
+            // Fallback: use window.location as last resort
+            window.location.href = redirectUrl;
+          }
+        }
+      }, 300); // Small delay to ensure state is fully propagated
+      
+      return () => clearTimeout(redirectTimer);
     }
     // If authStatus === 'unauthenticated', show login form (no redirect needed)
   }, [authStatus, user, router, redirectUrl]);
@@ -205,6 +256,7 @@ function LoginContent() {
   
   /**
    * Handle OTP verification
+   * PRODUCTION FIX: Explicitly wait for session before showing success
    */
   const handleVerifyOtp = async () => {
     setError(null);
@@ -231,13 +283,17 @@ function LoginContent() {
         }
         setIsLoading(false);
       } else {
+        // PRODUCTION FIX: Show success message
+        // The redirect useEffect will handle navigation once authStatus becomes 'authenticated'
+        // Wait for the onAuthStateChange to fire and update authStatus
         setSuccess('Verified! Please wait...');
         // Wait a moment for auth state to update, then redirect
         setTimeout(() => {
           router.push(redirectUrl);
-        }, 1000);
+        }, 500);
       }
-    } catch {
+    } catch (err) {
+      console.error('[Login] OTP verification error:', err);
       setError('Could not verify OTP. Please try again.');
       setIsLoading(false);
     }

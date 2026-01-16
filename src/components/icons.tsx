@@ -1,5 +1,5 @@
 /**
- * Custom SVG Icons for WealthLens
+ * Custom SVG Icons for LensOnWealth
  * 
  * Consistent icon set with clean, minimal design
  * All icons use currentColor for flexible styling

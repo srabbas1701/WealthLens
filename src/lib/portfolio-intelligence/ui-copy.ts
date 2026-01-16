@@ -355,7 +355,7 @@ export const SCENARIO_COPY = {
 };
 
 export const TRUST_STATEMENT = 
-  'WealthLens analytics are designed to help you understand and evaluate your portfolio structure. They do not constitute investment advice.';
+  'LensOnWealth analytics are designed to help you understand and evaluate your portfolio structure. They do not constitute investment advice.';
 
 /**
  * Get pillar insight based on score

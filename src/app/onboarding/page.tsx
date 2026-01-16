@@ -19,7 +19,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   SparklesIcon, 
@@ -48,6 +48,7 @@ type Step = 'welcome' | 'category_selection' | 'setup_queue' | 'add_method' | 'u
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, authStatus, hasPortfolio, refreshProfile } = useAuth();
   
   const [currentStep, setCurrentStep] = useState<Step>('welcome');
@@ -75,16 +76,107 @@ export default function OnboardingPage() {
   const [pendingManualCategories, setPendingManualCategories] = useState<InvestmentCategory[]>([]);
 
   // Auth guards
+  // PERMANENT FIX: Prevent redirect loops by checking recent redirects
+  const redirectAttemptedRef = useRef(false);
+  
   useEffect(() => {
+    // CRITICAL: Only run redirect logic if we're actually on the onboarding route
+    if (pathname !== '/onboarding') {
+      return;
+    }
+    
     if (authStatus === 'loading') return;
     if (authStatus === 'unauthenticated') {
+      redirectAttemptedRef.current = false;
       router.replace('/login?redirect=/onboarding');
       return;
     }
-    if (authStatus === 'authenticated' && hasPortfolio) {
-      router.replace('/dashboard');
+    
+    // PERMANENT FIX: Check if we just came from dashboard (no portfolio scenario)
+    // Use localStorage to match dashboard's logic
+    const dashboardRedirectKey = `dashboard_redirect_${user?.id}`;
+    const dashboardRedirectData = localStorage.getItem(dashboardRedirectKey);
+    const now = Date.now();
+    
+    let timeSinceDashboardRedirect = Infinity;
+    if (dashboardRedirectData) {
+      try {
+        const parsed = JSON.parse(dashboardRedirectData);
+        timeSinceDashboardRedirect = now - (parsed.timestamp || 0);
+      } catch (e) {
+        // Ignore
+      }
     }
-  }, [authStatus, hasPortfolio, router]);
+    
+    // PERMANENT FIX: Only redirect to dashboard if:
+    // 1. We have portfolio
+    // 2. We haven't recently redirected
+    // 3. We didn't just come from dashboard (within last 15 seconds) - prevents loops
+    // 4. We're actually on onboarding route
+    if (authStatus === 'authenticated' && hasPortfolio && !redirectAttemptedRef.current && timeSinceDashboardRedirect > 15000) {
+      const redirectKey = `onboarding_redirect_${user?.id}`;
+      const redirectData = localStorage.getItem(redirectKey);
+      
+      let lastRedirectTime = 0;
+      let redirectCount = 0;
+      
+      if (redirectData) {
+        try {
+          const parsed = JSON.parse(redirectData);
+          lastRedirectTime = parsed.timestamp || 0;
+          redirectCount = parsed.count || 0;
+        } catch (e) {
+          localStorage.removeItem(redirectKey);
+        }
+      }
+      
+      const timeSinceRedirect = now - lastRedirectTime;
+      
+      // Only redirect if we haven't redirected in the last 10 seconds and haven't exceeded limit
+      if (timeSinceRedirect > 10000 && redirectCount < 3) {
+        redirectAttemptedRef.current = true;
+        redirectCount += 1;
+        
+        localStorage.setItem(redirectKey, JSON.stringify({
+          timestamp: now,
+          count: redirectCount,
+          expiresAt: now + 60000
+        }));
+        
+        // Clear dashboard redirect flag since we're going there legitimately
+        localStorage.removeItem(dashboardRedirectKey);
+        console.log('[Onboarding] Redirecting to dashboard - portfolio found');
+        router.replace('/dashboard');
+      } else {
+        console.log('[Onboarding] Skipping redirect - recently redirected or too many redirects', {
+          timeSinceRedirect: Math.round(timeSinceRedirect / 1000) + 's',
+          redirectCount
+        });
+      }
+    } else if (!hasPortfolio) {
+      // Clear redirect flag if no portfolio (we should stay on onboarding)
+      redirectAttemptedRef.current = false;
+      if (user?.id) {
+        localStorage.removeItem(`onboarding_redirect_${user.id}`);
+      }
+    }
+    
+    // Clean up expired redirect data
+    if (user?.id) {
+      const redirectKey = `onboarding_redirect_${user.id}`;
+      const redirectData = localStorage.getItem(redirectKey);
+      if (redirectData) {
+        try {
+          const parsed = JSON.parse(redirectData);
+          if (parsed.expiresAt && now > parsed.expiresAt) {
+            localStorage.removeItem(redirectKey);
+          }
+        } catch (e) {
+          // Ignore
+        }
+      }
+    }
+  }, [authStatus, hasPortfolio, router, user?.id, pathname]);
 
   // Load saved state from localStorage
   useEffect(() => {

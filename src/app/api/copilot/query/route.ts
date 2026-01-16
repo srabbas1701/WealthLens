@@ -221,7 +221,7 @@ function getSystemPrompt(): string {
     
     // Final fallback: Use inline prompt
     console.warn('System prompt file not found, using fallback');
-    return `You are WealthLens, an investment intelligence assistant for Indian investors.
+    return `You are LensOnWealth, an investment intelligence assistant for Indian investors.
 
 Your role is to explain portfolio behavior, risk, diversification, and goal alignment
 in a calm, neutral, and easy-to-understand manner.
@@ -243,7 +243,7 @@ LANGUAGE: Simple English — explain concepts, don't assume knowledge. Use India
 FORMAT: Maximum 3 short paragraphs for most responses. Lead with the most important point.`;
   } catch (error) {
     console.error('Error loading system prompt:', error);
-    return 'You are WealthLens, an investment intelligence assistant for Indian investors.';
+    return 'You are LensOnWealth, an investment intelligence assistant for Indian investors.';
   }
 }
 

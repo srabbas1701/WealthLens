@@ -133,27 +133,27 @@ export function AppHeader({
     // Return landing/demo header (no portfolio dependencies)
     return (
       <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]">
-        <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           {/* Left: Logo */}
-          <div className="flex items-center gap-4">
-            <LogoLockup />
+          <div className="flex items-center gap-3">
+            <LogoLockup iconSize="w-8 h-8" />
           </div>
 
           {/* Center: Navigation Links */}
-          <nav className="hidden md:flex items-center gap-6">
-            <a href="#features" className="text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
+          <nav className="hidden md:flex items-center gap-5">
+            <a href="#features" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
               Features
             </a>
-            <a href="#trust" className="text-sm text-[#6B7280] hover:text-[#0F172A] transition-colors font-medium">
+            <a href="#trust" className="text-xs text-[#6B7280] hover:text-[#0F172A] transition-colors font-medium">
               Trust
             </a>
-            <a href="#pricing" className="text-sm text-[#6B7280] hover:text-[#0F172A] transition-colors font-medium">
+            <a href="#pricing" className="text-xs text-[#6B7280] hover:text-[#0F172A] transition-colors font-medium">
               Pricing
             </a>
           </nav>
 
           {/* Right: Navigation and Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Theme Toggle */}
             <ThemeToggle />
             
@@ -162,7 +162,12 @@ export function AppHeader({
               <>
                 <Link
                   href="/dashboard"
-                  className="px-4 py-2 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-sm font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
+                  onClick={() => {
+                    // CRITICAL FIX: Mark navigation source to prevent redirect loops
+                    sessionStorage.setItem('navigation_source', 'header');
+                    sessionStorage.setItem('navigation_time', Date.now().toString());
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-xs font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
                 >
                   Dashboard
                 </Link>
@@ -171,11 +176,11 @@ export function AppHeader({
                 <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setShowUserMenu(!showUserMenu)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] dark:bg-[#EFF6FF] text-white dark:text-[#1E3A8A] text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#DBEAFE] transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2563EB] dark:bg-[#EFF6FF] text-white dark:text-[#1E3A8A] text-xs font-medium hover:bg-[#1E40AF] dark:hover:bg-[#DBEAFE] transition-colors"
                   >
-                    <UserIcon className="w-4 h-4" />
+                    <UserIcon className="w-3.5 h-3.5" />
                     <span>Account</span>
-                    <ChevronDownIcon className={`w-4 h-4 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+                    <ChevronDownIcon className={`w-3.5 h-3.5 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
                   </button>
 
                   {/* Dropdown Menu */}
@@ -215,13 +220,13 @@ export function AppHeader({
               <>
                 <Link
                   href="/login"
-                  className="px-4 py-2 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-sm font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-xs font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
                 >
                   Sign In
                 </Link>
                 <Link
                   href="/login"
-                  className="px-5 py-2 rounded-lg bg-[#2563EB] dark:bg-[#EFF6FF] text-white dark:text-[#1E3A8A] text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#DBEAFE] transition-colors"
+                  className="px-4 py-1.5 rounded-lg bg-[#2563EB] dark:bg-[#EFF6FF] text-white dark:text-[#1E3A8A] text-xs font-medium hover:bg-[#1E40AF] dark:hover:bg-[#DBEAFE] transition-colors"
                 >
                   Get Started
                 </Link>
@@ -348,6 +353,9 @@ export function AppHeader({
                   
                   // If not on dashboard, navigate to dashboard - the URL param will trigger copilot
                   if (!pathname?.startsWith('/dashboard')) {
+                    // CRITICAL FIX: Mark navigation source to prevent redirect loops
+                    sessionStorage.setItem('navigation_source', 'header');
+                    sessionStorage.setItem('navigation_time', Date.now().toString());
                     router.push('/dashboard?openHelp=true');
                   }
                 }}

@@ -61,8 +61,13 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session
-  const { data: { user } } = await supabase.auth.getUser();
+  // Refresh session (critical for production - ensures session is valid)
+  const { data: { user }, error: sessionError } = await supabase.auth.getUser();
+  
+  // Log session errors in production for debugging (non-blocking)
+  if (sessionError && process.env.NODE_ENV === 'production') {
+    console.error('[Middleware] Session error:', sessionError.message);
+  }
 
   const pathname = request.nextUrl.pathname;
   

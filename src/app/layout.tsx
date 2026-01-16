@@ -16,9 +16,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "WealthLens - Understand Your Investments",
+  title: "LensOnWealth - Complete Wealth Tracking for Indian Investors",
   description:
-    "Portfolio intelligence for Indian investors. Understand every investment you own with clarity and confidence.",
+    "Get a clear view of your complete wealth - stocks, mutual funds, EPF, NPS, PPF, fixed deposits, bonds, real estate, gold, and more. All platforms, all asset classes, crystal clear visibility.",
+  keywords: "wealth tracking India, complete wealth visibility, track all investments, EPF NPS PPF tracker, investment clarity India, net worth tracker, clear wealth view",
 };
 
 export default function RootLayout({

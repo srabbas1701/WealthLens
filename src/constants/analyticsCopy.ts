@@ -25,7 +25,7 @@ export {
  */
 export const COMMON_DISCLAIMERS = {
   insightOnly: 'For portfolio insight only.',
-  notAdvice: 'WealthLens analytics are designed to help you understand and evaluate your portfolio structure. They do not constitute investment advice.',
+  notAdvice: 'LensOnWealth analytics are designed to help you understand and evaluate your portfolio structure. They do not constitute investment advice.',
   basedOnHoldings: 'Based on current holdings.',
   referenceOnly: 'For reference only. Dashboard values remain unchanged.',
   hypothetical: 'Scenarios are hypothetical and for risk understanding only.',
