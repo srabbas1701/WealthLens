@@ -34,7 +34,7 @@
 
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo, ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
@@ -102,7 +102,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [appDataRequested, setAppDataRequested] = useState(false);
   const [appDataLoading, setAppDataLoading] = useState(false);
   
-  const supabase = createClient();
+  // Lazy Supabase client creation - only create when needed and env vars are available
+  // Use useMemo to create client only once, and handle build-time gracefully
+  const supabase = useMemo(() => {
+    // During build/static generation, env vars might not be available
+    // Check if we're in a browser environment first
+    if (typeof window === 'undefined') {
+      // Server-side or build-time: return null, will be created on client
+      return null;
+    }
+    
+    try {
+      return createClient();
+    } catch (error) {
+      // If env vars are missing, return null
+      // This allows the component to render without crashing
+      console.warn('[Auth] Supabase client creation failed:', error);
+      return null;
+    }
+  }, []);
   
   /**
    * Determine auth method from user data
@@ -145,6 +163,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Called after successful authentication
    */
   const fetchUserData = useCallback(async (userId: string) => {
+    if (!supabase) {
+      console.warn('[Auth] Cannot fetch user data: Supabase client not available');
+      return;
+    }
+    
     try {
       // Fetch user profile
       const { data: profileData, error: profileError } = await supabase
@@ -252,6 +275,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * App data (profile, portfolio) is fetched lazily when useAuthAppData() is called
    */
   useEffect(() => {
+    // Guard: Skip if Supabase client is not available (e.g., during build)
+    if (!supabase) {
+      setAuthStatus('unauthenticated');
+      return;
+    }
+    
     let isMounted = true;
     
     async function initAuthSession() {
@@ -447,6 +476,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Send magic link to email for passwordless login
    */
   const sendMagicLink = async (email: string) => {
+    if (!supabase) {
+      return { error: new Error('Supabase client not available') };
+    }
+    
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email,
@@ -489,7 +522,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Step 3: Call backend logout (clears backend session)
     // This will trigger onAuthStateChange SIGNED_OUT event
-    await supabase.auth.signOut();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     
     console.log('[Auth] Sign out complete');
   };
@@ -498,6 +533,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Send OTP to mobile number
    */
   const sendOtp = async (phone: string) => {
+    if (!supabase) {
+      return { error: new Error('Supabase client not available') };
+    }
+    
     try {
       const { error } = await supabase.auth.signInWithOtp({
         phone,
@@ -518,6 +557,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * PRODUCTION FIX: Explicitly wait for session to be established
    */
   const verifyOtp = async (phone: string, token: string) => {
+    if (!supabase) {
+      return { error: new Error('Supabase client not available') };
+    }
+    
     try {
       const { data, error } = await supabase.auth.verifyOtp({
         phone,
