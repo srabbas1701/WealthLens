@@ -87,7 +87,25 @@ export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  // During build/static generation, env vars might not be available
+  const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build';
+
   if (!url || !serviceKey) {
+    if (isBuildTime) {
+      // Build time: create a mock client that won't crash
+      console.warn('[Supabase Admin Client] Environment variables not available during build - using mock client');
+      return {
+        auth: {
+          getSession: async () => ({ data: { session: null }, error: null }),
+          getUser: async () => ({ data: { user: null }, error: null }),
+        },
+        from: () => ({
+          select: () => ({ eq: () => ({ single: async () => ({ data: null, error: null }) }) }),
+        }),
+      } as any;
+    }
+    
+    // Runtime: throw error so developers know to set env vars
     throw new Error(
       'Missing Supabase environment variables. ' +
       'Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY'
