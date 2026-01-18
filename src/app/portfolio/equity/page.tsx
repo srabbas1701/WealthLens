@@ -25,6 +25,9 @@ import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
+import { useToast } from '@/components/Toast';
+import { generateStocksPDF } from '@/lib/pdf/generateStocksPDF';
+import { Plus, Edit, Trash2, X, Search } from 'lucide-react';
 
 type SortField = 'name' | 'quantity' | 'avgPrice' | 'currentPrice' | 'investedValue' | 'currentValue' | 'gainLoss' | 'allocation';
 type SortDirection = 'asc' | 'desc';
@@ -66,6 +69,29 @@ export default function EquityHoldingsPage() {
   // Price update state
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
   const [priceUpdateDisabled, setPriceUpdateDisabled] = useState(false);
+  
+  // CRUD state
+  const { showToast } = useToast();
+  const [showAddStockModal, setShowAddStockModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedStock, setSelectedStock] = useState<EquityHolding | null>(null);
+  const [stockToDelete, setStockToDelete] = useState<EquityHolding | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    symbol: '',
+    quantity: '',
+    avgBuyPrice: '',
+    purchaseDate: ''
+  });
+  
+  // Stock search state
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   const fetchData = useCallback(async (userId: string) => {
     // Prevent duplicate simultaneous fetches
@@ -180,6 +206,222 @@ export default function EquityHoldingsPage() {
     }
   }, [priceUpdateLoading, priceUpdateDisabled, user?.id, fetchData]);
 
+  // Stock search handler
+  const handleStockSearch = async (query: string) => {
+    setFormData({ ...formData, name: query });
+    
+    if (query.length < 2) {
+      setShowSearchResults(false);
+      return;
+    }
+    
+    setIsSearching(true);
+    
+    try {
+      const response = await fetch(`/api/stocks/search?q=${encodeURIComponent(query)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSearchResults(data.results || []);
+        setShowSearchResults(true);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Select stock from search results
+  const selectStock = (stock: any) => {
+    setFormData({ 
+      ...formData, 
+      name: stock.name, 
+      symbol: stock.symbol 
+    });
+    setShowSearchResults(false);
+  };
+
+  // Handlers
+  const handleAddStock = () => {
+    setSelectedStock(null);
+    setFormData({ name: '', symbol: '', quantity: '', avgBuyPrice: '', purchaseDate: new Date().toISOString().split('T')[0] });
+    setSearchResults([]);
+    setShowSearchResults(false);
+    setShowAddStockModal(true);
+  };
+
+  const handleEditStock = (stock: EquityHolding) => {
+    setSelectedStock(stock);
+    setFormData({
+      name: stock.name,
+      symbol: stock.symbol || '',
+      quantity: stock.quantity.toString(),
+      avgBuyPrice: stock.averagePrice.toString(),
+      purchaseDate: ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleDeleteStock = (stock: EquityHolding) => {
+    setStockToDelete(stock);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleAddStockSubmit = async (stockData: {
+    name: string;
+    symbol: string;
+    quantity: number;
+    avgBuyPrice: number;
+    purchaseDate?: string;
+  }) => {
+    setIsLoading(true);
+    
+    try {
+      if (!user?.id) {
+        showToast({
+          type: 'error',
+          title: 'Authentication Error',
+          message: 'User not authenticated',
+          duration: 7000,
+        });
+        return;
+      }
+
+      const response = await fetch('/api/stocks/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: stockData.symbol.toUpperCase(),
+          quantity: stockData.quantity,
+          avgBuyPrice: stockData.avgBuyPrice,
+          purchaseDate: stockData.purchaseDate,
+          user_id: user.id
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to add stock' }));
+        throw new Error(error.error || 'Failed to add stock');
+      }
+      
+      // Refresh data
+      await fetchData(user.id);
+      setShowAddStockModal(false);
+      setFormData({ name: '', symbol: '', quantity: '', avgBuyPrice: '', purchaseDate: '' });
+      
+      showToast({
+        type: 'success',
+        title: 'Stock Added',
+        message: `${stockData.name} has been added successfully.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error adding stock:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Add Stock',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditStockSubmit = async (stockData: {
+    quantity: number;
+    avgBuyPrice: number;
+  }) => {
+    if (!selectedStock || !user?.id) return;
+    
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch('/api/stocks/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedStock.id,
+          quantity: stockData.quantity,
+          avgBuyPrice: stockData.avgBuyPrice,
+          purchaseDate: formData.purchaseDate,
+          user_id: user.id
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to update stock' }));
+        throw new Error(error.error || 'Failed to update stock');
+      }
+      
+      // Refresh data
+      await fetchData(user.id);
+      setShowEditModal(false);
+      setSelectedStock(null);
+      
+      showToast({
+        type: 'success',
+        title: 'Stock Updated',
+        message: `${selectedStock.name} has been updated successfully.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error updating stock:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Update Stock',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteStockConfirm = async () => {
+    if (!stockToDelete || !user?.id) return;
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`/api/stocks/delete/${stockToDelete.id}?user_id=${user.id}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to delete stock' }));
+        throw new Error(error.error || 'Failed to delete stock');
+      }
+
+      // Refresh data
+      await fetchData(user.id);
+      setShowDeleteConfirm(false);
+      const deletedName = stockToDelete.name;
+      setStockToDelete(null);
+      
+      showToast({
+        type: 'success',
+        title: 'Stock Deleted',
+        message: `${deletedName} has been removed from your portfolio.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error deleting stock:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Delete Stock',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // GUARD: Redirect if not authenticated
   // RULE: Never redirect while authStatus === 'loading'
   useEffect(() => {
@@ -195,6 +437,206 @@ export default function EquityHoldingsPage() {
       // Button starts enabled - will be disabled only after successful update
     }
   }, [user?.id, fetchData]);
+
+  // Get most recent price date across all holdings
+  const mostRecentPriceDate = useMemo(() => {
+    const dates = holdings
+      .map((h: any) => h.priceDate)
+      .filter((date): date is string => date !== null && date !== undefined)
+      .sort((a, b) => b.localeCompare(a)); // Sort descending (most recent first)
+    return dates.length > 0 ? dates[0] : null;
+  }, [holdings]);
+
+  // Download handler
+  const handleDownload = useCallback(async () => {
+    console.log('[Equity Download] Handler called - starting download process');
+    
+    try {
+      console.log('[Equity Download] Starting PDF generation...', { holdingsCount: holdings.length, totalValue });
+      
+      if (!holdings || holdings.length === 0) {
+        showToast({
+          type: 'warning',
+          title: 'No Data',
+          message: 'No equity holdings available to download.',
+          duration: 5000,
+        });
+        return;
+      }
+      
+      // Get sorted holdings first (same logic as sortedHoldings memo)
+      const sortedHoldingsForExport = [...holdings].sort((a, b) => {
+        const multiplier = sortDirection === 'asc' ? 1 : -1;
+        switch (sortField) {
+          case 'name':
+            return multiplier * a.name.localeCompare(b.name);
+          case 'quantity':
+            return multiplier * (a.quantity - b.quantity);
+          case 'avgPrice':
+            return multiplier * (a.averagePrice - b.averagePrice);
+          case 'currentPrice':
+            return multiplier * (a.currentPrice - b.currentPrice);
+          case 'investedValue':
+            return multiplier * (a.investedValue - b.investedValue);
+          case 'currentValue':
+            return multiplier * (a.currentValue - b.currentValue);
+          case 'gainLoss':
+            return multiplier * (a.gainLoss - b.gainLoss);
+          case 'allocation':
+            return multiplier * (a.allocationPct - b.allocationPct);
+          default:
+            return 0;
+        }
+      });
+      
+      // Get grouped holdings (same as displayed on screen)
+      const groupedHoldingsForExport = (() => {
+        if (groupBy === 'none') {
+          return [{ key: 'all', label: 'All Holdings', holdings: sortedHoldingsForExport }];
+        }
+        if (groupBy === 'company') {
+          const groups = new Map<string, EquityHolding[]>();
+          sortedHoldingsForExport.forEach(h => {
+            const companyName = h.name.split(' ')[0] || 'Other';
+            if (!groups.has(companyName)) groups.set(companyName, []);
+            groups.get(companyName)!.push(h);
+          });
+          return Array.from(groups.entries())
+            .sort((a, b) => {
+              const aTotal = a[1].reduce((sum, h) => sum + h.currentValue, 0);
+              const bTotal = b[1].reduce((sum, h) => sum + h.currentValue, 0);
+              return bTotal - aTotal;
+            })
+            .map(([key, holdings]) => ({ key, label: key, holdings }));
+        }
+        if (groupBy === 'sector') {
+          const groups = new Map<string, EquityHolding[]>();
+          sortedHoldingsForExport.forEach(h => {
+            const sector = h.sector || 'Other';
+            if (!groups.has(sector)) groups.set(sector, []);
+            groups.get(sector)!.push(h);
+          });
+          return Array.from(groups.entries())
+            .sort((a, b) => {
+              const aTotal = a[1].reduce((sum, h) => sum + h.currentValue, 0);
+              const bTotal = b[1].reduce((sum, h) => sum + h.currentValue, 0);
+              return bTotal - aTotal;
+            })
+            .map(([key, holdings]) => ({ key, label: key, holdings }));
+        }
+        return [{ key: 'all', label: 'All Holdings', holdings: sortedHoldingsForExport }];
+      })();
+      
+      // Flatten grouped holdings for PDF (same order as displayed)
+      const holdingsToExport: EquityHolding[] = [];
+      for (const group of groupedHoldingsForExport) {
+        holdingsToExport.push(...group.holdings);
+      }
+      
+      // Convert holdings to PDF format (excluding Actions column)
+      // Ensure all values are properly converted and validated
+      const pdfData = holdingsToExport.map(holding => {
+        // Safely convert all numeric values
+        const quantity = typeof holding.quantity === 'number' ? holding.quantity : parseFloat(String(holding.quantity)) || 0;
+        const avgBuyPrice = typeof holding.averagePrice === 'number' ? holding.averagePrice : parseFloat(String(holding.averagePrice)) || 0;
+        const investedValue = typeof holding.investedValue === 'number' ? holding.investedValue : parseFloat(String(holding.investedValue)) || 0;
+        const currentPrice = typeof holding.currentPrice === 'number' ? holding.currentPrice : parseFloat(String(holding.currentPrice)) || 0;
+        const currentValue = typeof holding.currentValue === 'number' ? holding.currentValue : parseFloat(String(holding.currentValue)) || 0;
+        const gainLoss = typeof holding.gainLoss === 'number' ? holding.gainLoss : parseFloat(String(holding.gainLoss)) || 0;
+        const gainLossPercent = typeof holding.gainLossPercent === 'number' ? holding.gainLossPercent : parseFloat(String(holding.gainLossPercent)) || 0;
+        const allocationPct = typeof holding.allocationPct === 'number' ? holding.allocationPct : parseFloat(String(holding.allocationPct)) || 0;
+        
+        // Validate critical values
+        if (isNaN(quantity) || isNaN(avgBuyPrice) || isNaN(investedValue) || isNaN(currentValue)) {
+          console.warn('[Equity Download] Invalid data for holding:', holding.name, {
+            quantity, avgBuyPrice, investedValue, currentValue
+          });
+        }
+        
+        return {
+          name: String(holding.name || 'Unknown'),
+          symbol: String(holding.symbol || ''),
+          quantity,
+          avgBuyPrice,
+          investedValue,
+          currentPrice,
+          currentValue,
+          pl: gainLoss,
+          plPercentage: gainLossPercent,
+          allocation: allocationPct,
+        };
+      });
+      
+      console.log('[Equity Download] PDF data sample (first 3):', pdfData.slice(0, 3));
+
+      console.log('[Equity Download] Calling generateStocksPDF with', pdfData.length, 'holdings');
+      await generateStocksPDF({
+        stocks: pdfData,
+        totalValue,
+        totalInvested,
+        portfolioPercentage,
+        priceDate: mostRecentPriceDate,
+        formatCurrency,
+      });
+
+      console.log('[Equity Download] PDF generation complete');
+      
+      // Suppress extension errors that may appear after successful PDF generation
+      // These are harmless and don't affect the download
+      const originalErrorHandler = window.onerror;
+      window.onerror = (message, source, lineno, colno, error) => {
+        const errorStr = String(message || error?.message || '');
+        // Ignore browser extension errors
+        if (errorStr.includes('Could not establish connection') || 
+            errorStr.includes('Receiving end does not exist') ||
+            errorStr.includes('content-all.js')) {
+          console.debug('[Equity Download] Ignoring harmless browser extension error');
+          return true; // Suppress error
+        }
+        // For other errors, use original handler or default behavior
+        if (originalErrorHandler) {
+          return originalErrorHandler(message, source, lineno, colno, error);
+        }
+        return false;
+      };
+      
+      // Reset error handler after a short delay
+      setTimeout(() => {
+        window.onerror = originalErrorHandler;
+      }, 1000);
+      
+      showToast({
+        type: 'success',
+        title: 'PDF Downloaded',
+        message: 'Your equity holdings report has been downloaded successfully.',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[Equity Download] Error generating PDF:', error);
+      
+      // Check if it's an extension error (harmless)
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('Could not establish connection') || 
+          errorMsg.includes('Receiving end does not exist')) {
+        // Extension error - PDF was likely still generated
+        console.warn('[Equity Download] Browser extension interference detected, but PDF may have been generated');
+        showToast({
+          type: 'success',
+          title: 'PDF Downloaded',
+          message: 'Your equity holdings report has been downloaded. (Some browser extensions may show harmless errors)',
+          duration: 5000,
+        });
+      } else {
+        // Real error
+        showToast({
+          type: 'error',
+          title: 'Download Failed',
+          message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
+          duration: 5000,
+        });
+      }
+    }
+  }, [holdings, sortField, sortDirection, groupBy, totalValue, totalInvested, portfolioPercentage, mostRecentPriceDate, formatCurrency, showToast]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -241,15 +683,6 @@ export default function EquityHoldingsPage() {
   const avgCurrentPrice = holdings.length > 0 && totalValue > 0 
     ? totalValue / holdings.reduce((sum, h) => sum + h.quantity, 0)
     : 0;
-
-  // Get most recent price date across all holdings
-  const mostRecentPriceDate = useMemo(() => {
-    const dates = holdings
-      .map(h => h.priceDate)
-      .filter((date): date is string => date !== null && date !== undefined)
-      .sort((a, b) => b.localeCompare(a)); // Sort descending (most recent first)
-    return dates.length > 0 ? dates[0] : null;
-  }, [holdings]);
 
   // Format price date for display
   const formatPriceDate = (dateStr: string | null) => {
@@ -353,6 +786,7 @@ export default function EquityHoldingsPage() {
         backHref="/dashboard"
         backLabel="Back to Dashboard"
         showDownload={true}
+        onDownload={handleDownload}
       />
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
@@ -360,25 +794,37 @@ export default function EquityHoldingsPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Stocks Holdings</h1>
-            <button
-              onClick={handlePriceUpdate}
-              disabled={priceUpdateLoading || priceUpdateDisabled}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                priceUpdateLoading || priceUpdateDisabled
-                  ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
-                  : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
-              }`}
-              title={priceUpdateDisabled ? 'Prices already updated today' : 'Update stock prices from Yahoo Finance'}
-            >
-              <RefreshIcon 
-                className={`w-4 h-4 ${priceUpdateLoading ? 'animate-spin' : ''}`} 
-              />
-              {priceUpdateLoading 
-                ? 'Updating...' 
-                : priceUpdateDisabled 
-                  ? 'Updated Today' 
-                  : 'Update Prices'}
-            </button>
+            <div className="flex items-center gap-3">
+              {/* ADD STOCK BUTTON */}
+              <button 
+                onClick={handleAddStock}
+                className="flex items-center gap-2 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add Stock</span>
+              </button>
+              
+              {/* Update Prices button */}
+              <button
+                onClick={handlePriceUpdate}
+                disabled={priceUpdateLoading || priceUpdateDisabled}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  priceUpdateLoading || priceUpdateDisabled
+                    ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
+                    : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
+                }`}
+                title={priceUpdateDisabled ? 'Prices already updated today' : 'Update stock prices from Yahoo Finance'}
+              >
+                <RefreshIcon 
+                  className={`w-4 h-4 ${priceUpdateLoading ? 'animate-spin' : ''}`} 
+                />
+                {priceUpdateLoading 
+                  ? 'Updating...' 
+                  : priceUpdateDisabled 
+                    ? 'Updated Today' 
+                    : 'Update Prices'}
+              </button>
+            </div>
           </div>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             {holdings.length} holding{holdings.length !== 1 ? 's' : ''} • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
@@ -497,12 +943,15 @@ export default function EquityHoldingsPage() {
                       <SortIcon field="allocation" />
                     </div>
                   </th>
+                  <th className="text-right px-6 py-4 text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider w-20">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                 {groupedHoldings.length === 0 || (groupedHoldings[0].holdings.length === 0 && groupBy === 'none') ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center">
+                    <td colSpan={9} className="px-6 py-12 text-center">
                       <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">No stocks holdings found</p>
                       <p className="text-xs text-[#9CA3AF] dark:text-[#64748B]">Upload your portfolio to see stocks holdings</p>
                     </td>
@@ -512,7 +961,7 @@ export default function EquityHoldingsPage() {
                     <React.Fragment key={group.key}>
                       {groupBy !== 'none' && (
                         <tr className="bg-[#F9FAFB] dark:bg-[#334155]">
-                          <td colSpan={8} className="px-6 py-2.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                          <td colSpan={9} className="px-6 py-2.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                             {group.label}
                             <span className="ml-2 text-[#6B7280] dark:text-[#94A3B8] font-medium">
                               ({group.holdings.length} holding{group.holdings.length !== 1 ? 's' : ''}, {
@@ -523,7 +972,7 @@ export default function EquityHoldingsPage() {
                         </tr>
                       )}
                       {group.holdings.map((holding) => (
-                        <tr key={holding.id} className="hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
+                        <tr key={holding.id} className="group hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
                           <td className="px-6 py-3.5">
                             <div>
                               <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-sm">{holding.name}</p>
@@ -563,6 +1012,28 @@ export default function EquityHoldingsPage() {
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F1F5F9] dark:bg-[#334155] text-[#475569] dark:text-[#CBD5E1] border border-[#E5E7EB] dark:border-[#334155]">
                           {holding.allocationPct.toFixed(1)}%
                         </span>
+                        </td>
+                        {/* ACTIONS COLUMN */}
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2 opacity-100 transition-opacity">
+                            {/* Edit Button */}
+                            <button 
+                              onClick={() => handleEditStock(holding)}
+                              className="p-2 hover:bg-primary/10 text-primary rounded-lg transition-colors"
+                              title="Edit holding"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            
+                            {/* Delete Button */}
+                            <button 
+                              onClick={() => handleDeleteStock(holding)}
+                              className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
+                              title="Delete holding"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                       ))}
@@ -606,6 +1077,7 @@ export default function EquityHoldingsPage() {
                     <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                       {portfolioPercentage.toFixed(1)}%
                     </td>
+                    <td className="px-4 py-3.5"></td>
                   </tr>
                 </tfoot>
               )}
@@ -664,6 +1136,451 @@ export default function EquityHoldingsPage() {
           </div>
         )}
       </main>
+
+      {/* ADD STOCK MODAL */}
+      {showAddStockModal && (
+        <AddStockModal
+          onClose={() => {
+            setShowAddStockModal(false);
+            setFormData({ name: '', symbol: '', quantity: '', avgBuyPrice: '', purchaseDate: '' });
+            setSearchResults([]);
+            setShowSearchResults(false);
+          }}
+          onSave={handleAddStockSubmit}
+          formData={formData}
+          setFormData={setFormData}
+          searchResults={searchResults}
+          showSearchResults={showSearchResults}
+          isSearching={isSearching}
+          onSearch={handleStockSearch}
+          onSelectStock={selectStock}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* EDIT STOCK MODAL */}
+      {showEditModal && selectedStock && (
+        <EditStockModal
+          stock={selectedStock}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedStock(null);
+          }}
+          onSave={handleEditStockSubmit}
+          formData={formData}
+          setFormData={setFormData}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* DELETE CONFIRMATION DIALOG */}
+      {showDeleteConfirm && stockToDelete && (
+        <DeleteConfirmationDialog
+          stock={stockToDelete}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setStockToDelete(null);
+          }}
+          onConfirm={handleDeleteStockConfirm}
+          isLoading={isLoading}
+        />
+      )}
+
+    </div>
+  );
+}
+
+/**
+ * Add Stock Modal Component
+ */
+function AddStockModal({ 
+  onClose, 
+  onSave,
+  formData,
+  setFormData,
+  searchResults,
+  showSearchResults,
+  isSearching,
+  onSearch,
+  onSelectStock,
+  isLoading,
+  formatCurrency
+}: { 
+  onClose: () => void; 
+  onSave: (data: any) => void;
+  formData: any;
+  setFormData: any;
+  searchResults: any[];
+  showSearchResults: boolean;
+  isSearching: boolean;
+  onSearch: (query: string) => void;
+  onSelectStock: (stock: any) => void;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name || !formData.quantity || !formData.avgBuyPrice) {
+      return;
+    }
+    
+    if (parseFloat(formData.quantity) <= 0) {
+      return;
+    }
+    
+    if (parseFloat(formData.avgBuyPrice) <= 0) {
+      return;
+    }
+    
+    onSave({
+      name: formData.name,
+      symbol: formData.symbol || formData.name,
+      quantity: parseFloat(formData.quantity),
+      avgBuyPrice: parseFloat(formData.avgBuyPrice),
+      purchaseDate: formData.purchaseDate
+    });
+  };
+
+  const investedValue = formData.quantity && formData.avgBuyPrice
+    ? parseFloat(formData.quantity) * parseFloat(formData.avgBuyPrice)
+    : 0;
+
+  return (
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-card">
+          <h2 className="text-2xl font-bold text-foreground">Add Stock Holding</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
+            type="button"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="relative">
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Stock Name <span className="text-destructive">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => onSearch(e.target.value)}
+                placeholder="Search for stock (e.g., HDFC Bank)"
+                className="w-full px-4 py-3 pr-10 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+                required
+                autoComplete="off"
+              />
+              <Search className="absolute right-3 top-3.5 w-5 h-5 text-muted-foreground" />
+            </div>
+            
+            {showSearchResults && searchResults.length > 0 && (
+              <div className="absolute z-10 w-full mt-2 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {searchResults.map((stock, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => onSelectStock(stock)}
+                    className="w-full text-left px-4 py-3 hover:bg-accent transition-colors border-b border-border last:border-0"
+                  >
+                    <div className="font-semibold text-foreground">{stock.name}</div>
+                    <div className="text-sm text-muted-foreground">{stock.symbol}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {isSearching && (
+              <div className="text-sm text-muted-foreground mt-1">Searching...</div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Symbol
+            </label>
+            <input
+              type="text"
+              value={formData.symbol}
+              onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
+              placeholder="NSE:HDFCBANK or BSE:500180"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Format: NSE:SYMBOL or BSE:SYMBOL
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Quantity <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.quantity}
+              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+              placeholder="100"
+              min="1"
+              step="1"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Average Buy Price (₹) <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.avgBuyPrice}
+              onChange={(e) => setFormData({ ...formData, avgBuyPrice: e.target.value })}
+              placeholder="750.50"
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Purchase Date (Optional)
+            </label>
+            <input
+              type="date"
+              value={formData.purchaseDate}
+              onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            />
+          </div>
+
+          {investedValue > 0 && (
+            <div className="bg-accent border border-border rounded-lg p-4">
+              <div className="text-sm text-muted-foreground mb-1">Invested Value</div>
+              <div className="text-2xl font-bold text-foreground">
+                {formatCurrency(investedValue)}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading || !formData.name || !formData.quantity || !formData.avgBuyPrice}
+              className="flex-1 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Adding...' : 'Add Stock'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Edit Stock Modal Component
+ */
+function EditStockModal({ 
+  stock, 
+  onClose, 
+  onSave,
+  formData,
+  setFormData,
+  isLoading,
+  formatCurrency
+}: { 
+  stock: EquityHolding; 
+  onClose: () => void; 
+  onSave: (data: any) => void;
+  formData: any;
+  setFormData: any;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (parseFloat(formData.quantity) <= 0) {
+      return;
+    }
+    
+    if (parseFloat(formData.avgBuyPrice) <= 0) {
+      return;
+    }
+    
+    onSave({
+      quantity: parseFloat(formData.quantity),
+      avgBuyPrice: parseFloat(formData.avgBuyPrice)
+    });
+  };
+
+  const newInvestedValue = formData.quantity && formData.avgBuyPrice
+    ? parseFloat(formData.quantity) * parseFloat(formData.avgBuyPrice)
+    : 0;
+
+  return (
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="text-2xl font-bold text-foreground">Edit Stock Holding</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
+            type="button"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="bg-accent border border-border rounded-lg p-4">
+            <div className="font-semibold text-foreground text-lg">{stock.name}</div>
+            <div className="text-sm text-muted-foreground">{stock.symbol}</div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Quantity <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.quantity}
+              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+              min="1"
+              step="1"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Average Buy Price (₹) <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.avgBuyPrice}
+              onChange={(e) => setFormData({ ...formData, avgBuyPrice: e.target.value })}
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          {newInvestedValue > 0 && (
+            <div className="bg-accent border border-border rounded-lg p-4">
+              <div className="text-sm text-muted-foreground mb-1">New Invested Value</div>
+              <div className="text-2xl font-bold text-foreground">
+                {formatCurrency(newInvestedValue)}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Previous: {formatCurrency(stock.investedValue)}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Delete Confirmation Dialog Component
+ */
+function DeleteConfirmationDialog({ 
+  stock, 
+  onClose, 
+  onConfirm,
+  isLoading
+}: { 
+  stock: EquityHolding; 
+  onClose: () => void; 
+  onConfirm: () => void;
+  isLoading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="p-6">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+            <Trash2 className="w-6 h-6 text-destructive" />
+          </div>
+          
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            Delete Stock Holding?
+          </h2>
+          
+          <p className="text-muted-foreground mb-6">
+            Are you sure you want to delete{' '}
+            <strong className="text-foreground">{stock.name}</strong>?{' '}
+            This will remove{' '}
+            <strong className="text-foreground">
+              {stock.quantity.toLocaleString('en-IN')} shares
+            </strong>{' '}
+            with invested value of{' '}
+            <strong className="text-foreground">
+              ₹{stock.investedValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </strong>.
+          </p>
+
+          <div className="bg-yellow-500/10 border-l-4 border-yellow-500 p-4 rounded-r-lg mb-6">
+            <p className="text-sm text-foreground">
+              <strong>Warning:</strong> This action cannot be undone. You'll need to add 
+              this stock again manually or re-upload your CSV if you change your mind.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Deleting...' : 'Delete Stock'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

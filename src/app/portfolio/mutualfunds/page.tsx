@@ -21,6 +21,9 @@ import {
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
+import { useToast } from '@/components/Toast';
+import { Plus, Edit, Trash2, X } from 'lucide-react';
+import { generateMutualFundsPDF } from '@/lib/pdf/generateHoldingsPDF';
 
 type SortField = 'name' | 'amc' | 'units' | 'currentValue' | 'investedValue' | 'xirr' | 'gainLoss' | 'allocation';
 type SortDirection = 'asc' | 'desc';
@@ -63,6 +66,27 @@ export default function MutualFundsPage() {
   
   // NAV update state
   const [navUpdateLoading, setNavUpdateLoading] = useState(false);
+  
+  // CRUD state
+  const { showToast } = useToast();
+  const [showAddMFModal, setShowAddMFModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedMF, setSelectedMF] = useState<MFHolding | null>(null);
+  const [mfToDelete, setMfToDelete] = useState<MFHolding | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    amc: '',
+    category: '',
+    plan: 'Direct - Growth',
+    folio: '',
+    units: '',
+    avgBuyNav: '',
+    isin: ''
+  });
 
   const fetchData = useCallback(async (userId: string) => {
     // Prevent duplicate simultaneous fetches
@@ -244,6 +268,211 @@ export default function MutualFundsPage() {
     }
   }, [navUpdateLoading, user?.id, fetchData]);
 
+  // Handlers
+  const handleAddMF = () => {
+    setSelectedMF(null);
+    setFormData({ 
+      name: '', 
+      amc: '', 
+      category: '', 
+      plan: 'Direct - Growth', 
+      folio: '', 
+      units: '', 
+      avgBuyNav: '',
+      isin: ''
+    });
+    setShowAddMFModal(true);
+  };
+
+  const handleEditMF = (mf: MFHolding) => {
+    setSelectedMF(mf);
+    setFormData({
+      name: mf.name,
+      amc: mf.amc,
+      category: mf.category,
+      plan: mf.plan,
+      folio: mf.folio,
+      units: mf.units.toString(),
+      avgBuyNav: mf.avgBuyNav.toString(),
+      isin: ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleDeleteMF = (mf: MFHolding) => {
+    setMfToDelete(mf);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleAddMFSubmit = async (mfData: {
+    name: string;
+    amc: string;
+    category: string;
+    plan: string;
+    folio: string;
+    units: number;
+    avgBuyNav: number;
+    isin?: string;
+  }) => {
+    setIsLoading(true);
+    
+    try {
+      if (!user?.id) {
+        showToast({
+          type: 'error',
+          title: 'Authentication Error',
+          message: 'User not authenticated',
+          duration: 7000,
+        });
+        return;
+      }
+
+      const response = await fetch('/api/mf/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: mfData.name,
+          amc: mfData.amc,
+          category: mfData.category,
+          plan: mfData.plan,
+          folio: mfData.folio,
+          units: mfData.units,
+          avgBuyNav: mfData.avgBuyNav,
+          isin: mfData.isin,
+          user_id: user.id
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to add mutual fund' }));
+        throw new Error(error.error || 'Failed to add mutual fund');
+      }
+      
+      // Refresh data
+      await fetchData(user.id);
+      setShowAddMFModal(false);
+      setFormData({ 
+        name: '', 
+        amc: '', 
+        category: '', 
+        plan: 'Direct - Growth', 
+        folio: '', 
+        units: '', 
+        avgBuyNav: '',
+        isin: ''
+      });
+      
+      showToast({
+        type: 'success',
+        title: 'Mutual Fund Added',
+        message: `${mfData.name} has been added successfully.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error adding MF:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Add Mutual Fund',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditMFSubmit = async (mfData: {
+    units: number;
+    avgBuyNav: number;
+  }) => {
+    if (!selectedMF || !user?.id) return;
+    
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch('/api/mf/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedMF.id,
+          units: mfData.units,
+          avgBuyNav: mfData.avgBuyNav,
+          user_id: user.id
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to update mutual fund' }));
+        throw new Error(error.error || 'Failed to update mutual fund');
+      }
+      
+      // Refresh data
+      await fetchData(user.id);
+      setShowEditModal(false);
+      setSelectedMF(null);
+      
+      showToast({
+        type: 'success',
+        title: 'Mutual Fund Updated',
+        message: `${selectedMF.name} has been updated successfully.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error updating MF:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Update Mutual Fund',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteMFConfirm = async () => {
+    if (!mfToDelete || !user?.id) return;
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`/api/mf/delete/${mfToDelete.id}?user_id=${user.id}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to delete mutual fund' }));
+        throw new Error(error.error || 'Failed to delete mutual fund');
+      }
+
+      // Refresh data
+      await fetchData(user.id);
+      setShowDeleteConfirm(false);
+      const deletedName = mfToDelete.name;
+      setMfToDelete(null);
+      
+      showToast({
+        type: 'success',
+        title: 'Mutual Fund Deleted',
+        message: `${deletedName} has been removed from your portfolio.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error deleting MF:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Delete Mutual Fund',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -338,6 +567,110 @@ export default function MutualFundsPage() {
     return dates.length > 0 ? dates[0] : null;
   }, [holdings]);
 
+  // Download handler for Mutual Funds
+  const handleDownload = useCallback(async () => {
+    console.log('[MF Download] Handler called - starting download process');
+    
+    try {
+      console.log('[MF Download] Starting PDF generation...', { holdingsCount: holdings.length, totalValue });
+      
+      if (!holdings || holdings.length === 0) {
+        showToast({
+          type: 'warning',
+          title: 'No Data',
+          message: 'No mutual fund holdings available to download.',
+          duration: 5000,
+        });
+        return;
+      }
+      
+      // Get sorted and grouped holdings for export (same as displayed)
+      const sortedHoldingsForExport = sortedHoldings;
+      const groupedHoldingsForExport = groupedHoldings();
+      
+      // Flatten grouped holdings for PDF (same order as displayed)
+      const holdingsToExport: MFHolding[] = [];
+      for (const group of groupedHoldingsForExport) {
+        holdingsToExport.push(...group.holdings);
+      }
+      
+      // Convert holdings to PDF format
+      const pdfData = holdingsToExport.map(holding => ({
+        name: String(holding.name || 'Unknown'),
+        amc: String(holding.amc || 'Other'),
+        category: String(holding.category || 'Other'),
+        units: typeof holding.units === 'number' ? holding.units : parseFloat(String(holding.units)) || 0,
+        avgBuyNav: typeof holding.avgBuyNav === 'number' ? holding.avgBuyNav : parseFloat(String(holding.avgBuyNav)) || 0,
+        latestNav: typeof holding.latestNav === 'number' ? holding.latestNav : parseFloat(String(holding.latestNav)) || 0,
+        investedValue: typeof holding.investedValue === 'number' ? holding.investedValue : parseFloat(String(holding.investedValue)) || 0,
+        currentValue: typeof holding.currentValue === 'number' ? holding.currentValue : parseFloat(String(holding.currentValue)) || 0,
+        xirr: typeof holding.xirr === 'number' ? holding.xirr : (holding.xirr !== null ? parseFloat(String(holding.xirr)) : null),
+        gainLoss: typeof holding.gainLoss === 'number' ? holding.gainLoss : parseFloat(String(holding.gainLoss)) || 0,
+        gainLossPercent: typeof holding.gainLossPercent === 'number' ? holding.gainLossPercent : parseFloat(String(holding.gainLossPercent)) || 0,
+      }));
+      
+      console.log('[MF Download] Calling generateMutualFundsPDF with', pdfData.length, 'holdings');
+      await generateMutualFundsPDF({
+        holdings: pdfData,
+        totalValue,
+        totalInvested,
+        portfolioPercentage,
+        navDate: mostRecentNavDate,
+        formatCurrency,
+      });
+
+      console.log('[MF Download] PDF generation complete');
+      
+      // Suppress extension errors
+      const originalErrorHandler = window.onerror;
+      window.onerror = (message, source, lineno, colno, error) => {
+        const errorStr = String(message || error?.message || '');
+        if (errorStr.includes('Could not establish connection') || 
+            errorStr.includes('Receiving end does not exist') ||
+            errorStr.includes('content-all.js')) {
+          console.debug('[MF Download] Ignoring harmless browser extension error');
+          return true;
+        }
+        if (originalErrorHandler) {
+          return originalErrorHandler(message, source, lineno, colno, error);
+        }
+        return false;
+      };
+      
+      setTimeout(() => {
+        window.onerror = originalErrorHandler;
+      }, 1000);
+      
+      showToast({
+        type: 'success',
+        title: 'PDF Downloaded',
+        message: 'Your mutual funds holdings report has been downloaded successfully.',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[MF Download] Error generating PDF:', error);
+      
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('Could not establish connection') || 
+          errorMsg.includes('Receiving end does not exist')) {
+        console.warn('[MF Download] Browser extension interference detected, but PDF may have been generated');
+        showToast({
+          type: 'success',
+          title: 'PDF Downloaded',
+          message: 'Your mutual funds holdings report has been downloaded. (Some browser extensions may show harmless errors)',
+          duration: 5000,
+        });
+      } else {
+        showToast({
+          type: 'error',
+          title: 'Download Failed',
+          message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
+          duration: 5000,
+        });
+      }
+    }
+  }, [holdings, sortField, sortDirection, groupBy, totalValue, totalInvested, portfolioPercentage, mostRecentNavDate, formatCurrency, showToast]);
+
   // Format NAV date for display
   const formatNavDate = (dateStr: string | null) => {
     if (!dateStr) return null;
@@ -397,6 +730,7 @@ export default function MutualFundsPage() {
         backHref="/dashboard"
         backLabel="Back to Dashboard"
         showDownload={true}
+        onDownload={handleDownload}
       />
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
@@ -404,23 +738,35 @@ export default function MutualFundsPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Mutual Fund Holdings</h1>
-            <button
-              onClick={handleNavUpdate}
-              disabled={navUpdateLoading}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                navUpdateLoading
-                  ? 'bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed'
-                  : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
-              }`}
-              title="Update NAVs from AMFI"
-            >
-              <RefreshIcon 
-                className={`w-4 h-4 ${navUpdateLoading ? 'animate-spin' : ''}`} 
-              />
-              {navUpdateLoading 
-                ? 'Updating...' 
-                : 'Update NAVs'}
-            </button>
+            <div className="flex items-center gap-3">
+              {/* ADD MF BUTTON */}
+              <button 
+                onClick={handleAddMF}
+                className="flex items-center gap-2 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add MF</span>
+              </button>
+              
+              {/* Update NAVs button */}
+              <button
+                onClick={handleNavUpdate}
+                disabled={navUpdateLoading}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  navUpdateLoading
+                    ? 'bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed'
+                    : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
+                }`}
+                title="Update NAVs from AMFI"
+              >
+                <RefreshIcon 
+                  className={`w-4 h-4 ${navUpdateLoading ? 'animate-spin' : ''}`} 
+                />
+                {navUpdateLoading 
+                  ? 'Updating...' 
+                  : 'Update NAVs'}
+              </button>
+            </div>
           </div>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             {holdings.length} holdings • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
@@ -529,6 +875,9 @@ export default function MutualFundsPage() {
                       <SortIcon field="allocation" />
                     </div>
                   </th>
+                  <th className="text-right px-6 py-4 text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider w-20">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
@@ -536,7 +885,7 @@ export default function MutualFundsPage() {
                   <React.Fragment key={group.key}>
                     {groupBy !== 'none' && (
                       <tr className="bg-[#F9FAFB] dark:bg-[#334155]">
-                        <td colSpan={7} className="px-6 py-2.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                        <td colSpan={8} className="px-6 py-2.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                           {group.label}
                           <span className="ml-2 text-[#6B7280] dark:text-[#94A3B8] font-medium">
                             ({group.holdings.length} scheme{group.holdings.length !== 1 ? 's' : ''}, {
@@ -547,7 +896,7 @@ export default function MutualFundsPage() {
                       </tr>
                     )}
                     {group.holdings.map((holding) => (
-                      <tr key={holding.id} className="hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
+                      <tr key={holding.id} className="group hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
                         <td className="px-6 py-3.5">
                           <div>
                             <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-sm">{holding.name}</p>
@@ -609,6 +958,28 @@ export default function MutualFundsPage() {
                             {holding.allocationPct.toFixed(1)}%
                           </span>
                         </td>
+                        {/* ACTIONS COLUMN */}
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2 opacity-100 transition-opacity">
+                            {/* Edit Button */}
+                            <button 
+                              onClick={() => handleEditMF(holding)}
+                              className="p-2 hover:bg-primary/10 text-primary rounded-lg transition-colors"
+                              title="Edit holding"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            
+                            {/* Delete Button */}
+                            <button 
+                              onClick={() => handleDeleteMF(holding)}
+                              className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
+                              title="Delete holding"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </React.Fragment>
@@ -643,6 +1014,7 @@ export default function MutualFundsPage() {
                   <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                     {portfolioPercentage.toFixed(1)}%
                   </td>
+                  <td className="px-4 py-3.5"></td>
                 </tr>
               </tfoot>
             </table>
@@ -669,6 +1041,468 @@ export default function MutualFundsPage() {
           </div>
         </div>
       </main>
+
+      {/* ADD MF MODAL */}
+      {showAddMFModal && (
+        <AddMFModal
+          onClose={() => {
+            setShowAddMFModal(false);
+            setFormData({ 
+              name: '', 
+              amc: '', 
+              category: '', 
+              plan: 'Direct - Growth', 
+              folio: '', 
+              units: '', 
+              avgBuyNav: '',
+              isin: ''
+            });
+          }}
+          onSave={handleAddMFSubmit}
+          formData={formData}
+          setFormData={setFormData}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* EDIT MF MODAL */}
+      {showEditModal && selectedMF && (
+        <EditMFModal
+          mf={selectedMF}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedMF(null);
+          }}
+          onSave={handleEditMFSubmit}
+          formData={formData}
+          setFormData={setFormData}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* DELETE CONFIRMATION DIALOG */}
+      {showDeleteConfirm && mfToDelete && (
+        <DeleteConfirmationDialog
+          mf={mfToDelete}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setMfToDelete(null);
+          }}
+          onConfirm={handleDeleteMFConfirm}
+          isLoading={isLoading}
+        />
+      )}
+
+    </div>
+  );
+}
+
+/**
+ * Add MF Modal Component
+ */
+function AddMFModal({ 
+  onClose, 
+  onSave,
+  formData,
+  setFormData,
+  isLoading,
+  formatCurrency
+}: { 
+  onClose: () => void; 
+  onSave: (data: any) => void;
+  formData: any;
+  setFormData: any;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name || !formData.units || !formData.avgBuyNav) {
+      return;
+    }
+    
+    if (parseFloat(formData.units) <= 0) {
+      return;
+    }
+    
+    if (parseFloat(formData.avgBuyNav) <= 0) {
+      return;
+    }
+    
+    onSave({
+      name: formData.name,
+      amc: formData.amc || 'Other',
+      category: formData.category || 'Large Cap',
+      plan: formData.plan,
+      folio: formData.folio || `${Math.floor(10000 + Math.random() * 90000)}/${Math.floor(10 + Math.random() * 90)}`,
+      units: parseFloat(formData.units),
+      avgBuyNav: parseFloat(formData.avgBuyNav),
+      isin: formData.isin
+    });
+  };
+
+  const investedValue = formData.units && formData.avgBuyNav
+    ? parseFloat(formData.units) * parseFloat(formData.avgBuyNav)
+    : 0;
+
+  return (
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-card">
+          <h2 className="text-2xl font-bold text-foreground">Add Mutual Fund</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
+            type="button"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Scheme Name <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="e.g., HDFC Flexi Cap Fund Direct Growth"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              AMC (Asset Management Company)
+            </label>
+            <input
+              type="text"
+              value={formData.amc}
+              onChange={(e) => setFormData({ ...formData, amc: e.target.value })}
+              placeholder="e.g., HDFC Mutual Fund"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Category
+            </label>
+            <select
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            >
+              <option value="Large Cap">Large Cap</option>
+              <option value="Mid Cap">Mid Cap</option>
+              <option value="Small Cap">Small Cap</option>
+              <option value="Flexi Cap">Flexi Cap</option>
+              <option value="Multi Cap">Multi Cap</option>
+              <option value="Debt">Debt</option>
+              <option value="Hybrid">Hybrid</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Plan
+            </label>
+            <select
+              value={formData.plan}
+              onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            >
+              <option value="Direct - Growth">Direct - Growth</option>
+              <option value="Direct - Dividend">Direct - Dividend</option>
+              <option value="Regular - Growth">Regular - Growth</option>
+              <option value="Regular - Dividend">Regular - Dividend</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Folio Number
+            </label>
+            <input
+              type="text"
+              value={formData.folio}
+              onChange={(e) => setFormData({ ...formData, folio: e.target.value })}
+              placeholder="e.g., 12345/67"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Units <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.units}
+              onChange={(e) => setFormData({ ...formData, units: e.target.value })}
+              placeholder="100.50"
+              min="0.0001"
+              step="0.0001"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Average Buy NAV (₹) <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.avgBuyNav}
+              onChange={(e) => setFormData({ ...formData, avgBuyNav: e.target.value })}
+              placeholder="50.25"
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              ISIN (Optional)
+            </label>
+            <input
+              type="text"
+              value={formData.isin}
+              onChange={(e) => setFormData({ ...formData, isin: e.target.value })}
+              placeholder="e.g., INF209K01YH5"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            />
+          </div>
+
+          {investedValue > 0 && (
+            <div className="bg-accent border border-border rounded-lg p-4">
+              <div className="text-sm text-muted-foreground mb-1">Invested Value</div>
+              <div className="text-2xl font-bold text-foreground">
+                {formatCurrency(investedValue)}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading || !formData.name || !formData.units || !formData.avgBuyNav}
+              className="flex-1 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Adding...' : 'Add MF'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Edit MF Modal Component
+ */
+function EditMFModal({ 
+  mf, 
+  onClose, 
+  onSave,
+  formData,
+  setFormData,
+  isLoading,
+  formatCurrency
+}: { 
+  mf: MFHolding; 
+  onClose: () => void; 
+  onSave: (data: any) => void;
+  formData: any;
+  setFormData: any;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (parseFloat(formData.units) <= 0) {
+      return;
+    }
+    
+    if (parseFloat(formData.avgBuyNav) <= 0) {
+      return;
+    }
+    
+    onSave({
+      units: parseFloat(formData.units),
+      avgBuyNav: parseFloat(formData.avgBuyNav)
+    });
+  };
+
+  const newInvestedValue = formData.units && formData.avgBuyNav
+    ? parseFloat(formData.units) * parseFloat(formData.avgBuyNav)
+    : 0;
+
+  return (
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="text-2xl font-bold text-foreground">Edit Mutual Fund</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
+            type="button"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="bg-accent border border-border rounded-lg p-4">
+            <div className="font-semibold text-foreground text-lg">{mf.name}</div>
+            <div className="text-sm text-muted-foreground">{mf.amc} • {mf.plan}</div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Units <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.units}
+              onChange={(e) => setFormData({ ...formData, units: e.target.value })}
+              min="0.0001"
+              step="0.0001"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Average Buy NAV (₹) <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.avgBuyNav}
+              onChange={(e) => setFormData({ ...formData, avgBuyNav: e.target.value })}
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          {newInvestedValue > 0 && (
+            <div className="bg-accent border border-border rounded-lg p-4">
+              <div className="text-sm text-muted-foreground mb-1">New Invested Value</div>
+              <div className="text-2xl font-bold text-foreground">
+                {formatCurrency(newInvestedValue)}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Previous: {formatCurrency(mf.investedValue)}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Delete Confirmation Dialog Component
+ */
+function DeleteConfirmationDialog({ 
+  mf, 
+  onClose, 
+  onConfirm,
+  isLoading
+}: { 
+  mf: MFHolding; 
+  onClose: () => void; 
+  onConfirm: () => void;
+  isLoading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="p-6">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+            <Trash2 className="w-6 h-6 text-destructive" />
+          </div>
+          
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            Delete Mutual Fund?
+          </h2>
+          
+          <p className="text-muted-foreground mb-6">
+            Are you sure you want to delete{' '}
+            <strong className="text-foreground">{mf.name}</strong>?{' '}
+            This will remove{' '}
+            <strong className="text-foreground">
+              {mf.units.toLocaleString('en-IN', { maximumFractionDigits: 4 })} units
+            </strong>{' '}
+            with invested value of{' '}
+            <strong className="text-foreground">
+              ₹{mf.investedValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </strong>.
+          </p>
+
+          <div className="bg-yellow-500/10 border-l-4 border-yellow-500 p-4 rounded-r-lg mb-6">
+            <p className="text-sm text-foreground">
+              <strong>Warning:</strong> This action cannot be undone. You'll need to add 
+              this mutual fund again manually or re-upload your CSV if you change your mind.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Deleting...' : 'Delete MF'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

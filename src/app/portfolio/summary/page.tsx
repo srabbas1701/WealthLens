@@ -78,32 +78,59 @@ export default function PortfolioSummaryPage() {
         if (result.success && result.data) {
           // Transform dashboard data into summary format
           const portfolioData = result.data;
-          const assetSummaries: AssetSummary[] = portfolioData.allocation.map((asset: any) => {
-            const assetHoldings = portfolioData.holdings.filter((h: any) => h.assetType === asset.name);
-            const totalInvested = assetHoldings.reduce((sum: number, h: any) => sum + h.investedValue, 0);
-            const totalCurrent = assetHoldings.reduce((sum: number, h: any) => sum + h.currentValue, 0);
+          // CRITICAL: Calculate from ALL holdings, not just allocation items
+          // This ensures no asset types are missed (like Gold if it's missing from allocation)
+          const allAssetTypes = new Set(portfolioData.holdings.map((h: any) => h.assetType).filter(Boolean));
+          
+          const assetSummaries: AssetSummary[] = Array.from(allAssetTypes).map((assetType: string) => {
+            const assetHoldings = portfolioData.holdings.filter((h: any) => h.assetType === assetType);
+            const totalInvested = assetHoldings.reduce((sum: number, h: any) => sum + (h.investedValue || 0), 0);
+            const totalCurrent = assetHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || 0), 0);
             const gainLoss = totalCurrent - totalInvested;
             
+            // Find corresponding allocation item for value (if exists)
+            const allocationItem = portfolioData.allocation.find((a: any) => a.name === assetType);
+            
+            // Use current value (totalCurrent) - this is the source of truth
+            // Fallback to allocation value only if current is 0
+            const totalValue = totalCurrent > 0 ? totalCurrent : (allocationItem?.value || 0);
+            
             return {
-              assetType: asset.name,
-              totalValue: asset.value,
+              assetType: assetType,
+              totalValue: totalValue,
               investedValue: totalInvested,
               gainLoss: gainLoss,
               gainLossPercent: totalInvested > 0 ? (gainLoss / totalInvested) * 100 : 0,
               holdingsCount: assetHoldings.length,
               topHoldings: assetHoldings
-                .sort((a: any, b: any) => b.investedValue - a.investedValue)
+                .sort((a: any, b: any) => (b.investedValue || 0) - (a.investedValue || 0))
                 .slice(0, 5)
                 .map((h: any) => ({
                   name: h.name,
-                  value: h.investedValue,
-                  percentage: (h.investedValue / asset.value) * 100,
+                  value: h.investedValue || 0,
+                  percentage: totalValue > 0 ? ((h.investedValue || 0) / totalValue) * 100 : 0,
                 })),
             };
-          });
+          }).sort((a, b) => b.totalValue - a.totalValue); // Sort by total value descending
 
+          // CRITICAL: Calculate totals from ALL holdings, not just assetSummaries
+          // This ensures totals match the sum of all holdings (including any missing from allocation)
+          const totalInvestedFromHoldings = portfolioData.holdings.reduce((sum: number, h: any) => sum + (h.investedValue || 0), 0);
+          const totalCurrentFromHoldings = portfolioData.holdings.reduce((sum: number, h: any) => sum + (h.currentValue || 0), 0);
           const totalInvested = assetSummaries.reduce((sum, a) => sum + a.investedValue, 0);
           const totalGainLoss = assetSummaries.reduce((sum, a) => sum + a.gainLoss, 0);
+          
+          // VALIDATION: Verify totals match (with small tolerance for rounding)
+          const totalInvestedDiff = Math.abs(totalInvestedFromHoldings - totalInvested);
+          const totalCurrentDiff = Math.abs(totalCurrentFromHoldings - portfolioData.metrics.netWorth);
+          if (totalInvestedDiff > 1 || totalCurrentDiff > 1) {
+            console.warn('[Portfolio Summary] Total mismatch detected:', {
+              totalInvestedFromHoldings,
+              totalInvested,
+              totalCurrentFromHoldings,
+              netWorth: portfolioData.metrics.netWorth,
+            });
+          }
 
           setData({
             totalValue: portfolioData.metrics.netWorth,
@@ -174,7 +201,7 @@ export default function PortfolioSummaryPage() {
       'EPF': '/portfolio/epf',
       'NPS': '/portfolio/nps',
       'Index Funds': '/portfolio/mutualfunds',
-      'Gold': '/portfolio/summary',
+      'Gold': '/portfolio/gold',
       'Other': '/portfolio/summary',
     };
     

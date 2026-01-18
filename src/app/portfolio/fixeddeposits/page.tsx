@@ -24,6 +24,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
+import { generateFixedDepositsPDF } from '@/lib/pdf/generateHoldingsPDF';
 
 type SortField = 'bank' | 'principal' | 'rate' | 'startDate' | 'maturityDate' | 'currentValue' | 'daysLeft';
 type SortDirection = 'asc' | 'desc';
@@ -383,6 +384,96 @@ export default function FixedDepositsPage() {
     }
   });
 
+  // Download handler for Fixed Deposits
+  const handleDownload = useCallback(async () => {
+    console.log('[FD Download] Handler called - starting download process');
+    
+    try {
+      console.log('[FD Download] Starting PDF generation...', { holdingsCount: sortedHoldings.length, totalValue });
+      
+      if (!holdings || sortedHoldings.length === 0) {
+        showToast({
+          type: 'warning',
+          title: 'No Data',
+          message: 'No fixed deposit holdings available to download.',
+          duration: 5000,
+        });
+        return;
+      }
+      
+      // Convert holdings to PDF format (same order as displayed)
+      const pdfData = sortedHoldings.map(holding => ({
+        bank: String(holding.bank || 'Unknown'),
+        fdNumber: String(holding.fdNumber || ''),
+        principal: typeof holding.principal === 'number' ? holding.principal : parseFloat(String(holding.principal)) || 0,
+        rate: typeof holding.rate === 'number' ? holding.rate : parseFloat(String(holding.rate)) || 0,
+        startDate: holding.startDate,
+        maturityDate: holding.maturityDate,
+        currentValue: typeof holding.currentValue === 'number' ? holding.currentValue : parseFloat(String(holding.currentValue)) || 0,
+        daysLeft: typeof holding.daysLeft === 'number' ? holding.daysLeft : parseInt(String(holding.daysLeft)) || 0,
+      }));
+      
+      console.log('[FD Download] Calling generateFixedDepositsPDF with', pdfData.length, 'holdings');
+      await generateFixedDepositsPDF({
+        holdings: pdfData,
+        totalValue,
+        totalPrincipal,
+        portfolioPercentage,
+        formatCurrency,
+      });
+
+      console.log('[FD Download] PDF generation complete');
+      
+      // Suppress extension errors
+      const originalErrorHandler = window.onerror;
+      window.onerror = (message, source, lineno, colno, error) => {
+        const errorStr = String(message || error?.message || '');
+        if (errorStr.includes('Could not establish connection') || 
+            errorStr.includes('Receiving end does not exist') ||
+            errorStr.includes('content-all.js')) {
+          console.debug('[FD Download] Ignoring harmless browser extension error');
+          return true;
+        }
+        if (originalErrorHandler) {
+          return originalErrorHandler(message, source, lineno, colno, error);
+        }
+        return false;
+      };
+      
+      setTimeout(() => {
+        window.onerror = originalErrorHandler;
+      }, 1000);
+      
+      showToast({
+        type: 'success',
+        title: 'PDF Downloaded',
+        message: 'Your fixed deposits holdings report has been downloaded successfully.',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[FD Download] Error generating PDF:', error);
+      
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('Could not establish connection') || 
+          errorMsg.includes('Receiving end does not exist')) {
+        console.warn('[FD Download] Browser extension interference detected, but PDF may have been generated');
+        showToast({
+          type: 'success',
+          title: 'PDF Downloaded',
+          message: 'Your fixed deposits holdings report has been downloaded. (Some browser extensions may show harmless errors)',
+          duration: 5000,
+        });
+      } else {
+        showToast({
+          type: 'error',
+          title: 'Download Failed',
+          message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
+          duration: 5000,
+        });
+      }
+    }
+  }, [holdings, maturityFilter, sortField, sortDirection, totalValue, totalPrincipal, portfolioPercentage, formatCurrency, showToast, sortedHoldings]);
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-IN', {
       day: 'numeric',
@@ -449,6 +540,7 @@ export default function FixedDepositsPage() {
           backHref="/dashboard"
           backLabel="Back to Dashboard"
           showDownload={true}
+          onDownload={handleDownload}
         />
 
         <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">

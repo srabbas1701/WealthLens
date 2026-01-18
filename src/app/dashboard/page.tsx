@@ -63,6 +63,7 @@ import ManualInvestmentModal from '@/components/ManualInvestmentModal';
 import PPFAddModal from '@/components/PPFAddModal';
 import NPSAddModal from '@/components/NPSAddModal';
 import EPFAddModal from '@/components/EPFAddModal';
+import GoldAddModal from '@/components/GoldAddModal';
 import VerificationBanner from '@/components/VerificationBanner';
 import InsightsLimitBanner from '@/components/InsightsLimitBanner';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
@@ -248,6 +249,9 @@ function DashboardContent() {
   
   // EPF Add modal state
   const [isEPFModalOpen, setIsEPFModalOpen] = useState(false);
+  
+  // Gold Add modal state
+  const [isGoldModalOpen, setIsGoldModalOpen] = useState(false);
   
   // User dropdown state
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -900,7 +904,7 @@ function DashboardContent() {
                 'EPF': '/portfolio/epf',
                 'NPS': '/portfolio/nps',
                 'Index Funds': '/portfolio/mutualfunds',
-                'Gold': '/portfolio/summary',
+                'Gold': '/portfolio/gold',
                 'Other': '/portfolio/summary',
               };
               return routeMap[assetName] || '/portfolio/summary';
@@ -1364,6 +1368,10 @@ function DashboardContent() {
           setIsManualModalOpen(false);
           setIsEPFModalOpen(true);
         }}
+        onGoldSelected={() => {
+          setIsManualModalOpen(false);
+          setIsGoldModalOpen(true);
+        }}
       />
 
       {/* PPF Add Modal */}
@@ -1388,6 +1396,15 @@ function DashboardContent() {
       <EPFAddModal
         isOpen={isEPFModalOpen}
         onClose={() => setIsEPFModalOpen(false)}
+        userId={user?.id || ''}
+        onSuccess={handleUploadSuccess}
+        existingHolding={null}
+      />
+
+      {/* Gold Add Modal */}
+      <GoldAddModal
+        isOpen={isGoldModalOpen}
+        onClose={() => setIsGoldModalOpen(false)}
         userId={user?.id || ''}
         onSuccess={handleUploadSuccess}
         existingHolding={null}

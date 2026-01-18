@@ -22,6 +22,8 @@ import {
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
+import { useToast } from '@/components/Toast';
+import { generateBondsPDF } from '@/lib/pdf/generateHoldingsPDF';
 
 type SortField = 'name' | 'type' | 'coupon' | 'maturityDate' | 'faceValue' | 'investedValue' | 'currentValue' | 'yield' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -134,6 +136,7 @@ export default function BondsHoldingsPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const { showToast } = useToast();
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<BondHolding[]>([]);
@@ -338,6 +341,97 @@ export default function BondsHoldingsPage() {
     }, 0);
   }, [sortedHoldings]);
 
+  // Download handler for Bonds
+  const handleDownload = useCallback(async () => {
+    console.log('[Bonds Download] Handler called - starting download process');
+    
+    try {
+      console.log('[Bonds Download] Starting PDF generation...', { holdingsCount: holdings.length, totalValue: totalCurrentValue });
+      
+      if (!holdings || holdings.length === 0) {
+        showToast({
+          type: 'warning',
+          title: 'No Data',
+          message: 'No bond holdings available to download.',
+          duration: 5000,
+        });
+        return;
+      }
+      
+      // Convert holdings to PDF format (same order as displayed)
+      const pdfData = sortedHoldings.map(holding => ({
+        name: String(holding.name || 'Unknown'),
+        issuer: holding.issuer || null,
+        type: String(holding.type || 'Corporate'),
+        couponRate: holding.couponRate,
+        maturityDate: holding.maturityDate,
+        faceValue: typeof holding.faceValue === 'number' ? holding.faceValue : parseFloat(String(holding.faceValue)) || 0,
+        investedValue: typeof holding.investedValue === 'number' ? holding.investedValue : parseFloat(String(holding.investedValue)) || 0,
+        currentValue: typeof holding.currentValue === 'number' ? holding.currentValue : parseFloat(String(holding.currentValue)) || 0,
+        yield: holding.yield,
+      }));
+      
+      console.log('[Bonds Download] Calling generateBondsPDF with', pdfData.length, 'holdings');
+      await generateBondsPDF({
+        holdings: pdfData,
+        totalValue: totalCurrentValue,
+        totalInvested,
+        portfolioPercentage,
+        formatCurrency,
+      });
+
+      console.log('[Bonds Download] PDF generation complete');
+      
+      // Suppress extension errors
+      const originalErrorHandler = window.onerror;
+      window.onerror = (message, source, lineno, colno, error) => {
+        const errorStr = String(message || error?.message || '');
+        if (errorStr.includes('Could not establish connection') || 
+            errorStr.includes('Receiving end does not exist') ||
+            errorStr.includes('content-all.js')) {
+          console.debug('[Bonds Download] Ignoring harmless browser extension error');
+          return true;
+        }
+        if (originalErrorHandler) {
+          return originalErrorHandler(message, source, lineno, colno, error);
+        }
+        return false;
+      };
+      
+      setTimeout(() => {
+        window.onerror = originalErrorHandler;
+      }, 1000);
+      
+      showToast({
+        type: 'success',
+        title: 'PDF Downloaded',
+        message: 'Your bonds holdings report has been downloaded successfully.',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[Bonds Download] Error generating PDF:', error);
+      
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('Could not establish connection') || 
+          errorMsg.includes('Receiving end does not exist')) {
+        console.warn('[Bonds Download] Browser extension interference detected, but PDF may have been generated');
+        showToast({
+          type: 'success',
+          title: 'PDF Downloaded',
+          message: 'Your bonds holdings report has been downloaded. (Some browser extensions may show harmless errors)',
+          duration: 5000,
+        });
+      } else {
+        showToast({
+          type: 'error',
+          title: 'Download Failed',
+          message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
+          duration: 5000,
+        });
+      }
+    }
+  }, [holdings, sortField, sortDirection, totalCurrentValue, totalInvested, portfolioPercentage, formatCurrency, showToast, sortedHoldings]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
@@ -356,6 +450,7 @@ export default function BondsHoldingsPage() {
         backHref="/dashboard"
         backLabel="Back to Dashboard"
         showDownload={true}
+        onDownload={handleDownload}
       />
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">

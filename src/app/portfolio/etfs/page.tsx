@@ -22,6 +22,9 @@ import {
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
+import { useToast } from '@/components/Toast';
+import { Plus, Edit, Trash2, X } from 'lucide-react';
+import { generateETFSPDF } from '@/lib/pdf/generateHoldingsPDF';
 
 type SortField = 'name' | 'category' | 'units' | 'avgPrice' | 'currentNAV' | 'investedValue' | 'currentValue' | 'gainLoss' | 'allocation';
 type SortDirection = 'asc' | 'desc';
@@ -73,6 +76,24 @@ export default function ETFHoldingsPage() {
   // Price update state
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
   const [priceUpdateDisabled, setPriceUpdateDisabled] = useState(false);
+  
+  // CRUD state
+  const { showToast } = useToast();
+  const [showAddETFModal, setShowAddETFModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedETF, setSelectedETF] = useState<ETFHolding | null>(null);
+  const [etfToDelete, setEtfToDelete] = useState<ETFHolding | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    symbol: '',
+    category: 'Equity',
+    units: '',
+    averagePrice: ''
+  });
 
   const fetchData = useCallback(async (userId: string) => {
     // Prevent duplicate simultaneous fetches
@@ -183,6 +204,196 @@ export default function ETFHoldingsPage() {
     }
   };
 
+  // Handlers
+  const handleAddETF = () => {
+    setSelectedETF(null);
+    setFormData({ 
+      name: '', 
+      symbol: '', 
+      category: 'Equity', 
+      units: '', 
+      averagePrice: ''
+    });
+    setShowAddETFModal(true);
+  };
+
+  const handleEditETF = (etf: ETFHolding) => {
+    setSelectedETF(etf);
+    setFormData({
+      name: etf.name,
+      symbol: etf.symbol || '',
+      category: etf.category,
+      units: etf.units.toString(),
+      averagePrice: etf.averagePrice.toString()
+    });
+    setShowEditModal(true);
+  };
+
+  const handleDeleteETF = (etf: ETFHolding) => {
+    setEtfToDelete(etf);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleAddETFSubmit = async (etfData: {
+    name: string;
+    symbol: string;
+    category: string;
+    units: number;
+    averagePrice: number;
+  }) => {
+    setIsLoading(true);
+    
+    try {
+      if (!user?.id) {
+        showToast({
+          type: 'error',
+          title: 'Authentication Error',
+          message: 'User not authenticated',
+          duration: 7000,
+        });
+        return;
+      }
+
+      const response = await fetch('/api/etf/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: etfData.name,
+          symbol: etfData.symbol.toUpperCase(),
+          category: etfData.category,
+          units: etfData.units,
+          averagePrice: etfData.averagePrice,
+          user_id: user.id
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to add ETF' }));
+        throw new Error(error.error || 'Failed to add ETF');
+      }
+      
+      // Refresh data
+      await fetchData(user.id);
+      setShowAddETFModal(false);
+      setFormData({ 
+        name: '', 
+        symbol: '', 
+        category: 'Equity', 
+        units: '', 
+        averagePrice: ''
+      });
+      
+      showToast({
+        type: 'success',
+        title: 'ETF Added',
+        message: `${etfData.name} has been added successfully.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error adding ETF:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Add ETF',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditETFSubmit = async (etfData: {
+    units: number;
+    averagePrice: number;
+  }) => {
+    if (!selectedETF || !user?.id) return;
+    
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch('/api/etf/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedETF.id,
+          units: etfData.units,
+          averagePrice: etfData.averagePrice,
+          user_id: user.id
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to update ETF' }));
+        throw new Error(error.error || 'Failed to update ETF');
+      }
+      
+      // Refresh data
+      await fetchData(user.id);
+      setShowEditModal(false);
+      setSelectedETF(null);
+      
+      showToast({
+        type: 'success',
+        title: 'ETF Updated',
+        message: `${selectedETF.name} has been updated successfully.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error updating ETF:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Update ETF',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteETFConfirm = async () => {
+    if (!etfToDelete || !user?.id) return;
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`/api/etf/delete/${etfToDelete.id}?user_id=${user.id}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to delete ETF' }));
+        throw new Error(error.error || 'Failed to delete ETF');
+      }
+
+      // Refresh data
+      await fetchData(user.id);
+      setShowDeleteConfirm(false);
+      const deletedName = etfToDelete.name;
+      setEtfToDelete(null);
+      
+      showToast({
+        type: 'success',
+        title: 'ETF Deleted',
+        message: `${deletedName} has been removed from your portfolio.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error deleting ETF:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Delete ETF',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const formatPriceDate = (dateStr: string | null): string => {
     if (!dateStr) return 'N/A';
     try {
@@ -250,6 +461,99 @@ export default function ETFHoldingsPage() {
     return dates.length > 0 ? dates[0] : null;
   }, [holdings]);
 
+  // Download handler for ETFs
+  const handleDownload = useCallback(async () => {
+    console.log('[ETF Download] Handler called - starting download process');
+    
+    try {
+      console.log('[ETF Download] Starting PDF generation...', { holdingsCount: holdings.length, totalValue });
+      
+      if (!holdings || holdings.length === 0) {
+        showToast({
+          type: 'warning',
+          title: 'No Data',
+          message: 'No ETF holdings available to download.',
+          duration: 5000,
+        });
+        return;
+      }
+      
+      // Convert holdings to PDF format (same order as displayed)
+      const pdfData = sortedHoldings.map(holding => ({
+        name: String(holding.name || 'Unknown'),
+        symbol: holding.symbol || '',
+        category: String(holding.category || 'Other'),
+        units: typeof holding.units === 'number' ? holding.units : parseFloat(String(holding.units)) || 0,
+        averagePrice: typeof holding.averagePrice === 'number' ? holding.averagePrice : parseFloat(String(holding.averagePrice)) || 0,
+        currentNAV: typeof holding.currentNAV === 'number' ? holding.currentNAV : parseFloat(String(holding.currentNAV)) || 0,
+        investedValue: typeof holding.investedValue === 'number' ? holding.investedValue : parseFloat(String(holding.investedValue)) || 0,
+        currentValue: typeof holding.currentValue === 'number' ? holding.currentValue : parseFloat(String(holding.currentValue)) || 0,
+        gainLoss: typeof holding.gainLoss === 'number' ? holding.gainLoss : parseFloat(String(holding.gainLoss)) || 0,
+        gainLossPercent: typeof holding.gainLossPercent === 'number' ? holding.gainLossPercent : parseFloat(String(holding.gainLossPercent)) || 0,
+      }));
+      
+      console.log('[ETF Download] Calling generateETFSPDF with', pdfData.length, 'holdings');
+      await generateETFSPDF({
+        holdings: pdfData,
+        totalValue,
+        totalInvested,
+        portfolioPercentage,
+        priceDate: mostRecentPriceDate,
+        formatCurrency,
+      });
+
+      console.log('[ETF Download] PDF generation complete');
+      
+      // Suppress extension errors
+      const originalErrorHandler = window.onerror;
+      window.onerror = (message, source, lineno, colno, error) => {
+        const errorStr = String(message || error?.message || '');
+        if (errorStr.includes('Could not establish connection') || 
+            errorStr.includes('Receiving end does not exist') ||
+            errorStr.includes('content-all.js')) {
+          console.debug('[ETF Download] Ignoring harmless browser extension error');
+          return true;
+        }
+        if (originalErrorHandler) {
+          return originalErrorHandler(message, source, lineno, colno, error);
+        }
+        return false;
+      };
+      
+      setTimeout(() => {
+        window.onerror = originalErrorHandler;
+      }, 1000);
+      
+      showToast({
+        type: 'success',
+        title: 'PDF Downloaded',
+        message: 'Your ETF holdings report has been downloaded successfully.',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[ETF Download] Error generating PDF:', error);
+      
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('Could not establish connection') || 
+          errorMsg.includes('Receiving end does not exist')) {
+        console.warn('[ETF Download] Browser extension interference detected, but PDF may have been generated');
+        showToast({
+          type: 'success',
+          title: 'PDF Downloaded',
+          message: 'Your ETF holdings report has been downloaded. (Some browser extensions may show harmless errors)',
+          duration: 5000,
+        });
+      } else {
+        showToast({
+          type: 'error',
+          title: 'Download Failed',
+          message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
+          duration: 5000,
+        });
+      }
+    }
+  }, [holdings, sortField, sortDirection, totalValue, totalInvested, portfolioPercentage, mostRecentPriceDate, formatCurrency, showToast, sortedHoldings]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
@@ -268,6 +572,7 @@ export default function ETFHoldingsPage() {
         backHref="/dashboard"
         backLabel="Back to Dashboard"
         showDownload={true}
+        onDownload={handleDownload}
       />
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
@@ -275,25 +580,37 @@ export default function ETFHoldingsPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">ETF Holdings</h1>
-            <button
-              onClick={handlePriceUpdate}
-              disabled={priceUpdateLoading || priceUpdateDisabled}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                priceUpdateLoading || priceUpdateDisabled
-                  ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
-                  : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
-              }`}
-              title={priceUpdateDisabled ? 'Prices already updated today' : 'Update ETF prices from Yahoo Finance'}
-            >
-              <RefreshIcon 
-                className={`w-4 h-4 ${priceUpdateLoading ? 'animate-spin' : ''}`} 
-              />
-              {priceUpdateLoading 
-                ? 'Updating...' 
-                : priceUpdateDisabled 
-                  ? 'Updated Today' 
-                  : 'Update Prices'}
-            </button>
+            <div className="flex items-center gap-3">
+              {/* ADD ETF BUTTON */}
+              <button 
+                onClick={handleAddETF}
+                className="flex items-center gap-2 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add ETF</span>
+              </button>
+              
+              {/* Update Prices button */}
+              <button
+                onClick={handlePriceUpdate}
+                disabled={priceUpdateLoading || priceUpdateDisabled}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  priceUpdateLoading || priceUpdateDisabled
+                    ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
+                    : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
+                }`}
+                title={priceUpdateDisabled ? 'Prices already updated today' : 'Update ETF prices from Yahoo Finance'}
+              >
+                <RefreshIcon 
+                  className={`w-4 h-4 ${priceUpdateLoading ? 'animate-spin' : ''}`} 
+                />
+                {priceUpdateLoading 
+                  ? 'Updating...' 
+                  : priceUpdateDisabled 
+                    ? 'Updated Today' 
+                    : 'Update Prices'}
+              </button>
+            </div>
           </div>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             {holdings.length} holding{holdings.length !== 1 ? 's' : ''} • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
@@ -393,12 +710,15 @@ export default function ETFHoldingsPage() {
                         <SortIcon field="allocation" />
                       </div>
                     </th>
+                    <th className="text-right px-6 py-4 text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider w-20">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                   {sortedHoldings.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center">
+                      <td colSpan={10} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center gap-2">
                           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">No ETF holdings found</p>
                           <p className="text-xs text-[#9CA3AF] dark:text-[#64748B]">Upload your portfolio to see ETF holdings</p>
@@ -407,7 +727,7 @@ export default function ETFHoldingsPage() {
                     </tr>
                   ) : (
                     sortedHoldings.map((holding) => (
-                      <tr key={holding.id} className="hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
+                      <tr key={holding.id} className="group hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
                         <td className="px-6 py-3.5">
                           <div>
                             <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.name}</p>
@@ -465,6 +785,28 @@ export default function ETFHoldingsPage() {
                         <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                           {holding.allocationPct.toFixed(1)}%
                         </td>
+                        {/* ACTIONS COLUMN */}
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2 opacity-100 transition-opacity">
+                            {/* Edit Button */}
+                            <button 
+                              onClick={() => handleEditETF(holding)}
+                              className="p-2 hover:bg-primary/10 text-primary rounded-lg transition-colors"
+                              title="Edit holding"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            
+                            {/* Delete Button */}
+                            <button 
+                              onClick={() => handleDeleteETF(holding)}
+                              className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
+                              title="Delete holding"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -499,6 +841,7 @@ export default function ETFHoldingsPage() {
                       <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                         {portfolioPercentage.toFixed(1)}%
                       </td>
+                      <td className="px-4 py-3.5"></td>
                     </tr>
                   </tfoot>
                 )}
@@ -562,6 +905,419 @@ export default function ETFHoldingsPage() {
           </div>
         )}
       </main>
+
+      {/* ADD ETF MODAL */}
+      {showAddETFModal && (
+        <AddETFModal
+          onClose={() => {
+            setShowAddETFModal(false);
+            setFormData({ 
+              name: '', 
+              symbol: '', 
+              category: 'Equity', 
+              units: '', 
+              averagePrice: ''
+            });
+          }}
+          onSave={handleAddETFSubmit}
+          formData={formData}
+          setFormData={setFormData}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* EDIT ETF MODAL */}
+      {showEditModal && selectedETF && (
+        <EditETFModal
+          etf={selectedETF}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedETF(null);
+          }}
+          onSave={handleEditETFSubmit}
+          formData={formData}
+          setFormData={setFormData}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* DELETE CONFIRMATION DIALOG */}
+      {showDeleteConfirm && etfToDelete && (
+        <DeleteConfirmationDialog
+          etf={etfToDelete}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setEtfToDelete(null);
+          }}
+          onConfirm={handleDeleteETFConfirm}
+          isLoading={isLoading}
+        />
+      )}
+
+    </div>
+  );
+}
+
+/**
+ * Add ETF Modal Component
+ */
+function AddETFModal({ 
+  onClose, 
+  onSave,
+  formData,
+  setFormData,
+  isLoading,
+  formatCurrency
+}: { 
+  onClose: () => void; 
+  onSave: (data: any) => void;
+  formData: any;
+  setFormData: any;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name || !formData.units || !formData.averagePrice) {
+      return;
+    }
+    
+    if (parseFloat(formData.units) <= 0) {
+      return;
+    }
+    
+    if (parseFloat(formData.averagePrice) <= 0) {
+      return;
+    }
+    
+    onSave({
+      name: formData.name,
+      symbol: formData.symbol || formData.name,
+      category: formData.category,
+      units: parseFloat(formData.units),
+      averagePrice: parseFloat(formData.averagePrice)
+    });
+  };
+
+  const investedValue = formData.units && formData.averagePrice
+    ? parseFloat(formData.units) * parseFloat(formData.averagePrice)
+    : 0;
+
+  return (
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-card">
+          <h2 className="text-2xl font-bold text-foreground">Add ETF</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
+            type="button"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              ETF Name <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="e.g., Nippon India ETF Nifty 50"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Symbol
+            </label>
+            <input
+              type="text"
+              value={formData.symbol}
+              onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
+              placeholder="e.g., NIFTYBEES"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Category <span className="text-destructive">*</span>
+            </label>
+            <select
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            >
+              <option value="Equity">Equity</option>
+              <option value="Debt">Debt</option>
+              <option value="Gold">Gold</option>
+              <option value="Hybrid">Hybrid</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Units <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.units}
+              onChange={(e) => setFormData({ ...formData, units: e.target.value })}
+              placeholder="100.50"
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Average Buy Price (₹) <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.averagePrice}
+              onChange={(e) => setFormData({ ...formData, averagePrice: e.target.value })}
+              placeholder="150.25"
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          {investedValue > 0 && (
+            <div className="bg-accent border border-border rounded-lg p-4">
+              <div className="text-sm text-muted-foreground mb-1">Invested Value</div>
+              <div className="text-2xl font-bold text-foreground">
+                {formatCurrency(investedValue)}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading || !formData.name || !formData.units || !formData.averagePrice}
+              className="flex-1 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Adding...' : 'Add ETF'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Edit ETF Modal Component
+ */
+function EditETFModal({ 
+  etf, 
+  onClose, 
+  onSave,
+  formData,
+  setFormData,
+  isLoading,
+  formatCurrency
+}: { 
+  etf: ETFHolding; 
+  onClose: () => void; 
+  onSave: (data: any) => void;
+  formData: any;
+  setFormData: any;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (parseFloat(formData.units) <= 0) {
+      return;
+    }
+    
+    if (parseFloat(formData.averagePrice) <= 0) {
+      return;
+    }
+    
+    onSave({
+      units: parseFloat(formData.units),
+      averagePrice: parseFloat(formData.averagePrice)
+    });
+  };
+
+  const newInvestedValue = formData.units && formData.averagePrice
+    ? parseFloat(formData.units) * parseFloat(formData.averagePrice)
+    : 0;
+
+  return (
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="text-2xl font-bold text-foreground">Edit ETF</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
+            type="button"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="bg-accent border border-border rounded-lg p-4">
+            <div className="font-semibold text-foreground text-lg">{etf.name}</div>
+            <div className="text-sm text-muted-foreground">{etf.symbol} • {etf.category}</div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Units <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.units}
+              onChange={(e) => setFormData({ ...formData, units: e.target.value })}
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Average Buy Price (₹) <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.averagePrice}
+              onChange={(e) => setFormData({ ...formData, averagePrice: e.target.value })}
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+            />
+          </div>
+
+          {newInvestedValue > 0 && (
+            <div className="bg-accent border border-border rounded-lg p-4">
+              <div className="text-sm text-muted-foreground mb-1">New Invested Value</div>
+              <div className="text-2xl font-bold text-foreground">
+                {formatCurrency(newInvestedValue)}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Previous: {formatCurrency(etf.investedValue)}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Delete Confirmation Dialog Component
+ */
+function DeleteConfirmationDialog({ 
+  etf, 
+  onClose, 
+  onConfirm,
+  isLoading
+}: { 
+  etf: ETFHolding; 
+  onClose: () => void; 
+  onConfirm: () => void;
+  isLoading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="p-6">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+            <Trash2 className="w-6 h-6 text-destructive" />
+          </div>
+          
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            Delete ETF?
+          </h2>
+          
+          <p className="text-muted-foreground mb-6">
+            Are you sure you want to delete{' '}
+            <strong className="text-foreground">{etf.name}</strong>?{' '}
+            This will remove{' '}
+            <strong className="text-foreground">
+              {etf.units.toLocaleString('en-IN', { maximumFractionDigits: 2 })} units
+            </strong>{' '}
+            with invested value of{' '}
+            <strong className="text-foreground">
+              ₹{etf.investedValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </strong>.
+          </p>
+
+          <div className="bg-yellow-500/10 border-l-4 border-yellow-500 p-4 rounded-r-lg mb-6">
+            <p className="text-sm text-foreground">
+              <strong>Warning:</strong> This action cannot be undone. You'll need to add 
+              this ETF again manually or re-upload your CSV if you change your mind.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Deleting...' : 'Delete ETF'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -25,6 +25,8 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -80,6 +82,7 @@
   --accent: #EFF6FF;
   --accent-foreground: #1E40AF;
   --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
   
   /* Chart Colors - Professional Muted */
   --chart-1: #2563EB;
@@ -120,6 +123,7 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
   --success: oklch(0.769 0.188 70.08); /* Green for success states in dark mode */
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);

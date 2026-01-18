@@ -268,8 +268,8 @@ export function AppHeader({
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]">
-      <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]" style={{ pointerEvents: 'auto' }}>
+      <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between" style={{ pointerEvents: 'auto' }}>
         {/* Left: Logo and Back Button */}
         <div className="flex items-center gap-4">
           <LogoLockup />
@@ -327,8 +327,41 @@ export function AppHeader({
           
           {showDownload && (
             <button
-              onClick={onDownload || (() => {})}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
+              onClick={async (e) => {
+                console.log('[AppHeader] Download button clicked', { 
+                  onDownload: !!onDownload, 
+                  showDownload, 
+                  onDownloadType: typeof onDownload,
+                  onDownloadValue: onDownload
+                });
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Check if onDownload is a function
+                if (onDownload && typeof onDownload === 'function') {
+                  console.log('[AppHeader] Calling onDownload handler');
+                  try {
+                    const result = await onDownload();
+                    console.log('[AppHeader] onDownload result:', result);
+                  } catch (error) {
+                    console.error('[AppHeader] Error calling onDownload:', error);
+                  }
+                } else {
+                  console.error('[AppHeader] onDownload handler is not defined or not a function', { 
+                    onDownload, 
+                    type: typeof onDownload,
+                    showDownload
+                  });
+                  alert('Download handler not available. Please refresh the page.');
+                }
+              }}
+              onMouseDown={(e) => {
+                console.log('[AppHeader] Download button mousedown');
+              }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors cursor-pointer relative z-[60]"
+              style={{ pointerEvents: 'auto' }}
+              type="button"
+              aria-label="Download holdings"
             >
               <FileIcon className="w-4 h-4" />
               Download

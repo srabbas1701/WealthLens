@@ -21,6 +21,9 @@ import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { RefreshIcon } from '@/components/icons';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import { useToast } from '@/components/Toast';
+import { useSubscription } from '@/hooks/useSubscription';
+import { generateStocksPDF } from '@/lib/pdf/generateStocksPDF';
+import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { Plus, Edit, Trash2, X, Search } from 'lucide-react';
 
 // Types
@@ -47,6 +50,7 @@ export default function StocksHoldingsPage() {
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
+  const { isPremium, loading: subscriptionLoading } = useSubscription();
   const fetchingRef = useRef(false);
   
   const [loading, setLoading] = useState(true);
@@ -63,6 +67,7 @@ export default function StocksHoldingsPage() {
   const [fetchingPrice, setFetchingPrice] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
   
   // Price update state
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
@@ -445,6 +450,88 @@ export default function StocksHoldingsPage() {
     .filter((date): date is string => date !== null && date !== undefined)
     .sort((a, b) => b.localeCompare(a))[0] || null;
 
+  // Download handler with premium check
+  const handleDownload = useCallback(async () => {
+    console.log('[Download] Handler called - starting download process');
+    alert('Download button clicked! Starting PDF generation...'); // Temporary test
+    
+    // TODO: Re-enable premium check once subscription logic is fully implemented
+    // For now, allow all authenticated users to download
+    
+    // Check if subscription status is still loading
+    // if (subscriptionLoading) {
+    //   showToast({
+    //     type: 'info',
+    //     title: 'Loading...',
+    //     message: 'Please wait while we check your subscription status.',
+    //     duration: 3000,
+    //   });
+    //   return;
+    // }
+
+    // Check if user is premium
+    // if (!isPremium) {
+    //   setShowPremiumModal(true);
+    //   return;
+    // }
+
+    // Generate PDF for all authenticated users (temporary - until premium logic is implemented)
+    try {
+      console.log('[Download] Starting PDF generation...', { stocksCount: stocks.length, totalValue });
+      
+      if (!stocks || stocks.length === 0) {
+        showToast({
+          type: 'warning',
+          title: 'No Data',
+          message: 'No stocks holdings available to download.',
+          duration: 5000,
+        });
+        return;
+      }
+      
+      // Convert stocks to PDF format (excluding Actions column)
+      const pdfData = stocks.map(stock => ({
+        name: stock.name,
+        symbol: stock.symbol,
+        quantity: stock.quantity,
+        avgBuyPrice: stock.avgBuyPrice,
+        investedValue: stock.investedValue,
+        currentPrice: stock.currentPrice,
+        currentValue: stock.currentValue,
+        pl: stock.pl,
+        plPercentage: stock.plPercentage,
+        allocation: stock.allocation,
+      }));
+
+      console.log('[Download] Calling generateStocksPDF with', pdfData.length, 'stocks');
+      await generateStocksPDF({
+        stocks: pdfData,
+        totalValue,
+        totalInvested,
+        portfolioPercentage,
+        priceDate: mostRecentPriceDate,
+        formatCurrency,
+      });
+
+      console.log('[Download] PDF generation complete');
+      showToast({
+        type: 'success',
+        title: 'PDF Downloaded',
+        message: 'Your stocks holdings report has been downloaded successfully.',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[Download] Error generating PDF:', error);
+      showToast({
+        type: 'error',
+        title: 'Download Failed',
+        message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
+        duration: 5000,
+      });
+    }
+    // TODO: Re-add isPremium and subscriptionLoading to dependencies when premium check is re-enabled
+  }, [stocks, totalValue, totalInvested, portfolioPercentage, mostRecentPriceDate, formatCurrency, showToast]);
+
   // Group holdings
   const groupedStocks = (() => {
     if (groupBy === 'none') {
@@ -533,6 +620,10 @@ export default function StocksHoldingsPage() {
         backHref="/dashboard"
         backLabel="Back to Dashboard"
         showDownload={true}
+        onDownload={() => {
+          console.log('[Stocks Page] Direct handler called');
+          handleDownload();
+        }}
       />
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
@@ -545,7 +636,7 @@ export default function StocksHoldingsPage() {
               {/* ADD STOCK BUTTON */}
               <button 
                 onClick={handleAddStock}
-                className="flex items-center gap-2 px-6 py-3 bg-[#10b981] dark:bg-[#10b981] text-white rounded-lg hover:bg-[#059669] dark:hover:bg-[#059669] transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
+                className="flex items-center gap-2 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
               >
                 <Plus className="w-5 h-5" />
                 <span>Add Stock</span>
@@ -696,11 +787,11 @@ export default function StocksHoldingsPage() {
                         
                         {/* ACTIONS COLUMN - visible on mobile, hover-only on desktop */}
                         <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2 opacity-0 md:group-hover:opacity-100 sm:opacity-100 transition-opacity">
+                          <div className="flex items-center justify-end gap-2 opacity-100 transition-opacity">
                             {/* Edit Button */}
                             <button 
                               onClick={() => handleEditStock(stock)}
-                              className="p-2 hover:bg-[#2563EB]/10 dark:hover:bg-[#3B82F6]/10 text-[#2563EB] dark:text-[#3B82F6] rounded-lg transition-colors"
+                              className="p-2 hover:bg-primary/10 text-primary rounded-lg transition-colors"
                               title="Edit holding"
                             >
                               <Edit className="w-4 h-4" />
@@ -709,7 +800,7 @@ export default function StocksHoldingsPage() {
                             {/* Delete Button */}
                             <button 
                               onClick={() => handleDeleteStock(stock)}
-                              className="p-2 hover:bg-[#DC2626]/10 dark:hover:bg-red-400/10 text-[#DC2626] dark:text-red-400 rounded-lg transition-colors"
+                              className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
                               title="Delete holding"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -778,6 +869,13 @@ export default function StocksHoldingsPage() {
         />
       )}
 
+      {/* PREMIUM DOWNLOAD MODAL */}
+      <PremiumDownloadModal
+        isOpen={showPremiumModal}
+        onClose={() => setShowPremiumModal(false)}
+        featureName="Download Stocks Holdings PDF"
+      />
+
     </div>
   );
 }
@@ -843,18 +941,18 @@ function AddStockModal({
     : 0;
 
   return (
-    <div className="fixed inset-0 bg-[#F6F8FB]/80 dark:bg-[#0F172A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155] sticky top-0 bg-white dark:bg-[#1E293B]">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Add Stock Holding</h2>
+        <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-card">
+          <h2 className="text-2xl font-bold text-foreground">Add Stock Holding</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] rounded-lg transition-colors"
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
             type="button"
           >
-            <X className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -863,8 +961,8 @@ function AddStockModal({
           
           {/* Stock Name with Autocomplete */}
           <div className="relative">
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-              Stock Name <span className="text-[#DC2626] dark:text-red-400">*</span>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Stock Name <span className="text-destructive">*</span>
             </label>
             <div className="relative">
               <input
@@ -872,38 +970,38 @@ function AddStockModal({
                 value={formData.name}
                 onChange={(e) => onSearch(e.target.value)}
                 placeholder="Search for stock (e.g., HDFC Bank)"
-                className="w-full px-4 py-3 pr-10 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+                className="w-full px-4 py-3 pr-10 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
                 required
                 autoComplete="off"
               />
-              <Search className="absolute right-3 top-3.5 w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+              <Search className="absolute right-3 top-3.5 w-5 h-5 text-muted-foreground" />
             </div>
             
             {/* Search Results Dropdown */}
             {showSearchResults && searchResults.length > 0 && (
-              <div className="absolute z-10 w-full mt-2 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg shadow-lg max-h-48 overflow-y-auto">
+              <div className="absolute z-10 w-full mt-2 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
                 {searchResults.map((stock, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => onSelectStock(stock)}
-                    className="w-full text-left px-4 py-3 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors border-b border-[#E5E7EB] dark:border-[#334155] last:border-0"
+                    className="w-full text-left px-4 py-3 hover:bg-accent transition-colors border-b border-border last:border-0"
                   >
-                    <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{stock.name}</div>
-                    <div className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{stock.symbol}</div>
+                    <div className="font-semibold text-foreground">{stock.name}</div>
+                    <div className="text-sm text-muted-foreground">{stock.symbol}</div>
                   </button>
                 ))}
               </div>
             )}
             
             {isSearching && (
-              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">Searching...</div>
+              <div className="text-sm text-muted-foreground mt-1">Searching...</div>
             )}
           </div>
 
           {/* Symbol */}
           <div>
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+            <label className="block text-sm font-semibold text-foreground mb-2">
               Symbol
             </label>
             <input
@@ -911,17 +1009,17 @@ function AddStockModal({
               value={formData.symbol}
               onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
               placeholder="NSE:HDFCBANK or BSE:500180"
-              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
             />
-            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Format: NSE:SYMBOL or BSE:SYMBOL
             </p>
           </div>
 
           {/* Quantity */}
           <div>
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-              Quantity <span className="text-[#DC2626] dark:text-red-400">*</span>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Quantity <span className="text-destructive">*</span>
             </label>
             <input
               type="number"
@@ -930,15 +1028,15 @@ function AddStockModal({
               placeholder="100"
               min="1"
               step="1"
-              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
               required
             />
           </div>
 
           {/* Average Buy Price */}
           <div>
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-              Average Buy Price (₹) <span className="text-[#DC2626] dark:text-red-400">*</span>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Average Buy Price (₹) <span className="text-destructive">*</span>
             </label>
             <input
               type="number"
@@ -947,29 +1045,29 @@ function AddStockModal({
               placeholder="750.50"
               min="0.01"
               step="0.01"
-              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
               required
             />
           </div>
 
           {/* Purchase Date */}
           <div>
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+            <label className="block text-sm font-semibold text-foreground mb-2">
               Purchase Date (Optional)
             </label>
             <input
               type="date"
               value={formData.purchaseDate}
               onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
-              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
             />
           </div>
 
           {/* Calculated Invested Value */}
           {investedValue > 0 && (
-            <div className="bg-[#F6F8FB] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
-              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">Invested Value</div>
-              <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+            <div className="bg-accent border border-border rounded-lg p-4">
+              <div className="text-sm text-muted-foreground mb-1">Invested Value</div>
+              <div className="text-2xl font-bold text-foreground">
                 {formatCurrency(investedValue)}
               </div>
             </div>
@@ -980,14 +1078,14 @@ function AddStockModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-semibold"
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isLoading || !formData.name || !formData.quantity || !formData.avgBuyPrice}
-              className="flex-1 px-6 py-3 bg-[#10b981] dark:bg-[#10b981] text-white rounded-lg hover:bg-[#059669] dark:hover:bg-[#059669] transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Adding...' : 'Add Stock'}
             </button>
@@ -1044,18 +1142,18 @@ function EditStockModal({
     : 0;
 
   return (
-    <div className="fixed inset-0 bg-[#F6F8FB]/80 dark:bg-[#0F172A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155]">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Edit Stock Holding</h2>
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="text-2xl font-bold text-foreground">Edit Stock Holding</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] rounded-lg transition-colors"
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
             type="button"
           >
-            <X className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -1063,15 +1161,15 @@ function EditStockModal({
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           
           {/* Stock Info (Read-only) */}
-          <div className="bg-[#F6F8FB] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
-            <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-lg">{stock.name}</div>
-            <div className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{stock.symbol}</div>
+          <div className="bg-accent border border-border rounded-lg p-4">
+            <div className="font-semibold text-foreground text-lg">{stock.name}</div>
+            <div className="text-sm text-muted-foreground">{stock.symbol}</div>
           </div>
 
           {/* Quantity */}
           <div>
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-              Quantity <span className="text-[#DC2626] dark:text-red-400">*</span>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Quantity <span className="text-destructive">*</span>
             </label>
             <input
               type="number"
@@ -1079,7 +1177,7 @@ function EditStockModal({
               onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
               min="1"
               step="1"
-              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
               required
               autoFocus
             />
@@ -1087,8 +1185,8 @@ function EditStockModal({
 
           {/* Average Buy Price */}
           <div>
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-              Average Buy Price (₹) <span className="text-[#DC2626] dark:text-red-400">*</span>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Average Buy Price (₹) <span className="text-destructive">*</span>
             </label>
             <input
               type="number"
@@ -1096,19 +1194,19 @@ function EditStockModal({
               onChange={(e) => setFormData({ ...formData, avgBuyPrice: e.target.value })}
               min="0.01"
               step="0.01"
-              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
               required
             />
           </div>
 
           {/* New Invested Value */}
           {newInvestedValue > 0 && (
-            <div className="bg-[#F6F8FB] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
-              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">New Invested Value</div>
-              <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+            <div className="bg-accent border border-border rounded-lg p-4">
+              <div className="text-sm text-muted-foreground mb-1">New Invested Value</div>
+              <div className="text-2xl font-bold text-foreground">
                 {formatCurrency(newInvestedValue)}
               </div>
-              <div className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+              <div className="text-xs text-muted-foreground mt-1">
                 Previous: {formatCurrency(stock.investedValue)}
               </div>
             </div>
@@ -1119,14 +1217,14 @@ function EditStockModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-semibold"
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isLoading}
-              className="flex-1 px-6 py-3 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Saving...' : 'Save Changes'}
             </button>
@@ -1154,37 +1252,37 @@ function DeleteConfirmationDialog({
   isLoading: boolean;
 }) {
   return (
-    <div className="fixed inset-0 bg-[#F6F8FB]/80 dark:bg-[#0F172A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md">
         
         <div className="p-6">
           {/* Icon */}
-          <div className="w-12 h-12 rounded-full bg-[#DC2626]/10 dark:bg-red-400/10 flex items-center justify-center mb-4">
-            <Trash2 className="w-6 h-6 text-[#DC2626] dark:text-red-400" />
+          <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+            <Trash2 className="w-6 h-6 text-destructive" />
           </div>
           
           {/* Title */}
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+          <h2 className="text-2xl font-bold text-foreground mb-2">
             Delete Stock Holding?
           </h2>
           
           {/* Description */}
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-6">
+          <p className="text-muted-foreground mb-6">
             Are you sure you want to delete{' '}
-            <strong className="text-[#0F172A] dark:text-[#F8FAFC]">{stock.name}</strong>?{' '}
+            <strong className="text-foreground">{stock.name}</strong>?{' '}
             This will remove{' '}
-            <strong className="text-[#0F172A] dark:text-[#F8FAFC]">
+            <strong className="text-foreground">
               {stock.quantity.toLocaleString('en-IN')} shares
             </strong>{' '}
             with invested value of{' '}
-            <strong className="text-[#0F172A] dark:text-[#F8FAFC]">
+            <strong className="text-foreground">
               ₹{stock.investedValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
             </strong>.
           </p>
 
           {/* Warning */}
           <div className="bg-yellow-500/10 border-l-4 border-yellow-500 p-4 rounded-r-lg mb-6">
-            <p className="text-sm text-[#0F172A] dark:text-[#F8FAFC]">
+            <p className="text-sm text-foreground">
               <strong>Warning:</strong> This action cannot be undone. You'll need to add 
               this stock again manually or re-upload your CSV if you change your mind.
             </p>
@@ -1194,14 +1292,14 @@ function DeleteConfirmationDialog({
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-semibold"
+              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
               disabled={isLoading}
-              className="flex-1 px-6 py-3 bg-[#DC2626] dark:bg-red-500 text-white rounded-lg hover:bg-[#B91C1C] dark:hover:bg-red-600 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-6 py-3 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Deleting...' : 'Delete Stock'}
             </button>

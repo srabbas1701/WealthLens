@@ -37,6 +37,7 @@ interface ManualInvestmentModalProps {
   onPPFSelected?: () => void; // Callback when PPF is selected
   onNPSSelected?: () => void; // Callback when NPS is selected
   onEPFSelected?: () => void; // Callback when EPF is selected
+  onGoldSelected?: () => void; // Callback when Gold is selected
 }
 
 type AssetTypeOption = 'fd' | 'bond' | 'gold' | 'cash' | 'epf' | 'ppf' | 'nps';
@@ -102,6 +103,7 @@ export default function ManualInvestmentModal({
   onPPFSelected,
   onNPSSelected,
   onEPFSelected,
+  onGoldSelected,
 }: ManualInvestmentModalProps) {
   const { formatCurrency } = useCurrency();
   const [step, setStep] = useState<Step>('select');
@@ -190,6 +192,12 @@ export default function ManualInvestmentModal({
     // Special handling for EPF - redirect to comprehensive EPF modal
     if (type === 'epf' && onEPFSelected) {
       onEPFSelected();
+      return;
+    }
+    
+    // Special handling for Gold - redirect to comprehensive Gold modal
+    if (type === 'gold' && onGoldSelected) {
+      onGoldSelected();
       return;
     }
     

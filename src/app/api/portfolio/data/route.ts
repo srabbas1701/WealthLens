@@ -346,7 +346,54 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // 3.6. Fetch NAVs for mutual fund holdings (batch query for performance)
+    // 3.6. Fetch gold prices for gold holdings (batch query for performance)
+    const goldHoldings = holdings.filter((h: any) => {
+      const asset = h.assets as any;
+      return asset?.asset_type === 'gold';
+    });
+    
+    if (goldHoldings.length > 0) {
+      // Fetch latest gold prices
+      const { data: goldPriceData, error: goldPriceError } = await supabase
+        .from('gold_price_daily')
+        .select('gold_24k, gold_22k')
+        .order('date', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (!goldPriceError && goldPriceData) {
+        // Store gold prices in memory for read-time computation
+        for (const holding of goldHoldings) {
+          try {
+            const notes = holding.notes ? JSON.parse(holding.notes) : {};
+            const quantity = holding.quantity || 0;
+            const unitType = notes.unit_type || 'gram';
+            const purity = notes.purity || '22k';
+            
+            // Determine price based on purity
+            let pricePerUnit: number;
+            if (unitType === 'unit') {
+              // For units (SGB), use 22k price as base
+              pricePerUnit = goldPriceData.gold_22k;
+            } else {
+              // For grams, use purity-specific price
+              pricePerUnit = purity === '24k' ? goldPriceData.gold_24k : goldPriceData.gold_22k;
+            }
+            
+            if (pricePerUnit && pricePerUnit > 0) {
+              // Store gold price in memory for computation
+              (holding as any)._computedGoldPrice = pricePerUnit;
+            }
+          } catch (e) {
+            console.warn(`[Portfolio Data API] Failed to parse notes for gold holding ${holding.id}:`, e);
+          }
+        }
+      } else {
+        console.warn('[Portfolio Data API] No gold price data found, using current_value from database');
+      }
+    }
+    
+    // 3.7. Fetch NAVs for mutual fund holdings (batch query for performance)
     // Separate MF holdings into those with ISINs and those without
     // NOTE: ETFs are handled above in section 3.5 - they trade on exchanges and get prices from stock_prices table
     const allMFHoldings = holdings.filter((h: any) => {
@@ -405,6 +452,8 @@ export async function GET(request: NextRequest) {
     // CRITICAL: This ensures totals match sum of holdings
     // For MF: Compute current_value from units × NAV (computed at read-time)
     // For equity: Use current_value if available (from stored prices)
+    // For Gold: Compute current_value from quantity × gold_price (computed at read-time)
+    // For PPF/EPF: Use currentBalance from notes
     // For others: Use invested_value
     let totalValue = 0;
     const allocationMap = new Map<string, number>();
@@ -418,6 +467,7 @@ export async function GET(request: NextRequest) {
       let valueToUse = investedValue;
       const isPPF = assetType === 'ppf';
       const isEPF = assetType === 'epf';
+      const isGold = assetType === 'gold';
       
       if (isMF) {
         // MF: Compute current_value from units × latest_nav (NAV-driven)
@@ -441,6 +491,22 @@ export async function GET(request: NextRequest) {
           valueToUse = quantity * computedPrice;
         } else {
           // No price available - use current_value from database if available, else invested_value
+          if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
+            valueToUse = h.current_value;
+          } else {
+            valueToUse = investedValue;
+          }
+        }
+      } else if (isGold) {
+        // Gold: Compute from gold prices (like stock prices)
+        const computedGoldPrice = (h as any)._computedGoldPrice;
+        const quantity = h.quantity || 0;
+        
+        if (computedGoldPrice && computedGoldPrice > 0 && quantity > 0) {
+          // Compute current_value from quantity × latest_gold_price
+          valueToUse = quantity * computedGoldPrice;
+        } else {
+          // No gold price available - use current_value from database if available, else invested_value
           if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
             valueToUse = h.current_value;
           } else {
@@ -477,9 +543,20 @@ export async function GET(request: NextRequest) {
       // Add to total
       totalValue += valueToUse;
       
-      // Add to allocation map (use computed value for equity/MF/PPF/EPF, invested_value for others)
+      // Add to allocation map
+      // IMPORTANT: Use computed current value (valueToUse) for ALL asset types
+      // This ensures allocation percentages are based on current values, not invested values
       allocationMap.set(assetType, (allocationMap.get(assetType) || 0) + valueToUse);
     });
+    
+    // CRITICAL VALIDATION: Verify all asset types are included
+    // This prevents missing asset types (like Gold) from being excluded from totals
+    const assetTypesInHoldings = new Set(holdings.map(h => (h.assets as any)?.asset_type).filter(Boolean));
+    const assetTypesInAllocation = new Set(allocationMap.keys());
+    const missingTypes = Array.from(assetTypesInHoldings).filter(t => !assetTypesInAllocation.has(t));
+    if (missingTypes.length > 0 && process.env.NODE_ENV === 'development') {
+      console.warn(`[Portfolio Data API] Asset types in holdings but not in allocation: ${missingTypes.join(', ')}`);
+    }
     
     // 5. Calculate allocation by asset type (already computed above)
     
@@ -518,6 +595,7 @@ export async function GET(request: NextRequest) {
       let currentValue = investedValue;
       const isMF = assetType === 'mutual_fund' || assetType === 'index_fund';
       const isEquity = assetType === 'equity' || assetType === 'etf';
+      const isGold = assetType === 'gold';
       const isPPF = assetType === 'ppf';
       const isEPF = assetType === 'epf';
       
@@ -532,6 +610,23 @@ export async function GET(request: NextRequest) {
         } else {
           // No NAV available - use invested_value as fallback
           currentValue = investedValue;
+        }
+      } else if (isGold) {
+        // Gold: Compute from gold prices (like stock prices)
+        const computedGoldPrice = (h as any)._computedGoldPrice;
+        const quantity = h.quantity || 0;
+        
+        if (computedGoldPrice && computedGoldPrice > 0 && quantity > 0) {
+          // Compute current_value from quantity × latest_gold_price
+          currentValue = quantity * computedGoldPrice;
+        } else {
+          // No gold price available - use current_value from database if available, else invested_value
+          if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
+            currentValue = h.current_value;
+          } else {
+            // Fallback: use invested_value if no current_value available
+            currentValue = investedValue;
+          }
         }
       } else if (isEquity) {
         // Stocks & ETFs: Compute from price (like MF NAVs) - real-time pricing
