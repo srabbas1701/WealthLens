@@ -481,16 +481,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     try {
-      const { error } = await supabase.auth.signInWithOtp({
+      const { data, error } = await supabase.auth.signInWithOtp({
         email,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       
-      return { error: error ? new Error(error.message) : null };
-    } catch (error) {
-      return { error: error as Error };
+      if (error) {
+        // Log full error details for debugging
+        console.error('[Auth] Magic link error:', {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+          fullError: error,
+        });
+        
+        // Return error with detailed message
+        return { 
+          error: new Error(
+            error.message || 
+            `Failed to send magic link. Status: ${error.status || 'unknown'}. ` +
+            `Please check Supabase Auth Logs for details.`
+          ) 
+        };
+      }
+      
+      return { error: null };
+    } catch (error: any) {
+      // Catch network errors or other exceptions
+      console.error('[Auth] Magic link exception:', error);
+      return { 
+        error: new Error(
+          error?.message || 
+          'Network error. Please check your connection and try again.'
+        ) 
+      };
     }
   };
   

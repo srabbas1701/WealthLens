@@ -273,7 +273,7 @@ export default function AccountSettingsPage() {
                   <div>
                     <p className="text-sm font-medium text-[#0F172A] mb-1">Session Timeout</p>
                     <p className="text-sm text-[#6B7280]">
-                      You'll be automatically logged out after 15 minutes of inactivity for your security.
+                      You'll be automatically logged out after 30 minutes of inactivity for your security.
                     </p>
                   </div>
                 </div>

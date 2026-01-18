@@ -4,7 +4,7 @@
  * Tracks user activity and manages automatic logout after inactivity.
  * 
  * SECURITY REQUIREMENTS:
- * - Auto logout after 15 minutes of inactivity
+ * - Auto logout after 30 minutes of inactivity
  * - Inactivity = no user interaction or API activity
  * - Clear authentication state on logout
  * - Sync logout across tabs
@@ -16,8 +16,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 
-const INACTIVITY_WARNING_TIME = 13 * 60 * 1000; // 13 minutes
-const INACTIVITY_LOGOUT_TIME = 15 * 60 * 1000; // 15 minutes
+const INACTIVITY_WARNING_TIME = 28 * 60 * 1000; // 28 minutes (2 minutes before logout)
+const INACTIVITY_LOGOUT_TIME = 30 * 60 * 1000; // 30 minutes
 
 interface UseSessionTimeoutOptions {
   onWarning?: () => void;
@@ -84,13 +84,13 @@ export function useSessionTimeout({
     const now = Date.now();
     const timeSinceActivity = now - lastActivityRef.current;
 
-    // Show warning at 13 minutes
+    // Show warning at 28 minutes (2 minutes before logout)
     if (timeSinceActivity >= INACTIVITY_WARNING_TIME && !warningShownRef.current) {
       warningShownRef.current = true;
       onWarning?.();
     }
 
-    // Auto logout at 15 minutes
+    // Auto logout at 30 minutes
     if (timeSinceActivity >= INACTIVITY_LOGOUT_TIME) {
       handleAutoLogout();
     }
@@ -122,8 +122,9 @@ export function useSessionTimeout({
     localStorage.setItem('sessionLogout', Date.now().toString());
     localStorage.removeItem('sessionLogout');
 
-    // Redirect with message
-    router.push('/login?timeout=true');
+    // Redirect to landing page (not login) to avoid confusion
+    // User can see the landing page and choose to login again
+    router.push('/?timeout=true');
     
     onLogout?.();
   }, [signOut, router, onLogout]);

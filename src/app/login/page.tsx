@@ -432,14 +432,24 @@ function LoginContent() {
       'Unsupported phone provider': 'Unsupported phone provider',
       'Email rate limit exceeded': 'Too many attempts. Please wait a few minutes before trying again.',
       'Unable to validate email address': 'Please enter a valid email address.',
+      'Failed to send magic link': 'Unable to send email. Please check Supabase configuration.',
+      'Internal Server Error': 'Server error. Please check: 1) Email provider is enabled in Supabase, 2) No rate limits exceeded, 3) Check Supabase Auth Logs for details.',
+      '500': 'Server error (500). Check Supabase Dashboard → Authentication → Providers → Email is enabled.',
     };
     
+    // Check for partial matches first
     for (const [key, value] of Object.entries(errorMap)) {
       if (message.toLowerCase().includes(key.toLowerCase())) {
         return value;
       }
     }
     
+    // If message contains status codes or technical details, provide helpful guidance
+    if (message.includes('500') || message.includes('Internal Server Error')) {
+      return 'Server error. Please check Supabase Dashboard: Authentication → Providers → Email should be enabled. Also check Auth Logs for the exact error.';
+    }
+    
+    // Return original message if no match found (so user can see the actual error)
     return message;
   };
   
@@ -560,6 +570,23 @@ function LoginContent() {
                 <div className="flex items-start gap-3">
                   <CheckCircleIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-[#166534] dark:text-[#86EFAC]">{success}</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Mobile Helper Message (iPhone/iOS) */}
+            {authMethod === 'email' && emailStep === 'sent' && (
+              <div className="mb-6 p-4 bg-[#EFF6FF] dark:bg-[#1E3A8A] border border-[#DBEAFE] dark:border-[#1E40AF] rounded-lg">
+                <div className="flex items-start gap-3">
+                  <SmartphoneIcon className="w-5 h-5 text-[#2563EB] dark:text-[#60A5FA] flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-[#1E40AF] dark:text-[#93C5FD] mb-1">
+                      Using iPhone?
+                    </p>
+                    <p className="text-xs text-[#1E3A8A] dark:text-[#BFDBFE]">
+                      For best results, copy the link from your email and paste it in Safari, or use "Open in Safari" from the Mail app.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}

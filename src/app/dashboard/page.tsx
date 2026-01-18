@@ -341,22 +341,24 @@ function DashboardContent() {
     }
     
     // PERMANENT FIX: Clear redirect state when navigating from home page or header
+    // Skip redirect checks if user explicitly navigated from home page
     const navigationSource = sessionStorage.getItem('navigation_source');
+    const navigationTime = sessionStorage.getItem('navigation_time');
+    const isFromHomePage = navigationSource === 'home' && navigationTime && (Date.now() - parseInt(navigationTime, 10)) < 10000; // Within 10 seconds
+    
     if (navigationSource === 'home' || navigationSource === 'header') {
       console.log('[Dashboard] Cleared redirect state - navigated from', navigationSource);
       redirectAttemptedRef.current = false;
       const redirectKey = `dashboard_redirect_${user.id}`;
       localStorage.removeItem(redirectKey);
       sessionStorage.removeItem('navigation_source');
+      sessionStorage.removeItem('navigation_time');
       
-      // Wait a bit after navigation to let portfolio check complete
-      const navigationTime = sessionStorage.getItem('navigation_time');
-      if (navigationTime) {
-        const timeSinceNavigation = Date.now() - parseInt(navigationTime);
-        if (timeSinceNavigation < 3000) {
-          console.log('[Dashboard] Too soon after navigation - waiting');
-          return;
-        }
+      // If coming from home page, skip redirect logic entirely (user explicitly clicked)
+      // This prevents unnecessary redirects and improves loading speed
+      if (isFromHomePage) {
+        console.log('[Dashboard] Skipping redirect checks - user navigated from home page');
+        return;
       }
     }
     

@@ -6,8 +6,10 @@
  * - Edit existing stock holdings (quantity, buy price)
  * - Delete stocks with confirmation
  * - Minimal design changes - actions only visible on hover
- * - Clean slide-over modal for add/edit
+ * - Centered modals for add/edit
  * - Confirmation dialog for delete
+ * - Stock search autocomplete
+ * - Toast notifications
  */
 
 'use client';
@@ -18,6 +20,8 @@ import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { RefreshIcon } from '@/components/icons';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
+import { useToast } from '@/components/Toast';
+import { Plus, Edit, Trash2, X, Search } from 'lucide-react';
 
 // Types
 interface Stock {
@@ -42,6 +46,7 @@ export default function StocksHoldingsPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const { showToast } = useToast();
   const fetchingRef = useRef(false);
   
   const [loading, setLoading] = useState(true);
@@ -51,11 +56,13 @@ export default function StocksHoldingsPage() {
   const [portfolioPercentage, setPortfolioPercentage] = useState(0);
   
   const [showAddStockModal, setShowAddStockModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [editingStock, setEditingStock] = useState<Stock | null>(null);
+  const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
   const [stockToDelete, setStockToDelete] = useState<Stock | null>(null);
   const [fetchingPrice, setFetchingPrice] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const [isLoading, setIsLoading] = useState(false);
   
   // Price update state
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
@@ -63,11 +70,17 @@ export default function StocksHoldingsPage() {
   
   // Form state
   const [formData, setFormData] = useState({
+    name: '',
     symbol: '',
     quantity: '',
     avgBuyPrice: '',
     purchaseDate: ''
   });
+  
+  // Stock search state
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Fetch stocks data
   const fetchData = useCallback(async (userId: string) => {
@@ -162,18 +175,28 @@ export default function StocksHoldingsPage() {
           setPriceUpdateDisabled(true);
         } else {
           console.error('Price update failed:', data.error);
-          alert('Failed to update prices: ' + (data.error || 'Unknown error'));
+          showToast({
+            type: 'error',
+            title: 'Price Update Failed',
+            message: data.error || 'Unknown error',
+            duration: 7000,
+          });
         }
       } else {
         throw new Error('Failed to update prices');
       }
     } catch (error) {
       console.error('Error updating prices:', error);
-      alert('Error updating prices. Please try again.');
+      showToast({
+        type: 'error',
+        title: 'Price Update Error',
+        message: 'Error updating prices. Please try again.',
+        duration: 7000,
+      });
     } finally {
       setPriceUpdateLoading(false);
     }
-  }, [priceUpdateLoading, priceUpdateDisabled, user?.id, fetchData]);
+  }, [priceUpdateLoading, priceUpdateDisabled, user?.id, fetchData, showToast]);
 
   // Auth guard
   useEffect(() => {
@@ -189,22 +212,61 @@ export default function StocksHoldingsPage() {
     }
   }, [user?.id, fetchData]);
 
+  // Stock search handler
+  const handleStockSearch = async (query: string) => {
+    setFormData({ ...formData, name: query });
+    
+    if (query.length < 2) {
+      setShowSearchResults(false);
+      return;
+    }
+    
+    setIsSearching(true);
+    
+    try {
+      const response = await fetch(`/api/stocks/search?q=${encodeURIComponent(query)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSearchResults(data.results || []);
+        setShowSearchResults(true);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Select stock from search results
+  const selectStock = (stock: any) => {
+    setFormData({ 
+      ...formData, 
+      name: stock.name, 
+      symbol: stock.symbol 
+    });
+    setShowSearchResults(false);
+  };
+
   // Handlers
   const handleAddStock = () => {
-    setEditingStock(null);
-    setFormData({ symbol: '', quantity: '', avgBuyPrice: '', purchaseDate: '' });
+    setSelectedStock(null);
+    setFormData({ name: '', symbol: '', quantity: '', avgBuyPrice: '', purchaseDate: new Date().toISOString().split('T')[0] });
+    setSearchResults([]);
+    setShowSearchResults(false);
     setShowAddStockModal(true);
   };
 
   const handleEditStock = (stock: Stock) => {
-    setEditingStock(stock);
+    setSelectedStock(stock);
     setFormData({
+      name: stock.name,
       symbol: stock.symbol,
       quantity: stock.quantity.toString(),
       avgBuyPrice: stock.avgBuyPrice.toString(),
-      purchaseDate: '' // Load from DB if stored
+      purchaseDate: ''
     });
-    setShowAddStockModal(true);
+    setShowEditModal(true);
   };
 
   const handleDeleteStock = (stock: Stock) => {
@@ -212,92 +274,157 @@ export default function StocksHoldingsPage() {
     setShowDeleteConfirm(true);
   };
 
-  const handleSaveStock = async () => {
-    // Validation
-    if (!formData.symbol || !formData.quantity || !formData.avgBuyPrice) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    if (!user?.id) {
-      alert('User not authenticated');
-      return;
-    }
-
+  const handleAddStockSubmit = async (stockData: {
+    name: string;
+    symbol: string;
+    quantity: number;
+    avgBuyPrice: number;
+    purchaseDate?: string;
+  }) => {
+    setIsLoading(true);
+    
     try {
-      if (editingStock) {
-        // UPDATE existing stock
-        const response = await fetch('/api/stocks/update', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: editingStock.id,
-            quantity: parseFloat(formData.quantity),
-            avgBuyPrice: parseFloat(formData.avgBuyPrice),
-            purchaseDate: formData.purchaseDate,
-            user_id: user.id
-          })
+      if (!user?.id) {
+        showToast({
+          type: 'error',
+          title: 'Authentication Error',
+          message: 'User not authenticated',
+          duration: 7000,
         });
-
-        if (response.ok) {
-          // Refresh data
-          await fetchData(user.id);
-          setShowAddStockModal(false);
-        } else {
-          const error = await response.json().catch(() => ({ error: 'Failed to update stock' }));
-          alert(error.error || 'Failed to update stock');
-        }
-      } else {
-        // CREATE new stock
-        const response = await fetch('/api/stocks/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            symbol: formData.symbol.toUpperCase(),
-            quantity: parseFloat(formData.quantity),
-            avgBuyPrice: parseFloat(formData.avgBuyPrice),
-            purchaseDate: formData.purchaseDate,
-            user_id: user.id
-          })
-        });
-
-        if (response.ok) {
-          // Refresh data
-          await fetchData(user.id);
-          setShowAddStockModal(false);
-        } else {
-          const error = await response.json().catch(() => ({ error: 'Failed to create stock' }));
-          alert(error.error || 'Failed to create stock');
-        }
+        return;
       }
-    } catch (error) {
-      console.error('Error saving stock:', error);
-      alert('Failed to save stock. Please try again.');
+
+      const response = await fetch('/api/stocks/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: stockData.symbol.toUpperCase(),
+          quantity: stockData.quantity,
+          avgBuyPrice: stockData.avgBuyPrice,
+          purchaseDate: stockData.purchaseDate,
+          user_id: user.id
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to add stock' }));
+        throw new Error(error.error || 'Failed to add stock');
+      }
+      
+      // Refresh data
+      await fetchData(user.id);
+      setShowAddStockModal(false);
+      setFormData({ name: '', symbol: '', quantity: '', avgBuyPrice: '', purchaseDate: '' });
+      
+      showToast({
+        type: 'success',
+        title: 'Stock Added',
+        message: `${stockData.name} has been added successfully.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error adding stock:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Add Stock',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const confirmDelete = async () => {
+  const handleEditStockSubmit = async (stockData: {
+    quantity: number;
+    avgBuyPrice: number;
+  }) => {
+    if (!selectedStock || !user?.id) return;
+    
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch('/api/stocks/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedStock.id,
+          quantity: stockData.quantity,
+          avgBuyPrice: stockData.avgBuyPrice,
+          purchaseDate: formData.purchaseDate,
+          user_id: user.id
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to update stock' }));
+        throw new Error(error.error || 'Failed to update stock');
+      }
+      
+      // Refresh data
+      await fetchData(user.id);
+      setShowEditModal(false);
+      setSelectedStock(null);
+      
+      showToast({
+        type: 'success',
+        title: 'Stock Updated',
+        message: `${selectedStock.name} has been updated successfully.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error updating stock:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Update Stock',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteStockConfirm = async () => {
     if (!stockToDelete || !user?.id) return;
+
+    setIsLoading(true);
 
     try {
       const response = await fetch(`/api/stocks/delete/${stockToDelete.id}?user_id=${user.id}`, {
         method: 'DELETE'
       });
 
-      if (response.ok) {
-        // Refresh data
-        if (user?.id) {
-          await fetchData(user.id);
-        }
-        setShowDeleteConfirm(false);
-        setStockToDelete(null);
-      } else {
+      if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Failed to delete stock' }));
-        alert(error.error || 'Failed to delete stock');
+        throw new Error(error.error || 'Failed to delete stock');
       }
-    } catch (error) {
+
+      // Refresh data
+      await fetchData(user.id);
+      setShowDeleteConfirm(false);
+      const deletedName = stockToDelete.name;
+      setStockToDelete(null);
+      
+      showToast({
+        type: 'success',
+        title: 'Stock Deleted',
+        message: `${deletedName} has been removed from your portfolio.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
       console.error('Error deleting stock:', error);
-      alert('Failed to delete stock. Please try again.');
+      showToast({
+        type: 'error',
+        title: 'Failed to Delete Stock',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -418,10 +545,10 @@ export default function StocksHoldingsPage() {
               {/* ADD STOCK BUTTON */}
               <button 
                 onClick={handleAddStock}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#10b981] dark:bg-[#10b981] text-white rounded-lg font-semibold hover:bg-[#059669] dark:hover:bg-[#059669] transition-colors"
+                className="flex items-center gap-2 px-6 py-3 bg-[#10b981] dark:bg-[#10b981] text-white rounded-lg hover:bg-[#059669] dark:hover:bg-[#059669] transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
               >
-                <span className="text-lg">+</span>
-                Add Stock
+                <Plus className="w-5 h-5" />
+                <span>Add Stock</span>
               </button>
               
               {/* Update Prices button */}
@@ -521,7 +648,9 @@ export default function StocksHoldingsPage() {
                       <th className="text-right px-6 py-4 text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider">
                         Allocation %
                       </th>
-                      <th className="w-24"></th> {/* Actions column */}
+                      <th className="text-right px-6 py-4 text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider w-20">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
@@ -565,29 +694,25 @@ export default function StocksHoldingsPage() {
                           {stock.allocation.toFixed(1)}%
                         </td>
                         
-                        {/* ACTIONS COLUMN - only visible on hover */}
-                        <td className="text-right px-6 py-4">
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end gap-2">
+                        {/* ACTIONS COLUMN - visible on mobile, hover-only on desktop */}
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2 opacity-0 md:group-hover:opacity-100 sm:opacity-100 transition-opacity">
                             {/* Edit Button */}
                             <button 
                               onClick={() => handleEditStock(stock)}
-                              className="p-2 hover:bg-[#2563EB]/10 dark:hover:bg-[#3B82F6]/10 rounded-lg transition-colors"
-                              title="Edit stock"
+                              className="p-2 hover:bg-[#2563EB]/10 dark:hover:bg-[#3B82F6]/10 text-[#2563EB] dark:text-[#3B82F6] rounded-lg transition-colors"
+                              title="Edit holding"
                             >
-                              <svg className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#2563EB] dark:hover:text-[#3B82F6] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
+                              <Edit className="w-4 h-4" />
                             </button>
                             
                             {/* Delete Button */}
                             <button 
                               onClick={() => handleDeleteStock(stock)}
-                              className="p-2 hover:bg-[#DC2626]/10 dark:hover:bg-red-400/10 rounded-lg transition-colors"
-                              title="Delete stock"
+                              className="p-2 hover:bg-[#DC2626]/10 dark:hover:bg-red-400/10 text-[#DC2626] dark:text-red-400 rounded-lg transition-colors"
+                              title="Delete holding"
                             >
-                              <svg className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#DC2626] dark:hover:text-red-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -602,181 +727,488 @@ export default function StocksHoldingsPage() {
 
       </main>
 
-      {/* ADD/EDIT STOCK MODAL */}
+      {/* ADD STOCK MODAL */}
       {showAddStockModal && (
-        <div className="fixed inset-0 z-50">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowAddStockModal(false)}
-          />
-          
-          {/* Slide-over panel */}
-          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white dark:bg-[#1E293B] border-l border-[#E5E7EB] dark:border-[#334155] shadow-2xl">
-            
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155]">
-              <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
-                {editingStock ? 'Edit Stock' : 'Add Stock'}
-              </h2>
-              <button 
-                onClick={() => setShowAddStockModal(false)}
-                className="p-2 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] rounded-lg transition-colors"
-              >
-                <svg className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Form */}
-            <div className="p-6 space-y-6 overflow-y-auto h-[calc(100%-140px)]">
-              
-              {/* Stock Symbol */}
-              <div>
-                <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                  Stock Symbol <span className="text-[#DC2626] dark:text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., HDFCBANK"
-                  disabled={!!editingStock}
-                  className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#6B7280] dark:placeholder:text-[#94A3B8] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  value={formData.symbol}
-                  onChange={(e) => setFormData({...formData, symbol: e.target.value.toUpperCase()})}
-                />
-                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                  NSE symbol {editingStock && '(cannot be changed)'}
-                </p>
-              </div>
-
-              {/* Quantity */}
-              <div>
-                <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                  Quantity <span className="text-[#DC2626] dark:text-red-400">*</span>
-                </label>
-                <input
-                  type="number"
-                  placeholder="e.g., 100"
-                  className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all"
-                  value={formData.quantity}
-                  onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-                />
-              </div>
-
-              {/* Average Buy Price */}
-              <div>
-                <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                  Average Buy Price (₹) <span className="text-[#DC2626] dark:text-red-400">*</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="e.g., 1500.50"
-                  className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all"
-                  value={formData.avgBuyPrice}
-                  onChange={(e) => setFormData({...formData, avgBuyPrice: e.target.value})}
-                />
-              </div>
-
-              {/* Auto-calculated preview */}
-              {formData.quantity && formData.avgBuyPrice && (
-                <div className="bg-[#F6F8FB] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[#6B7280] dark:text-[#94A3B8]">Invested Value:</span>
-                    <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
-                      {formatCurrency(parseFloat(formData.quantity) * parseFloat(formData.avgBuyPrice))}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Purchase Date (optional) */}
-              <div>
-                <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                  Purchase Date (Optional)
-                </label>
-                <input
-                  type="date"
-                  className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all"
-                  value={formData.purchaseDate}
-                  onChange={(e) => setFormData({...formData, purchaseDate: e.target.value})}
-                />
-              </div>
-
-            </div>
-
-            {/* Footer Actions */}
-            <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] flex gap-3">
-              <button
-                onClick={() => setShowAddStockModal(false)}
-                className="flex-1 px-6 py-3 bg-[#F6F8FB] dark:bg-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg font-semibold hover:bg-[#E5E7EB] dark:hover:bg-[#475569] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveStock}
-                disabled={!formData.symbol || !formData.quantity || !formData.avgBuyPrice}
-                className="flex-1 px-6 py-3 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg font-semibold hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {editingStock ? 'Update Stock' : 'Add Stock'}
-              </button>
-            </div>
-
-          </div>
-        </div>
+        <AddStockModal
+          onClose={() => {
+            setShowAddStockModal(false);
+            setFormData({ name: '', symbol: '', quantity: '', avgBuyPrice: '', purchaseDate: '' });
+            setSearchResults([]);
+            setShowSearchResults(false);
+          }}
+          onSave={handleAddStockSubmit}
+          formData={formData}
+          setFormData={setFormData}
+          searchResults={searchResults}
+          showSearchResults={showSearchResults}
+          isSearching={isSearching}
+          onSearch={handleStockSearch}
+          onSelectStock={selectStock}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
       )}
 
-      {/* DELETE CONFIRMATION MODAL */}
+      {/* EDIT STOCK MODAL */}
+      {showEditModal && selectedStock && (
+        <EditStockModal
+          stock={selectedStock}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedStock(null);
+          }}
+          onSave={handleEditStockSubmit}
+          formData={formData}
+          setFormData={setFormData}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* DELETE CONFIRMATION DIALOG */}
       {showDeleteConfirm && stockToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowDeleteConfirm(false)}
-          />
-          
-          {/* Dialog */}
-          <div className="relative bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
-            
-            {/* Icon */}
-            <div className="w-12 h-12 rounded-full bg-[#DC2626]/10 dark:bg-red-400/10 flex items-center justify-center mx-auto">
-              <svg className="w-6 h-6 text-[#DC2626] dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-
-            {/* Content */}
-            <div className="text-center space-y-2">
-              <h3 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
-                Delete {stockToDelete.name}?
-              </h3>
-              <p className="text-[#6B7280] dark:text-[#94A3B8]">
-                This will permanently remove <strong className="text-[#0F172A] dark:text-[#F8FAFC]">{stockToDelete.quantity} shares</strong> of {stockToDelete.name} from your portfolio. 
-                This action cannot be undone.
-              </p>
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 px-6 py-3 bg-[#F6F8FB] dark:bg-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg font-semibold hover:bg-[#E5E7EB] dark:hover:bg-[#475569] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="flex-1 px-6 py-3 bg-[#DC2626] dark:bg-red-500 text-white rounded-lg font-semibold hover:bg-[#B91C1C] dark:hover:bg-red-600 transition-colors"
-              >
-                Delete Stock
-              </button>
-            </div>
-
-          </div>
-        </div>
+        <DeleteConfirmationDialog
+          stock={stockToDelete}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setStockToDelete(null);
+          }}
+          onConfirm={handleDeleteStockConfirm}
+          isLoading={isLoading}
+        />
       )}
 
+    </div>
+  );
+}
+
+/**
+ * Add Stock Modal Component
+ * Allows user to search for and add a new stock holding
+ */
+function AddStockModal({ 
+  onClose, 
+  onSave,
+  formData,
+  setFormData,
+  searchResults,
+  showSearchResults,
+  isSearching,
+  onSearch,
+  onSelectStock,
+  isLoading,
+  formatCurrency
+}: { 
+  onClose: () => void; 
+  onSave: (data: any) => void;
+  formData: any;
+  setFormData: any;
+  searchResults: any[];
+  showSearchResults: boolean;
+  isSearching: boolean;
+  onSearch: (query: string) => void;
+  onSelectStock: (stock: any) => void;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!formData.name || !formData.quantity || !formData.avgBuyPrice) {
+      return;
+    }
+    
+    if (parseFloat(formData.quantity) <= 0) {
+      return;
+    }
+    
+    if (parseFloat(formData.avgBuyPrice) <= 0) {
+      return;
+    }
+    
+    // Call parent handler
+    onSave({
+      name: formData.name,
+      symbol: formData.symbol || formData.name,
+      quantity: parseFloat(formData.quantity),
+      avgBuyPrice: parseFloat(formData.avgBuyPrice),
+      purchaseDate: formData.purchaseDate
+    });
+  };
+
+  // Calculate invested value
+  const investedValue = formData.quantity && formData.avgBuyPrice
+    ? parseFloat(formData.quantity) * parseFloat(formData.avgBuyPrice)
+    : 0;
+
+  return (
+    <div className="fixed inset-0 bg-[#F6F8FB]/80 dark:bg-[#0F172A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155] sticky top-0 bg-white dark:bg-[#1E293B]">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Add Stock Holding</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] rounded-lg transition-colors"
+            type="button"
+          >
+            <X className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          
+          {/* Stock Name with Autocomplete */}
+          <div className="relative">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Stock Name <span className="text-[#DC2626] dark:text-red-400">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => onSearch(e.target.value)}
+                placeholder="Search for stock (e.g., HDFC Bank)"
+                className="w-full px-4 py-3 pr-10 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+                required
+                autoComplete="off"
+              />
+              <Search className="absolute right-3 top-3.5 w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+            </div>
+            
+            {/* Search Results Dropdown */}
+            {showSearchResults && searchResults.length > 0 && (
+              <div className="absolute z-10 w-full mt-2 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {searchResults.map((stock, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => onSelectStock(stock)}
+                    className="w-full text-left px-4 py-3 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors border-b border-[#E5E7EB] dark:border-[#334155] last:border-0"
+                  >
+                    <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{stock.name}</div>
+                    <div className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{stock.symbol}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {isSearching && (
+              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">Searching...</div>
+            )}
+          </div>
+
+          {/* Symbol */}
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Symbol
+            </label>
+            <input
+              type="text"
+              value={formData.symbol}
+              onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
+              placeholder="NSE:HDFCBANK or BSE:500180"
+              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+            />
+            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+              Format: NSE:SYMBOL or BSE:SYMBOL
+            </p>
+          </div>
+
+          {/* Quantity */}
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Quantity <span className="text-[#DC2626] dark:text-red-400">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.quantity}
+              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+              placeholder="100"
+              min="1"
+              step="1"
+              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+              required
+            />
+          </div>
+
+          {/* Average Buy Price */}
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Average Buy Price (₹) <span className="text-[#DC2626] dark:text-red-400">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.avgBuyPrice}
+              onChange={(e) => setFormData({ ...formData, avgBuyPrice: e.target.value })}
+              placeholder="750.50"
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+              required
+            />
+          </div>
+
+          {/* Purchase Date */}
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Purchase Date (Optional)
+            </label>
+            <input
+              type="date"
+              value={formData.purchaseDate}
+              onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
+              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+            />
+          </div>
+
+          {/* Calculated Invested Value */}
+          {investedValue > 0 && (
+            <div className="bg-[#F6F8FB] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
+              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">Invested Value</div>
+              <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+                {formatCurrency(investedValue)}
+              </div>
+            </div>
+          )}
+
+          {/* Form Actions */}
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading || !formData.name || !formData.quantity || !formData.avgBuyPrice}
+              className="flex-1 px-6 py-3 bg-[#10b981] dark:bg-[#10b981] text-white rounded-lg hover:bg-[#059669] dark:hover:bg-[#059669] transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Adding...' : 'Add Stock'}
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Edit Stock Modal Component
+ * Allows user to edit quantity and average buy price of existing holding
+ */
+function EditStockModal({ 
+  stock, 
+  onClose, 
+  onSave,
+  formData,
+  setFormData,
+  isLoading,
+  formatCurrency
+}: { 
+  stock: Stock; 
+  onClose: () => void; 
+  onSave: (data: any) => void;
+  formData: any;
+  setFormData: any;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validation
+    if (parseFloat(formData.quantity) <= 0) {
+      return;
+    }
+    
+    if (parseFloat(formData.avgBuyPrice) <= 0) {
+      return;
+    }
+    
+    onSave({
+      quantity: parseFloat(formData.quantity),
+      avgBuyPrice: parseFloat(formData.avgBuyPrice)
+    });
+  };
+
+  // Calculate new invested value
+  const newInvestedValue = formData.quantity && formData.avgBuyPrice
+    ? parseFloat(formData.quantity) * parseFloat(formData.avgBuyPrice)
+    : 0;
+
+  return (
+    <div className="fixed inset-0 bg-[#F6F8FB]/80 dark:bg-[#0F172A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155]">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Edit Stock Holding</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] rounded-lg transition-colors"
+            type="button"
+          >
+            <X className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          
+          {/* Stock Info (Read-only) */}
+          <div className="bg-[#F6F8FB] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
+            <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-lg">{stock.name}</div>
+            <div className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{stock.symbol}</div>
+          </div>
+
+          {/* Quantity */}
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Quantity <span className="text-[#DC2626] dark:text-red-400">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.quantity}
+              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+              min="1"
+              step="1"
+              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+              required
+              autoFocus
+            />
+          </div>
+
+          {/* Average Buy Price */}
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Average Buy Price (₹) <span className="text-[#DC2626] dark:text-red-400">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.avgBuyPrice}
+              onChange={(e) => setFormData({ ...formData, avgBuyPrice: e.target.value })}
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
+              required
+            />
+          </div>
+
+          {/* New Invested Value */}
+          {newInvestedValue > 0 && (
+            <div className="bg-[#F6F8FB] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
+              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">New Invested Value</div>
+              <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+                {formatCurrency(newInvestedValue)}
+              </div>
+              <div className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                Previous: {formatCurrency(stock.investedValue)}
+              </div>
+            </div>
+          )}
+
+          {/* Form Actions */}
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Delete Confirmation Dialog Component
+ * Shows confirmation before deleting a stock holding
+ */
+function DeleteConfirmationDialog({ 
+  stock, 
+  onClose, 
+  onConfirm,
+  isLoading
+}: { 
+  stock: Stock; 
+  onClose: () => void; 
+  onConfirm: () => void;
+  isLoading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 bg-[#F6F8FB]/80 dark:bg-[#0F172A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md">
+        
+        <div className="p-6">
+          {/* Icon */}
+          <div className="w-12 h-12 rounded-full bg-[#DC2626]/10 dark:bg-red-400/10 flex items-center justify-center mb-4">
+            <Trash2 className="w-6 h-6 text-[#DC2626] dark:text-red-400" />
+          </div>
+          
+          {/* Title */}
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+            Delete Stock Holding?
+          </h2>
+          
+          {/* Description */}
+          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-6">
+            Are you sure you want to delete{' '}
+            <strong className="text-[#0F172A] dark:text-[#F8FAFC]">{stock.name}</strong>?{' '}
+            This will remove{' '}
+            <strong className="text-[#0F172A] dark:text-[#F8FAFC]">
+              {stock.quantity.toLocaleString('en-IN')} shares
+            </strong>{' '}
+            with invested value of{' '}
+            <strong className="text-[#0F172A] dark:text-[#F8FAFC]">
+              ₹{stock.investedValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </strong>.
+          </p>
+
+          {/* Warning */}
+          <div className="bg-yellow-500/10 border-l-4 border-yellow-500 p-4 rounded-r-lg mb-6">
+            <p className="text-sm text-[#0F172A] dark:text-[#F8FAFC]">
+              <strong>Warning:</strong> This action cannot be undone. You'll need to add 
+              this stock again manually or re-upload your CSV if you change your mind.
+            </p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-[#DC2626] dark:bg-red-500 text-white rounded-lg hover:bg-[#B91C1C] dark:hover:bg-red-600 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Deleting...' : 'Delete Stock'}
+            </button>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
