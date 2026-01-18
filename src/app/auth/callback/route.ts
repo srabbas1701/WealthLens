@@ -78,8 +78,39 @@ export async function GET(request: NextRequest) {
     let user = null;
     let authError = null;
 
-    // Handle magic link token (email OTP)
-    if (token_hash && type) {
+    // MOBILE FIX: Log all URL parameters for debugging
+    console.log('[Auth Callback] URL params:', {
+      hasCode: !!code,
+      hasTokenHash: !!token_hash,
+      hasType: !!type,
+      code: code ? code.substring(0, 20) + '...' : null,
+      token_hash: token_hash ? token_hash.substring(0, 20) + '...' : null,
+      type,
+      fullUrl: requestUrl.toString(),
+      userAgent: request.headers.get('user-agent'),
+    });
+
+    // Handle OAuth code exchange (modern Supabase magic links use 'code')
+    // This should be checked FIRST as it's the standard format
+    if (code) {
+      console.log('[Auth Callback] Processing code exchange...');
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      user = data?.user;
+      authError = error;
+      
+      if (error) {
+        console.error('[Auth Callback] Code exchange error:', {
+          message: error.message,
+          status: error.status,
+          code: error.code,
+        });
+      } else if (user) {
+        console.log('[Auth Callback] Code exchange successful, user:', user.id);
+      }
+    }
+    // Handle legacy magic link token (token_hash + type)
+    else if (token_hash && type) {
+      console.log('[Auth Callback] Processing token_hash verification...');
       const { data, error } = await supabase.auth.verifyOtp({
         token_hash,
         type: type as 'email' | 'magiclink',
@@ -93,19 +124,8 @@ export async function GET(request: NextRequest) {
           status: error.status,
           type,
         });
-      }
-    }
-    // Handle OAuth code exchange
-    else if (code) {
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-      user = data?.user;
-      authError = error;
-      
-      if (error) {
-        console.error('[Auth Callback] Code exchange error:', {
-          message: error.message,
-          status: error.status,
-        });
+      } else if (user) {
+        console.log('[Auth Callback] Token verification successful, user:', user.id);
       }
     } else {
       // No valid auth params
@@ -116,13 +136,27 @@ export async function GET(request: NextRequest) {
         url: requestUrl.toString(),
         userAgent: request.headers.get('user-agent'),
         origin,
+        allParams: Object.fromEntries(requestUrl.searchParams.entries()),
       });
       return NextResponse.redirect(
-        `${baseUrl}/login?error=invalid_callback`
+        `${baseUrl}/login?error=invalid_callback&details=no_auth_params`
       );
     }
 
     if (!authError && user) {
+      console.log('[Auth Callback] Authentication successful, checking portfolio...');
+      
+      // MOBILE FIX: Ensure session is properly stored before redirect
+      // Get session to verify it's stored
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.warn('[Auth Callback] Session check warning:', sessionError.message);
+      } else if (sessionData?.session) {
+        console.log('[Auth Callback] Session confirmed, user ID:', sessionData.session.user.id);
+      } else {
+        console.warn('[Auth Callback] No session found after authentication - this may cause issues on mobile');
+      }
+
       // Check if user has a portfolio to determine redirect
       const { data: portfolio, error: portfolioError } = await supabase
         .from('portfolios')
@@ -136,15 +170,15 @@ export async function GET(request: NextRequest) {
         // Still redirect to dashboard even if portfolio check fails
       }
 
-      if (portfolio) {
-        // User has portfolio → go to dashboard
-        // MOBILE FIX: Use absolute URL for better mobile browser compatibility
-        return NextResponse.redirect(`${baseUrl}/dashboard`);
-      } else {
-        // New user → go to onboarding
-        // MOBILE FIX: Use absolute URL for better mobile browser compatibility
-        return NextResponse.redirect(`${baseUrl}/onboarding`);
-      }
+      const redirectPath = portfolio ? '/dashboard' : '/onboarding';
+      console.log('[Auth Callback] Redirecting to:', redirectPath);
+      
+      // MOBILE FIX: Use absolute URL for better mobile browser compatibility
+      // Also add a small delay parameter to help with cookie propagation on iOS
+      const redirectUrl = new URL(redirectPath, baseUrl);
+      redirectUrl.searchParams.set('auth_success', 'true');
+      
+      return NextResponse.redirect(redirectUrl.toString());
     }
 
     // If there's an error, redirect to login with error message
