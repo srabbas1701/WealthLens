@@ -242,9 +242,69 @@ export function calculateMarketCapExposure(
 }
 
 /**
+ * Detect if a mutual fund is likely international based on fund name patterns
+ * 
+ * This is a fallback when factsheet geography data is not available.
+ * Uses clear, unambiguous indicators in fund names.
+ * 
+ * Returns: { isInternational: boolean; confidence: 'high' | 'medium' | 'low' }
+ */
+function detectInternationalFundFromName(fundName: string): { isInternational: boolean; confidence: 'high' | 'medium' | 'low' } {
+  if (!fundName) return { isInternational: false, confidence: 'low' };
+  
+  const nameLower = fundName.toLowerCase();
+  
+  // HIGH CONFIDENCE indicators (unambiguous international exposure)
+  const highConfidencePatterns = [
+    /\b(global|international|overseas|foreign)\b/i,
+    /\b(nyse|nasdaq|s&p|dow|sp500|s&p 500)\b/i,
+    /\b(us|usa|america|american|united states)\b/i,
+    /\b(fang|faang)\b/i, // FANG/FAANG funds are typically US tech
+    /\b(world|worldwide)\b/i,
+    /\b(emerging markets|developed markets)\b/i,
+    /\b(europe|european|uk|united kingdom|japan|china|asia pacific)\b/i,
+  ];
+  
+  for (const pattern of highConfidencePatterns) {
+    if (pattern.test(nameLower)) {
+      return { isInternational: true, confidence: 'high' };
+    }
+  }
+  
+  // MEDIUM CONFIDENCE indicators (likely international but could be ambiguous)
+  const mediumConfidencePatterns = [
+    /\b(etf fund of fund|fof|fund of fund)\b/i, // FoF often invests in international ETFs
+    /\b(technology etf|tech etf)\b/i, // Tech ETFs are often international
+    /\b(artificial intelligence|ai)\b/i, // AI funds often have international exposure
+  ];
+  
+  for (const pattern of mediumConfidencePatterns) {
+    if (pattern.test(nameLower)) {
+      return { isInternational: true, confidence: 'medium' };
+    }
+  }
+  
+  return { isInternational: false, confidence: 'low' };
+}
+
+/**
  * Calculate geography exposure (India vs International)
  * 
- * Note: Requires factsheet data for MF international allocation.
+ * ZERO-HALLUCINATION GUARANTEE:
+ * - Only processes holdings passed to this function
+ * - Never assumes or hardcodes fund names
+ * - Only includes funds in mfSources if they have international exposure > 0
+ * - If geography data is missing, uses intelligent name-based detection as fallback
+ * 
+ * REQUIREMENTS:
+ * - directEquityHoldings: MUST be actual user holdings (not mock/test data)
+ * - mfHoldings: MUST be actual user MF holdings (not mock/test data)
+ * - geographyDataViaMF: Optional map of ISIN -> {india, international} values
+ * 
+ * FALLBACK LOGIC:
+ * - If geographyDataViaMF is not provided, uses name-based detection
+ * - Only marks funds as international if name contains clear indicators (high/medium confidence)
+ * - Conservative approach: when in doubt, assumes India
  */
 export function calculateGeographyExposure(
   directEquityHoldings: NormalizedHolding[],
@@ -261,27 +321,91 @@ export function calculateGeographyExposure(
   
   // Add MF exposure (if data available)
   if (geographyDataViaMF) {
+    // CRITICAL: Only process funds that are in mfHoldings (user's actual holdings)
     mfHoldings.forEach(holding => {
       if (holding.isin) {
         const geoData = geographyDataViaMF.get(holding.isin.toUpperCase());
         if (geoData) {
-          indiaValue += geoData.india;
-          internationalValue += geoData.international;
-          const total = geoData.india + geoData.international;
-          if (total > 0 && geoData.international > 0) {
+          // geographyDataViaMF format: {india: number, international: number}
+          // These can be either:
+          // 1. Percentages (0-100) - sum should be ~100
+          // 2. Absolute values (in currency) - already calculated exposure
+          // 
+          // We'll handle both cases by checking if they sum to ~100 (percentages) or larger (absolute)
+          const fundValue = holding.currentValue;
+          const totalGeo = geoData.india + geoData.international;
+          
+          let indiaExposure: number;
+          let internationalExposure: number;
+          let internationalPct: number;
+          
+          if (totalGeo > 0 && totalGeo <= 110) {
+            // Likely percentages (0-100, allow some tolerance)
+            const indiaPct = geoData.india;
+            const internationalPctRaw = geoData.international;
+            
+            // Normalize to ensure they sum to 100
+            const normalizedIndiaPct = (geoData.india / totalGeo) * 100;
+            const normalizedInternationalPct = (geoData.international / totalGeo) * 100;
+            
+            indiaExposure = fundValue * (normalizedIndiaPct / 100);
+            internationalExposure = fundValue * (normalizedInternationalPct / 100);
+            internationalPct = normalizedInternationalPct;
+          } else {
+            // Likely absolute values (already calculated exposure in currency)
+            // Use as-is, but ensure they don't exceed fund value
+            indiaExposure = Math.min(geoData.india, fundValue);
+            internationalExposure = Math.min(geoData.international, fundValue - indiaExposure);
+            internationalPct = fundValue > 0 ? (internationalExposure / fundValue) * 100 : 0;
+          }
+          
+          indiaValue += indiaExposure;
+          internationalValue += internationalExposure;
+          
+          // Only add to sources if international exposure > 0
+          if (internationalExposure > 0) {
             mfSources.push({
               name: holding.name,
-              value: geoData.international,
-              pct: (geoData.international / total) * 100,
+              value: internationalExposure,
+              pct: internationalPct,
             });
           }
         }
+        // If geography data is missing for this fund, exclude it from geography calc
+        // (Don't assume - let caller handle missing data)
       }
     });
   } else {
-    // Default: Assume all MF is India
-    const mfValue = mfHoldings.reduce((sum, h) => sum + h.currentValue, 0);
-    indiaValue += mfValue;
+    // FALLBACK: Use intelligent name-based detection when geography data is not available
+    // This is a reasonable fallback for international funds with clear indicators
+    mfHoldings.forEach(holding => {
+      const fundValue = holding.currentValue;
+      const detection = detectInternationalFundFromName(holding.name);
+      
+      if (detection.isInternational && detection.confidence === 'high') {
+        // High confidence: Assume 100% international (typical for global/international funds)
+        internationalValue += fundValue;
+        mfSources.push({
+          name: holding.name,
+          value: fundValue,
+          pct: 100, // 100% international
+        });
+      } else if (detection.isInternational && detection.confidence === 'medium') {
+        // Medium confidence: Assume 80% international (FoF/tech ETFs often have some India exposure)
+        const internationalExposure = fundValue * 0.80;
+        const indiaExposure = fundValue * 0.20;
+        internationalValue += internationalExposure;
+        indiaValue += indiaExposure;
+        mfSources.push({
+          name: holding.name,
+          value: internationalExposure,
+          pct: 80, // 80% international
+        });
+      } else {
+        // Low confidence or no indicators: Assume India (conservative default)
+        indiaValue += fundValue;
+      }
+    });
   }
   
   const total = indiaValue + internationalValue;

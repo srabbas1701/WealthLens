@@ -36,8 +36,20 @@ function parseNPSMetadata(notes: string | null): any {
 
 // Mock NAV fetcher - In production, replace with actual API calls
 // NAVs source: https://www.npstrust.org.in/scheme-performance
-// IMPORTANT: This simulates daily NAV changes by applying ±0.5% to ±1.5% variation to existing NAV
-function getMockNAVUpdate(currentNAV: number, assetClass: string): number {
+// IMPORTANT: Uses deterministic date-based variation instead of random to prevent values changing on every call
+// This simulates daily NAV changes but keeps the same value for the same date
+function getMockNAVUpdate(currentNAV: number, assetClass: string, navDate?: string): number {
+  // Use today's date as seed for deterministic "random" variation
+  // This ensures the same NAV is returned for the same date
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const seed = parseInt(today.replace(/-/g, ''), 10); // Convert date to number for seed
+  
+  // Simple seeded pseudo-random function
+  const seededRandom = (seed: number) => {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  };
+  
   // Simulate realistic daily market movement
   // Equity: Higher volatility (±0.5% to ±1.5%)
   // Debt: Lower volatility (±0.1% to ±0.5%)
@@ -53,8 +65,9 @@ function getMockNAVUpdate(currentNAV: number, assetClass: string): number {
   }
   // E (Equity) keeps 1.5%
   
-  // Random variation: can be positive or negative
-  const variation = currentNAV * ((Math.random() * maxVariation * 2) - maxVariation);
+  // Deterministic variation based on date: same date = same variation
+  const randomValue = seededRandom(seed + assetClass.charCodeAt(0));
+  const variation = currentNAV * ((randomValue * maxVariation * 2) - maxVariation);
   const newNAV = currentNAV + variation;
   
   // Ensure NAV doesn't go below 1
@@ -63,9 +76,18 @@ function getMockNAVUpdate(currentNAV: number, assetClass: string): number {
 
 // Update scheme with latest NAV
 function updateSchemeNAV(scheme: any): any {
-  // IMPORTANT: Use existing NAV and only apply small variation
-  // This preserves the user's actual NAV values
-  const latestNAV = getMockNAVUpdate(scheme.currentNAV, scheme.assetClass);
+  // IMPORTANT: Check if NAV was already updated today
+  // If navDate exists and is today, use existing NAV to prevent unnecessary changes
+  const today = new Date().toISOString().split('T')[0];
+  const schemeNavDate = scheme.navDate ? new Date(scheme.navDate).toISOString().split('T')[0] : null;
+  
+  let latestNAV = scheme.currentNAV;
+  
+  // Only update NAV if it hasn't been updated today
+  if (schemeNavDate !== today) {
+    latestNAV = getMockNAVUpdate(scheme.currentNAV, scheme.assetClass, today);
+  }
+  
   const currentValue = scheme.currentUnits * latestNAV;
   const returns = currentValue - scheme.investedAmount;
   const returnsPercentage = scheme.investedAmount > 0 ? (returns / scheme.investedAmount) * 100 : 0;
@@ -76,7 +98,7 @@ function updateSchemeNAV(scheme: any): any {
     currentValue,
     returns,
     returnsPercentage,
-    navDate: new Date().toISOString(),
+    navDate: new Date().toISOString().split('T')[0], // Store date only (YYYY-MM-DD)
   };
 }
 

@@ -69,6 +69,104 @@ export default function RootLayout({
             `,
           }}
         />
+        {process.env.NODE_ENV === 'production' && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                (function() {
+                  // Only run in production
+                  if (typeof window === 'undefined') return;
+                  
+                  // Disable F12 and other developer tool shortcuts
+                  document.addEventListener('keydown', function(e) {
+                    // Disable F12
+                    if (e.key === 'F12' || e.keyCode === 123) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }
+                    
+                    // Disable Ctrl+Shift+I (DevTools)
+                    if (e.ctrlKey && e.shiftKey && e.key === 'I') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }
+                    
+                    // Disable Ctrl+Shift+J (Console)
+                    if (e.ctrlKey && e.shiftKey && e.key === 'J') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }
+                    
+                    // Disable Ctrl+Shift+C (Element Inspector)
+                    if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }
+                    
+                    // Disable Ctrl+U (View Source)
+                    if (e.ctrlKey && e.key === 'U') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }
+                    
+                    // Disable Ctrl+Shift+K (Firefox Console)
+                    if (e.ctrlKey && e.shiftKey && e.key === 'K') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }
+                  }, true);
+                  
+                  // Disable right-click context menu (optional - can be removed if not needed)
+                  document.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    return false;
+                  }, true);
+                  
+                  // Disable console methods
+                  if (typeof console !== 'undefined') {
+                    const noop = function() {};
+                    const methods = ['log', 'debug', 'info', 'warn', 'error', 'assert', 'dir', 'dirxml', 'group', 'groupEnd', 'time', 'timeEnd', 'count', 'trace', 'profile', 'profileEnd'];
+                    methods.forEach(function(method) {
+                      console[method] = noop;
+                    });
+                    
+                    // Override console object itself
+                    Object.defineProperty(window, 'console', {
+                      value: {},
+                      writable: false,
+                      configurable: false
+                    });
+                  }
+                  
+                  // Prevent opening DevTools via other methods
+                  let devtools = {open: false, orientation: null};
+                  const threshold = 160;
+                  
+                  setInterval(function() {
+                    if (window.outerHeight - window.innerHeight > threshold || 
+                        window.outerWidth - window.innerWidth > threshold) {
+                      if (!devtools.open) {
+                        devtools.open = true;
+                        // Optionally redirect or show a message
+                        // window.location.href = '/';
+                      }
+                    } else {
+                      if (devtools.open) {
+                        devtools.open = false;
+                      }
+                    }
+                  }, 500);
+                })();
+              `,
+            }}
+          />
+        )}
       </head>
       <body className={`${inter.variable} antialiased`} suppressHydrationWarning>
 

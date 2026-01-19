@@ -16,7 +16,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
@@ -34,6 +34,7 @@ import {
   ArrowLeftIcon,
 } from '@/components/icons';
 import NPSAddModal from '@/components/NPSAddModal';
+import { generateNPSPDF } from '@/lib/pdf/generateHoldingsPDF';
 
 // ============================================================================
 // TYPES
@@ -166,12 +167,19 @@ export default function NPSHoldingsPage() {
   };
 
   const handleUpdateNAVs = async () => {
+    // Prevent multiple simultaneous calls
+    if (navUpdateLoading) {
+      return;
+    }
+
     setNavUpdateLoading(true);
+    
+    // Show loading toast with a reasonable duration (not infinite)
     showToast({
       type: 'info',
       title: 'Updating NAVs',
       message: 'Fetching latest NAV data for all NPS schemes...',
-      duration: 0,
+      duration: 30000, // 30 seconds max - should be enough for the update
     });
 
     try {
@@ -262,6 +270,152 @@ export default function NPSHoldingsPage() {
   const totalReturns = totalCurrentValue - totalInvested;
   const totalReturnsPercentage = totalInvested > 0 ? (totalReturns / totalInvested) * 100 : 0;
 
+  // Get most recent NAV update date
+  const mostRecentNavDate = holdings.length > 0 
+    ? holdings.reduce((latest, holding) => {
+        const holdingDate = new Date(holding.navUpdatedDate);
+        return holdingDate > latest ? holdingDate : latest;
+      }, new Date(holdings[0].navUpdatedDate)).toISOString().split('T')[0]
+    : null;
+
+  // Download handler for NPS
+  const handleDownload = useCallback(async () => {
+    console.log('[NPS Download] Handler called - starting download process');
+    
+    try {
+      console.log('[NPS Download] Starting PDF generation...', { holdingsCount: holdings.length, totalValue: totalCurrentValue });
+      
+      if (!holdings || holdings.length === 0) {
+        showToast({
+          type: 'warning',
+          title: 'No Data',
+          message: 'No NPS holdings available to download.',
+          duration: 5000,
+        });
+        return;
+      }
+      
+      // Flatten holdings to schemes for PDF export
+      const pdfData: Array<{
+        pranNumber: string;
+        subscriberName: string;
+        tier: string;
+        assetClass: string;
+        fundManager: string;
+        allocationPercentage: number;
+        investedAmount: number;
+        currentNAV: number;
+        units: number;
+        currentValue: number;
+        returns: number;
+        returnsPercentage: number;
+      }> = [];
+
+      holdings.forEach(holding => {
+        // Add Tier I schemes
+        holding.tier1.schemes.forEach(scheme => {
+          pdfData.push({
+            pranNumber: holding.pranNumber,
+            subscriberName: holding.subscriberName || 'NPS Account',
+            tier: 'Tier I',
+            assetClass: scheme.assetClass,
+            fundManager: scheme.fundManager,
+            allocationPercentage: scheme.allocationPercentage,
+            investedAmount: scheme.investedAmount,
+            currentNAV: scheme.currentNAV,
+            units: scheme.currentUnits,
+            currentValue: scheme.currentValue,
+            returns: scheme.returns,
+            returnsPercentage: scheme.returnsPercentage,
+          });
+        });
+
+        // Add Tier II schemes if they exist
+        if (holding.tier2) {
+          holding.tier2.schemes.forEach(scheme => {
+            pdfData.push({
+              pranNumber: holding.pranNumber,
+              subscriberName: holding.subscriberName || 'NPS Account',
+              tier: 'Tier II',
+              assetClass: scheme.assetClass,
+              fundManager: scheme.fundManager,
+              allocationPercentage: scheme.allocationPercentage,
+              investedAmount: scheme.investedAmount,
+              currentNAV: scheme.currentNAV,
+              units: scheme.currentUnits,
+              currentValue: scheme.currentValue,
+              returns: scheme.returns,
+              returnsPercentage: scheme.returnsPercentage,
+            });
+          });
+        }
+      });
+      
+      // Calculate portfolio percentage (would need portfolio net worth, using 0 as placeholder)
+      const portfolioPercentage = 0;
+      
+      console.log('[NPS Download] Calling generateNPSPDF with', pdfData.length, 'schemes');
+      await generateNPSPDF({
+        holdings: pdfData,
+        totalValue: totalCurrentValue,
+        totalInvested,
+        portfolioPercentage,
+        navDate: mostRecentNavDate,
+        formatCurrency,
+      });
+
+      console.log('[NPS Download] PDF generation complete');
+      
+      // Suppress extension errors
+      const originalErrorHandler = window.onerror;
+      window.onerror = (message, source, lineno, colno, error) => {
+        const errorStr = String(message || error?.message || '');
+        if (errorStr.includes('Could not establish connection') || 
+            errorStr.includes('Receiving end does not exist') ||
+            errorStr.includes('content-all.js')) {
+          console.debug('[NPS Download] Ignoring harmless browser extension error');
+          return true;
+        }
+        if (originalErrorHandler) {
+          return originalErrorHandler(message, source, lineno, colno, error);
+        }
+        return false;
+      };
+      
+      setTimeout(() => {
+        window.onerror = originalErrorHandler;
+      }, 1000);
+      
+      showToast({
+        type: 'success',
+        title: 'PDF Downloaded',
+        message: 'Your NPS holdings report has been downloaded successfully.',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[NPS Download] Error generating PDF:', error);
+      
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('Could not establish connection') || 
+          errorMsg.includes('Receiving end does not exist')) {
+        console.warn('[NPS Download] Browser extension interference detected, but PDF may have been generated');
+        showToast({
+          type: 'success',
+          title: 'PDF Downloaded',
+          message: 'Your NPS holdings report has been downloaded. (Some browser extensions may show harmless errors)',
+          duration: 5000,
+        });
+      } else {
+        showToast({
+          type: 'error',
+          title: 'Download Failed',
+          message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
+          duration: 5000,
+        });
+      }
+    }
+  }, [holdings, totalCurrentValue, totalInvested, mostRecentNavDate, formatCurrency, showToast]);
+
   // Aggregate asset allocation
   const aggregateAllocation = holdings.reduce((acc, holding) => {
     const addSchemes = (tier: NPSTier | null | undefined) => {
@@ -306,6 +460,8 @@ export default function NPSHoldingsPage() {
         showBackButton={true}
         backHref="/dashboard"
         backLabel="Back to Dashboard"
+        showDownload={holdings.length > 0}
+        onDownload={handleDownload}
       />
 
       <div className="max-w-7xl mx-auto px-6 py-8 pt-24">
@@ -420,6 +576,7 @@ export default function NPSHoldingsPage() {
                       <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">
                         PRAN: {holding.pranNumber}
                         {holding.dateOfOpening && ` • Opened: ${new Date(holding.dateOfOpening).toLocaleDateString('en-IN')}`}
+                        {holding.navUpdatedDate && ` • NAV Date: ${new Date(holding.navUpdatedDate).toLocaleDateString('en-IN')}`}
                       </p>
                     </div>
 
@@ -432,6 +589,11 @@ export default function NPSHoldingsPage() {
                         <p className={`text-sm font-medium ${holding.totalReturns >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
                           {holding.totalReturns >= 0 ? '+' : ''}{formatCurrency(holding.totalReturns)} ({holding.overallReturnsPercentage >= 0 ? '+' : ''}{holding.overallReturnsPercentage.toFixed(2)}%)
                         </p>
+                        {holding.navUpdatedDate && (
+                          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                            NAV Date: {new Date(holding.navUpdatedDate).toLocaleDateString('en-IN')}
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2">

@@ -20,6 +20,7 @@ import {
   FileTextIcon,
   TrendingUpIcon,
   TrendingDownIcon,
+  RefreshIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
@@ -83,6 +84,20 @@ export default function GoldHoldingsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingHolding, setEditingHolding] = useState<GoldHolding | null>(null);
   const [deletingHoldingId, setDeletingHoldingId] = useState<string | null>(null);
+  
+  // Price update state
+  const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
+  const [priceUpdateDisabled, setPriceUpdateDisabled] = useState(false);
+  
+  // Gold price info state (IBJA or MCX)
+  const [goldPriceInfo, setGoldPriceInfo] = useState<{
+    gold_24k: number;
+    gold_22k: number;
+    date: string;
+    session: 'AM' | 'PM' | null;
+    source: string;
+    isIndicative: boolean;
+  } | null>(null);
 
   const fetchData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -157,6 +172,26 @@ export default function GoldHoldingsPage() {
           setTotalInvested(investedTotal);
           setTotalCurrentValue(currentTotal);
           setPortfolioPercentage(portfolioPct);
+          
+          // Fetch gold price info (IBJA or MCX)
+          try {
+            const priceResponse = await fetch('/api/gold/prices/update');
+            if (priceResponse.ok) {
+              const priceData = await priceResponse.json();
+              if (priceData.success && priceData.price) {
+                setGoldPriceInfo({
+                  gold_24k: priceData.price.gold_24k,
+                  gold_22k: priceData.price.gold_22k,
+                  date: priceData.price.date,
+                  session: priceData.price.session || null,
+                  source: priceData.price.source || 'IBJA',
+                  isIndicative: priceData.price.source === 'MCX_PROXY' || false,
+                });
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to fetch gold price info:', error);
+          }
         }
       }
     } catch (error) {
@@ -192,6 +227,69 @@ export default function GoldHoldingsPage() {
     setEditingHolding(holding);
     setShowAddModal(true);
   };
+
+  // Handle IBJA gold price update
+  const handlePriceUpdate = useCallback(async () => {
+    if (priceUpdateLoading || priceUpdateDisabled) return;
+    
+    setPriceUpdateLoading(true);
+    try {
+      const response = await fetch('/api/gold/prices/update?session=AM', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Refresh data to show updated prices
+          if (user?.id) {
+            await fetchData(user.id);
+          }
+          // Disable button after successful update
+          setPriceUpdateDisabled(true);
+          // Re-enable after 1 minute
+          setTimeout(() => setPriceUpdateDisabled(false), 60000);
+          
+          // Show success message with IBJA info
+          const successMsg = data.message || `Gold prices updated successfully (IBJA · ${data.session || 'AM'} · ${new Date(data.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })})`;
+          alert(successMsg);
+          
+          // Refresh gold price info
+          try {
+            const priceResponse = await fetch('/api/gold/prices/update');
+            if (priceResponse.ok) {
+              const priceData = await priceResponse.json();
+              if (priceData.success && priceData.price) {
+                setGoldPriceInfo({
+                  gold_24k: priceData.price.gold_24k,
+                  gold_22k: priceData.price.gold_22k,
+                  date: priceData.price.date,
+                  session: priceData.price.session || null,
+                  source: priceData.price.source || 'IBJA',
+                  isIndicative: priceData.price.source === 'MCX_PROXY' || false,
+                });
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to refresh gold price info:', error);
+          }
+        } else {
+          console.error('Gold price update failed:', data.error);
+          alert('Failed to update gold prices: ' + (data.error || 'Unknown error'));
+        }
+      } else {
+        throw new Error('Failed to update gold prices');
+      }
+    } catch (error) {
+      console.error('Error updating gold prices:', error);
+      alert('Error updating gold prices. Using last available IBJA rate.');
+    } finally {
+      setPriceUpdateLoading(false);
+    }
+  }, [priceUpdateLoading, priceUpdateDisabled, user?.id, fetchData]);
 
   const handleDelete = async (holdingId: string) => {
     if (!user?.id) return;
@@ -282,17 +380,75 @@ export default function GoldHoldingsPage() {
             <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Gold Holdings</h1>
             <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Track all your gold investments in one place</p>
           </div>
-          <button
-            onClick={() => {
-              setEditingHolding(null);
-              setShowAddModal(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium"
-          >
-            <PlusIcon className="w-5 h-5" />
-            Add Gold Holding
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Update Prices button */}
+            <button
+              onClick={handlePriceUpdate}
+              disabled={priceUpdateLoading || priceUpdateDisabled}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors font-medium ${
+                priceUpdateLoading || priceUpdateDisabled
+                  ? 'bg-[#9CA3AF] dark:bg-[#475569] text-white cursor-not-allowed'
+                  : 'bg-[#10B981] dark:bg-[#059669] text-white hover:bg-[#059669] dark:hover:bg-[#047857]'
+              }`}
+              title={priceUpdateDisabled ? 'Prices already updated recently' : 'Update gold prices from IBJA (India Bullion & Jewellers Association)'}
+            >
+              <RefreshIcon className={`w-5 h-5 ${priceUpdateLoading ? 'animate-spin' : ''}`} />
+              {priceUpdateLoading ? 'Updating...' : 'Update Prices'}
+            </button>
+            <button
+              onClick={() => {
+                setEditingHolding(null);
+                setShowAddModal(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium"
+            >
+              <PlusIcon className="w-5 h-5" />
+              Add Gold Holding
+            </button>
+          </div>
         </div>
+
+        {/* Gold Price Info (IBJA or MCX) */}
+        {goldPriceInfo && (
+          <div className={`mb-4 p-4 rounded-lg border ${
+            goldPriceInfo.isIndicative
+              ? 'bg-[#FEF3C7] dark:bg-[#78350F] border-[#FCD34D] dark:border-[#F59E0B]'
+              : 'bg-[#F0FDF4] dark:bg-[#064E3B] border-[#86EFAC] dark:border-[#059669]'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className={`text-xs font-medium uppercase tracking-wide ${
+                      goldPriceInfo.isIndicative
+                        ? 'text-[#92400E] dark:text-[#FCD34D]'
+                        : 'text-[#166534] dark:text-[#86EFAC]'
+                    }`}>
+                      Source: {goldPriceInfo.source}
+                    </p>
+                    {goldPriceInfo.isIndicative && (
+                      <span className="px-2 py-0.5 text-xs font-semibold bg-[#F59E0B] dark:bg-[#D97706] text-white rounded">
+                        INDICATIVE
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-[#0F172A] dark:text-[#F8FAFC] mt-1">
+                    24K: {formatCurrency(goldPriceInfo.gold_24k)}/gram
+                    {goldPriceInfo.session && ` · ${goldPriceInfo.session}`}
+                  </p>
+                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                    Last updated: {new Date(goldPriceInfo.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </p>
+                  {goldPriceInfo.isIndicative && (
+                    <p className="text-xs text-[#92400E] dark:text-[#FCD34D] mt-2 font-medium">
+                      ⚠️ Valuation is INDICATIVE based on MCX spot price. For official IBJA rates, please check IBJA website.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Summary Cards */}
         <div className="grid md:grid-cols-4 gap-4 mb-6">

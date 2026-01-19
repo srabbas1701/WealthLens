@@ -346,50 +346,71 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // 3.6. Fetch gold prices for gold holdings (batch query for performance)
+    // 3.6. Fetch IBJA gold prices for gold holdings (batch query for performance)
     const goldHoldings = holdings.filter((h: any) => {
       const asset = h.assets as any;
       return asset?.asset_type === 'gold';
     });
     
     if (goldHoldings.length > 0) {
-      // Fetch latest gold prices
+      // Fetch latest IBJA gold prices (normalized to ₹ per gram)
       const { data: goldPriceData, error: goldPriceError } = await supabase
         .from('gold_price_daily')
-        .select('gold_24k, gold_22k')
+        .select('gold_24k, gold_22k, date, source, session')
         .order('date', { ascending: false })
         .limit(1)
         .single();
       
       if (!goldPriceError && goldPriceData) {
-        // Store gold prices in memory for read-time computation
+        // Import gold pricing service
+        const { calculateGoldCurrentValue, getRateForPurity } = await import('@/services/goldPricingService');
+        
+        // Create IBJA rates object
+        const ibjaRates = {
+          date: goldPriceData.date,
+          gold_24k: goldPriceData.gold_24k, // Already normalized to ₹ per gram
+          gold_22k: goldPriceData.gold_22k, // Already normalized to ₹ per gram
+          source: 'IBJA' as const,
+          session: (goldPriceData.session as 'AM' | 'PM') || 'AM',
+          last_updated: new Date().toISOString(),
+        };
+        
+        // Store IBJA rates and compute current values for each gold holding
         for (const holding of goldHoldings) {
           try {
             const notes = holding.notes ? JSON.parse(holding.notes) : {};
-            const quantity = holding.quantity || 0;
-            const unitType = notes.unit_type || 'gram';
-            const purity = notes.purity || '22k';
+            const goldType = notes.gold_type || 'physical';
             
-            // Determine price based on purity
-            let pricePerUnit: number;
-            if (unitType === 'unit') {
-              // For units (SGB), use 22k price as base
-              pricePerUnit = goldPriceData.gold_22k;
-            } else {
-              // For grams, use purity-specific price
-              pricePerUnit = purity === '24k' ? goldPriceData.gold_24k : goldPriceData.gold_22k;
+            // Gold ETF: Skip IBJA calculation (uses NAV from exchange)
+            if (goldType === 'etf') {
+              // ETF valuation is handled via stock prices API
+              continue;
             }
             
-            if (pricePerUnit && pricePerUnit > 0) {
-              // Store gold price in memory for computation
-              (holding as any)._computedGoldPrice = pricePerUnit;
-            }
+            // Calculate current value using centralized service
+            const currentValue = calculateGoldCurrentValue(
+              {
+                goldType,
+                quantity: holding.quantity || 0,
+                unitType: notes.unit_type || 'gram',
+                purity: notes.purity || '22k',
+                netWeight: notes.net_weight,
+              },
+              ibjaRates
+            );
+            
+            // Store computed value for later use
+            (holding as any)._computedGoldPrice = currentValue / (holding.quantity || 1);
+            (holding as any)._computedGoldValue = currentValue;
+            (holding as any)._ibjaRates = ibjaRates;
           } catch (e) {
-            console.warn(`[Portfolio Data API] Failed to parse notes for gold holding ${holding.id}:`, e);
+            console.warn(`[Portfolio Data API] Failed to calculate gold value for holding ${holding.id}:`, e);
           }
         }
       } else {
-        console.warn('[Portfolio Data API] No gold price data found, using current_value from database');
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[Portfolio Data API] No IBJA gold price data found, using current_value from database');
+        }
       }
     }
     
@@ -498,15 +519,14 @@ export async function GET(request: NextRequest) {
           }
         }
       } else if (isGold) {
-        // Gold: Compute from gold prices (like stock prices)
-        const computedGoldPrice = (h as any)._computedGoldPrice;
-        const quantity = h.quantity || 0;
+        // Gold: Use computed value from IBJA rates (already calculated in section 3.6)
+        const computedGoldValue = (h as any)._computedGoldValue;
         
-        if (computedGoldPrice && computedGoldPrice > 0 && quantity > 0) {
-          // Compute current_value from quantity × latest_gold_price
-          valueToUse = quantity * computedGoldPrice;
+        if (computedGoldValue && computedGoldValue > 0) {
+          // Use pre-computed value from IBJA rates
+          valueToUse = computedGoldValue;
         } else {
-          // No gold price available - use current_value from database if available, else invested_value
+          // No IBJA price available - use current_value from database if available, else invested_value
           if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
             valueToUse = h.current_value;
           } else {
@@ -612,15 +632,14 @@ export async function GET(request: NextRequest) {
           currentValue = investedValue;
         }
       } else if (isGold) {
-        // Gold: Compute from gold prices (like stock prices)
-        const computedGoldPrice = (h as any)._computedGoldPrice;
-        const quantity = h.quantity || 0;
+        // Gold: Use computed value from IBJA rates (already calculated in section 3.6)
+        const computedGoldValue = (h as any)._computedGoldValue;
         
-        if (computedGoldPrice && computedGoldPrice > 0 && quantity > 0) {
-          // Compute current_value from quantity × latest_gold_price
-          currentValue = quantity * computedGoldPrice;
+        if (computedGoldValue && computedGoldValue > 0) {
+          // Use pre-computed value from IBJA rates
+          currentValue = computedGoldValue;
         } else {
-          // No gold price available - use current_value from database if available, else invested_value
+          // No IBJA price available - use current_value from database if available, else invested_value
           if (h.current_value !== null && h.current_value !== undefined && h.current_value > 0) {
             currentValue = h.current_value;
           } else {

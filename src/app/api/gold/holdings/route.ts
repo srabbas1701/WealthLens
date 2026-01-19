@@ -116,26 +116,68 @@ function createAssetName(goldType: string, metadata: any): string {
   }
 }
 
-// Calculate current value based on gold type
+/**
+ * Calculate current value based on gold type using IBJA rates
+ * 
+ * Uses centralized gold pricing service for proper valuation:
+ * - SGB: 24K IBJA rate
+ * - Physical: Purity-specific IBJA rate, net weight only
+ * - Digital: 24K IBJA rate
+ * - ETF: NAV from exchange (not IBJA)
+ */
 async function calculateCurrentValue(
   goldType: string,
   quantity: number,
   unitType: string,
   metadata: any
 ): Promise<number> {
-  if (unitType === 'unit') {
-    // For units (like SGB units), use invested amount as base
-    // This will be updated with actual gold price later
-    const purity = metadata.purity || '22k';
-    const pricePerGram = await getCurrentGoldPrice(purity);
-    // Assume 1 unit = 1 gram (for SGB, this is typically true)
-    return quantity * pricePerGram;
-  } else {
-    // For grams, use current gold price
-    const purity = metadata.purity || '22k';
-    const pricePerGram = await getCurrentGoldPrice(purity);
-    return quantity * pricePerGram;
+  // Gold ETF: Skip IBJA calculation (uses NAV from exchange)
+  if (goldType === 'etf') {
+    // ETF valuation is handled via stock prices API
+    // For now, use invested amount as placeholder
+    return metadata.invested_amount || 0;
   }
+  
+  // Fetch latest IBJA rates
+  const { createAdminClient } = await import('@/lib/supabase/server');
+  const adminClient = createAdminClient();
+  
+  const { data: goldPriceData, error } = await adminClient
+    .from('gold_price_daily')
+    .select('gold_24k, gold_22k, date, source, session')
+    .order('date', { ascending: false })
+    .limit(1)
+    .single();
+  
+  if (error || !goldPriceData) {
+    console.warn('[Gold Holdings API] No IBJA rates found, using invested amount');
+    return metadata.invested_amount || 0;
+  }
+  
+  // Import gold pricing service
+  const { calculateGoldCurrentValue } = await import('@/services/goldPricingService');
+  
+  // Create IBJA rates object
+  const ibjaRates = {
+    date: goldPriceData.date,
+    gold_24k: goldPriceData.gold_24k,
+    gold_22k: goldPriceData.gold_22k,
+    source: 'IBJA' as const,
+    session: (goldPriceData.session as 'AM' | 'PM') || 'AM',
+    last_updated: new Date().toISOString(),
+  };
+  
+  // Calculate using centralized service
+  return calculateGoldCurrentValue(
+    {
+      goldType: goldType as 'sgb' | 'physical' | 'digital',
+      quantity,
+      unitType: unitType as 'gram' | 'unit',
+      purity: metadata.purity,
+      netWeight: metadata.net_weight,
+    },
+    ibjaRates
+  );
 }
 
 // POST: Create new gold holding

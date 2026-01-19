@@ -185,26 +185,28 @@ async function generatePDFInternal({
       const formatted = col.formatter ? col.formatter(value, holding) : String(value || '');
       const x = col.align === 'right' ? rightAlignX(col.key) : colX[col.key] + cellPadding;
       
-      // Color coding for P&L columns
-      if (col.key.includes('gainLoss') || col.key.includes('pl')) {
+      // Color coding for P&L and Returns columns
+      if (col.key.includes('gainLoss') || col.key.includes('pl') || col.key === 'returns') {
         const isPositive = typeof value === 'number' && value >= 0;
         doc.setTextColor(...(isPositive ? successColor : dangerColor));
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(8);
         
-        // For P&L, show amount on top line and percentage below
-        const plAmount = formatted;
-        const plPercent = holding.gainLossPercent !== undefined && holding.gainLossPercent !== null
+        // For P&L/Returns, show amount on top line and percentage below
+        const amount = formatted;
+        const percent = col.key === 'returns' && holding.returnsPercentage !== undefined && holding.returnsPercentage !== null
+          ? `(${holding.returnsPercentage >= 0 ? '+' : ''}${holding.returnsPercentage.toFixed(2)}%)`
+          : col.key.includes('gainLoss') && holding.gainLossPercent !== undefined && holding.gainLossPercent !== null
           ? `(${holding.gainLossPercent >= 0 ? '+' : ''}${holding.gainLossPercent.toFixed(2)}%)`
           : '';
         
-        if (plPercent) {
-          doc.text(plAmount, x, dataY - 1, col.align === 'right' ? { align: 'right' } : {});
+        if (percent) {
+          doc.text(amount, x, dataY - 1, col.align === 'right' ? { align: 'right' } : {});
           doc.setFontSize(7);
           doc.setFont('helvetica', 'normal');
-          doc.text(plPercent, x, dataY + 1.5, col.align === 'right' ? { align: 'right' } : {});
+          doc.text(percent, x, dataY + 1.5, col.align === 'right' ? { align: 'right' } : {});
         } else {
-          doc.text(plAmount, x, dataY, col.align === 'right' ? { align: 'right' } : {});
+          doc.text(amount, x, dataY, col.align === 'right' ? { align: 'right' } : {});
         }
       } else {
         doc.setTextColor(...primaryColor);
@@ -454,5 +456,61 @@ export async function generateFixedDepositsPDF({
     totalValue,
     totalInvested: totalPrincipal,
     portfolioPercentage,
+  });
+}
+
+// NPS PDF
+export async function generateNPSPDF({
+  holdings,
+  totalValue,
+  totalInvested,
+  portfolioPercentage,
+  navDate,
+  formatCurrency,
+}: {
+  holdings: Array<{
+    pranNumber: string;
+    subscriberName: string;
+    tier: string;
+    assetClass: string;
+    fundManager: string;
+    allocationPercentage: number;
+    investedAmount: number;
+    currentNAV: number;
+    units: number;
+    currentValue: number;
+    returns: number;
+    returnsPercentage: number;
+  }>;
+  totalValue: number;
+  totalInvested: number;
+  portfolioPercentage: number;
+  navDate?: string | null;
+  formatCurrency: (value: number) => string;
+}): Promise<void> {
+  return generatePDFInternal({
+    title: 'NPS Holdings Report',
+    holdings,
+    columns: [
+      { key: 'pranNumber', label: 'PRAN', width: 28, align: 'left' },
+      { key: 'subscriberName', label: 'SUBSCRIBER', width: 34, align: 'left' },
+      { key: 'tier', label: 'TIER', width: 14, align: 'left' },
+      { key: 'assetClass', label: 'ASSET CLASS', width: 17, align: 'left' },
+      { key: 'fundManager', label: 'FUND MANAGER', width: 24, align: 'left' },
+      { key: 'allocationPercentage', label: 'ALLOCATION %', width: 20, align: 'right', formatter: (v) => `${v.toFixed(1)}%` },
+      { key: 'investedAmount', label: 'INVESTED', width: 28, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
+      { key: 'currentNAV', label: 'CURRENT NAV', width: 24, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 4) },
+      { key: 'units', label: 'UNITS', width: 24, align: 'right', formatter: (v) => formatNumberForPDF(v, 4) },
+      { key: 'currentValue', label: 'CURRENT VALUE', width: 28, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
+      { key: 'returns', label: 'RETURNS', width: 26, align: 'right', formatter: (v, h) => {
+        const sign = v >= 0 ? '+' : '-';
+        return 'Rs. ' + sign + formatNumberForPDF(Math.abs(v), 0);
+      }},
+    ],
+    totalValue,
+    totalInvested,
+    portfolioPercentage,
+    dateLabel: 'NAV as of',
+    dateValue: navDate,
   });
 }
