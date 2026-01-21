@@ -132,9 +132,10 @@ async function updateGoldPrice(
     const ibjaRates = await fetchIBJAGoldRates(session);
     
     // Get previous day's rates for validation
+    // Select only fields we need (avoid schema cache issues with updated_at)
     const { data: previousRates, error: prevError } = await adminClient
       .from('gold_price_daily')
-      .select('*')
+      .select('date, gold_24k, gold_22k, source, session, created_at')
       .order('date', { ascending: false })
       .limit(1)
       .maybeSingle(); // Use maybeSingle to handle no results gracefully
@@ -175,9 +176,10 @@ async function updateGoldPrice(
       const mcxRates = await fetchMCXGoldRates();
       
       // Get previous day's rates for validation
+      // Select only fields we need (avoid schema cache issues with updated_at)
       const { data: previousRates } = await adminClient
         .from('gold_price_daily')
-        .select('*')
+        .select('date, gold_24k, gold_22k, source, session, created_at')
         .order('date', { ascending: false })
         .limit(1)
         .maybeSingle(); // Use maybeSingle to handle no results gracefully
@@ -224,11 +226,14 @@ async function updateGoldPrice(
   
   // Store in database (all prices in ₹ per gram)
   // Handle session column - it might not exist in older schemas
+  // Don't include updated_at - let the database default handle it (has default now())
   const upsertData: any = {
     date: rates.date,
     gold_24k: rates.gold_24k, // ₹ per gram
     gold_22k: rates.gold_22k, // ₹ per gram
     source: rates.source,
+    // Note: updated_at is NOT included - database default will handle it
+    // Including it causes schema cache issues
   };
   
   // Only include session if it's not null (MCX doesn't have sessions)
@@ -236,14 +241,23 @@ async function updateGoldPrice(
     upsertData.session = rates.session;
   }
   
-  const { error } = await adminClient
+  // Try upsert first
+  // Select only the fields we need (excluding updated_at to avoid schema cache issues)
+  let { error, data } = await adminClient
     .from('gold_price_daily')
     .upsert(upsertData, {
       onConflict: 'date',
-    });
+    })
+    .select('id, date, gold_24k, gold_22k, source, session, created_at');
 
   if (error) {
     console.error('[Gold Price API] Error updating gold price in database:', error);
+    console.error('[Gold Price API] Error code:', error.code);
+    console.error('[Gold Price API] Error message:', error.message);
+    console.error('[Gold Price API] Error details:', error.details);
+    console.error('[Gold Price API] Error hint:', error.hint);
+    console.error('[Gold Price API] Upsert data:', JSON.stringify(upsertData, null, 2));
+    
     // If session column doesn't exist, try without it
     if (error.message?.includes('session') || error.code === '42703') {
       console.warn('[Gold Price API] Session column not found, retrying without session');
@@ -254,17 +268,50 @@ async function updateGoldPrice(
           gold_24k: rates.gold_24k,
           gold_22k: rates.gold_22k,
           source: rates.source,
+          // Don't include updated_at - let database default handle it
         }, {
           onConflict: 'date',
         });
       
       if (retryError) {
         console.error('[Gold Price API] Error updating gold price (retry):', retryError);
-        throw new Error('Failed to update gold price in database');
+        throw new Error(`Failed to update gold price in database: ${retryError.message || retryError.code || 'Unknown error'}`);
       }
     } else {
-      throw new Error('Failed to update gold price in database');
+      // Fallback: Try delete + insert approach
+      console.warn('[Gold Price API] Upsert failed, trying delete + insert approach');
+      
+      // Delete existing record for this date
+      const { error: deleteError } = await adminClient
+        .from('gold_price_daily')
+        .delete()
+        .eq('date', rates.date);
+      
+      if (deleteError) {
+        console.warn('[Gold Price API] Delete failed (may not exist):', deleteError.message);
+      }
+      
+      // Insert new record (don't include updated_at - database default handles it)
+      const { error: insertError, data: insertData } = await adminClient
+        .from('gold_price_daily')
+        .insert(upsertData)
+        .select()
+        .single();
+      
+      if (insertError) {
+        console.error('[Gold Price API] Insert also failed:', insertError);
+        // Check if it's an RLS policy issue
+        if (insertError.code === '42501' || insertError.message?.includes('permission denied') || insertError.message?.includes('policy')) {
+          throw new Error(`RLS policy error: ${insertError.message}. Admin client may not be configured correctly. Please check SUPABASE_SERVICE_ROLE_KEY environment variable.`);
+        }
+        throw new Error(`Failed to update gold price in database: ${insertError.message || insertError.code || 'Unknown error'}`);
+      }
+      
+      data = insertData;
+      console.log('[Gold Price API] Successfully inserted gold price using delete+insert fallback');
     }
+  } else {
+    console.log('[Gold Price API] Successfully upserted gold price:', data);
   }
 
   const sourceLabel = source === 'IBJA' ? 'IBJA' : 'MCX (INDICATIVE)';
@@ -487,11 +534,13 @@ export async function POST(req: NextRequest) {
       });
     } catch (updateError) {
       // If update fails, try to return last available rates
-      console.error('[Gold Price API] Update failed, fetching last available rates:', updateError);
+      const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
+      console.error('[Gold Price API] Update failed:', errorMessage);
+      console.error('[Gold Price API] Error details:', updateError);
       
       const { data: lastRates } = await adminClient
         .from('gold_price_daily')
-        .select('*')
+        .select('date, gold_24k, gold_22k, source, session, created_at')
         .order('date', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -499,7 +548,7 @@ export async function POST(req: NextRequest) {
       if (lastRates) {
         return NextResponse.json({
           success: false,
-          error: updateError instanceof Error ? updateError.message : 'Failed to update gold prices',
+          error: errorMessage,
           fallback: {
             date: lastRates.date,
             gold_24k: lastRates.gold_24k,
@@ -511,7 +560,12 @@ export async function POST(req: NextRequest) {
         }, { status: 500 });
       }
       
-      throw updateError;
+      // If no fallback rates available, return detailed error
+      return NextResponse.json({
+        success: false,
+        error: errorMessage,
+        message: 'Failed to update gold prices and no previous rates available',
+      }, { status: 500 });
     }
   } catch (error) {
     console.error('[Gold Price API] Error updating gold prices:', error);
@@ -528,7 +582,25 @@ export async function POST(req: NextRequest) {
 // GET: Fetch latest gold prices
 export async function GET(req: NextRequest) {
   try {
-    const adminClient = createAdminClient();
+    console.log('[Gold Price API] GET request received');
+    
+    let adminClient;
+    try {
+      adminClient = createAdminClient();
+      console.log('[Gold Price API] Admin client created successfully');
+    } catch (clientError) {
+      console.error('[Gold Price API] Failed to create admin client:', clientError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Failed to create admin client: ${clientError instanceof Error ? clientError.message : 'Unknown error'}`,
+        },
+        { status: 500 }
+      );
+    }
+
+    // Query gold_price_daily table - use * to avoid field selection issues
+    console.log('[Gold Price API] Querying gold_price_daily table...');
     const { data: priceData, error } = await adminClient
       .from('gold_price_daily')
       .select('*')
@@ -537,25 +609,57 @@ export async function GET(req: NextRequest) {
       .maybeSingle(); // Use maybeSingle to handle no results gracefully
 
     if (error) {
+      console.error('[Gold Price API] Database query error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       return NextResponse.json(
-        { success: false, error: 'Failed to fetch gold prices' },
+        {
+          success: false,
+          error: `Failed to fetch gold prices: ${error.message || error.code || 'Unknown database error'}`,
+          details: error.details,
+        },
         { status: 500 }
       );
     }
 
+    if (!priceData) {
+      console.warn('[Gold Price API] No gold price data found in database');
+      return NextResponse.json(
+        { success: false, error: 'No gold price data available' },
+        { status: 404 }
+      );
+    }
+    
+    console.log('[Gold Price API] Returning price data:', {
+      date: priceData.date,
+      source: priceData.source,
+      gold_24k: priceData.gold_24k
+    });
+
+    // Return only the fields we need, excluding updated_at to avoid schema cache issues
     return NextResponse.json({
       success: true,
       price: {
-        ...priceData,
+        date: priceData.date,
+        gold_24k: priceData.gold_24k,
+        gold_22k: priceData.gold_22k,
+        source: priceData.source || 'IBJA',
+        session: priceData.session || null,
+        // Don't include updated_at or created_at in response to avoid schema cache issues
+        // Only include fields needed by the frontend
         isIndicative: priceData.source === 'MCX_PROXY',
       },
     });
   } catch (error) {
-    console.error('Error fetching gold prices:', error);
+    console.error('[Gold Price API] Unexpected error fetching gold prices:', error);
     return NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch gold prices',
+        stack: error instanceof Error ? error.stack : undefined,
       },
       { status: 500 }
     );

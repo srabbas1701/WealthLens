@@ -1,9 +1,9 @@
 /**
- * API Route: Delete Stock Holding
+ * API Route: Delete Bond Holding
  * 
- * DELETE /api/stocks/delete/[id]
+ * DELETE /api/bonds/delete/[id]
  * 
- * Deletes (soft delete) a stock holding for the authenticated user
+ * Deletes a bond holding for the authenticated user
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -55,14 +55,14 @@ export async function DELETE(
       );
     }
 
-    // Hard delete (holdings table doesn't have is_active column)
+    // Hard delete
     const { error: deleteError } = await supabase
       .from('holdings')
       .delete()
       .eq('id', holdingId);
 
     if (deleteError) {
-      console.error('[Stock Delete API] Error deleting holding:', deleteError);
+      console.error('[Bond Delete API] Error deleting holding:', deleteError);
       return NextResponse.json(
         { error: 'Failed to delete holding' },
         { status: 500 }
@@ -70,12 +70,12 @@ export async function DELETE(
     }
 
     return NextResponse.json(
-      { message: 'Stock holding deleted successfully' },
+      { message: 'Bond holding deleted successfully' },
       { status: 200 }
     );
 
   } catch (error: any) {
-    console.error('[Stock Delete API] Error:', error);
+    console.error('[Bond Delete API] Error:', error);
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }

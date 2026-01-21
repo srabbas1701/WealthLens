@@ -11,7 +11,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { searchParams } = new URL(request.url);
@@ -24,7 +24,7 @@ export async function DELETE(
       );
     }
 
-    const holdingId = params.id;
+    const { id: holdingId } = await params;
 
     if (!holdingId) {
       return NextResponse.json(

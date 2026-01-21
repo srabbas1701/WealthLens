@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
@@ -20,6 +20,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
 } from '@/components/icons';
+import { Plus, Edit, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
@@ -147,6 +148,23 @@ export default function BondsHoldingsPage() {
   
   const [sortField, setSortField] = useState<SortField>('maturityDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  
+  // CRUD state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedBond, setSelectedBond] = useState<BondHolding | null>(null);
+  const [bondToDelete, setBondToDelete] = useState<BondHolding | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    issuer: '',
+    amount: '',
+    couponRate: '',
+    couponFrequency: '',
+    maturityDate: ''
+  });
 
   const fetchData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -341,6 +359,178 @@ export default function BondsHoldingsPage() {
     }, 0);
   }, [sortedHoldings]);
 
+  // CRUD Handlers
+  const handleAddBond = async (bondData: {
+    issuer: string;
+    amount: number;
+    couponRate?: number;
+    couponFrequency?: string;
+    maturityDate?: string;
+  }) => {
+    setIsLoading(true);
+    
+    try {
+      if (!user?.id) {
+        showToast({
+          type: 'error',
+          title: 'Authentication Error',
+          message: 'User not authenticated',
+          duration: 7000,
+        });
+        return;
+      }
+
+      const response = await fetch('/api/investments/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          form_data: {
+            assetType: 'bond',
+            bondIssuer: bondData.issuer,
+            bondAmount: bondData.amount,
+            bondCouponRate: bondData.couponRate,
+            bondCouponFrequency: bondData.couponFrequency,
+            bondMaturityDate: bondData.maturityDate,
+          }
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to add bond');
+      }
+
+      await fetchData(user.id);
+      setShowAddModal(false);
+      setFormData({
+        issuer: '',
+        amount: '',
+        couponRate: '',
+        couponFrequency: 'Annual',
+        maturityDate: ''
+      });
+      
+      showToast({
+        type: 'success',
+        title: 'Bond Added',
+        message: `${bondData.issuer} has been added to your portfolio.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error adding bond:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Add Bond',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditBond = async (bondData: {
+    issuer: string;
+    amount: number;
+    couponRate?: number;
+    couponFrequency?: string;
+    maturityDate?: string;
+  }) => {
+    if (!selectedBond || !user?.id) return;
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/investments/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          editing_holding_id: selectedBond.id,
+          form_data: {
+            assetType: 'bond',
+            bondIssuer: bondData.issuer,
+            bondAmount: bondData.amount,
+            bondCouponRate: bondData.couponRate,
+            bondCouponFrequency: bondData.couponFrequency,
+            bondMaturityDate: bondData.maturityDate,
+          }
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to update bond');
+      }
+
+      await fetchData(user.id);
+      setShowEditModal(false);
+      setSelectedBond(null);
+      
+      showToast({
+        type: 'success',
+        title: 'Bond Updated',
+        message: `${bondData.issuer} has been updated.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error updating bond:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Update Bond',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteBond = async () => {
+    if (!bondToDelete || !user?.id) return;
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`/api/bonds/delete/${bondToDelete.id}?user_id=${user.id}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to delete bond' }));
+        throw new Error(error.error || 'Failed to delete bond');
+      }
+
+      await fetchData(user.id);
+      setShowDeleteConfirm(false);
+      const deletedName = bondToDelete.name;
+      setBondToDelete(null);
+      
+      showToast({
+        type: 'success',
+        title: 'Bond Deleted',
+        message: `${deletedName} has been removed from your portfolio.`,
+        duration: 5000,
+      });
+      
+    } catch (error: any) {
+      console.error('Error deleting bond:', error);
+      showToast({
+        type: 'error',
+        title: 'Failed to Delete Bond',
+        message: error.message || 'Please try again.',
+        duration: 7000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Download handler for Bonds
   const handleDownload = useCallback(async () => {
     console.log('[Bonds Download] Handler called - starting download process');
@@ -455,11 +645,30 @@ export default function BondsHoldingsPage() {
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
         {/* Page Title */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Bonds Holdings</h1>
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-            {holdings.length} holding{holdings.length !== 1 ? 's' : ''} • Total Value: {formatCurrency(totalCurrentValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
-          </p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Bonds Holdings</h1>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+              {holdings.length} holding{holdings.length !== 1 ? 's' : ''} • Total Value: {formatCurrency(totalCurrentValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setSelectedBond(null);
+              setFormData({
+                issuer: '',
+                amount: '',
+                couponRate: '',
+                couponFrequency: 'Annual',
+                maturityDate: ''
+              });
+              setShowAddModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-colors font-semibold"
+          >
+            <Plus className="w-4 h-4" />
+            Add Bond
+          </button>
         </div>
 
         {/* Data Completeness Notice */}
@@ -568,12 +777,15 @@ export default function BondsHoldingsPage() {
                         <SortIcon field="status" />
                       </div>
                     </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                   {sortedHoldings.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center">
+                      <td colSpan={10} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center gap-2">
                           <p className="text-sm text-[#6B7280] mb-2">No bond holdings found</p>
                           <p className="text-xs text-[#9CA3AF]">Upload your portfolio to see bond holdings</p>
@@ -638,6 +850,49 @@ export default function BondsHoldingsPage() {
                             {holding.status}
                           </span>
                         </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                const bondMetadata: any = {};
+                                try {
+                                  // We need to fetch the notes from the holding to get metadata
+                                  // For now, we'll use what we have
+                                  if (holding.issuer || holding.couponRate || holding.maturityDate) {
+                                    bondMetadata.issuer = holding.issuer;
+                                    bondMetadata.coupon_rate = holding.couponRate;
+                                    bondMetadata.coupon_frequency = holding.couponFrequency;
+                                    bondMetadata.maturity_date = holding.maturityDate;
+                                  }
+                                } catch (e) {}
+                                
+                                setSelectedBond(holding);
+                                setFormData({
+                                  issuer: holding.issuer || '',
+                                  amount: holding.investedValue.toString(),
+                                  couponRate: holding.couponRate?.toString() || '',
+                                  couponFrequency: holding.couponFrequency || 'Annual',
+                                  maturityDate: holding.maturityDate || ''
+                                });
+                                setShowEditModal(true);
+                              }}
+                              className="p-2 hover:bg-[#F3F4F6] dark:hover:bg-[#334155] rounded-lg transition-colors"
+                              title="Edit Bond"
+                            >
+                              <Edit className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8]" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setBondToDelete(holding);
+                                setShowDeleteConfirm(true);
+                              }}
+                              className="p-2 hover:bg-[#FEE2E2] dark:hover:bg-[#7F1D1D] rounded-lg transition-colors"
+                              title="Delete Bond"
+                            >
+                              <Trash2 className="w-4 h-4 text-[#DC2626] dark:text-[#FCA5A5]" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -660,6 +915,7 @@ export default function BondsHoldingsPage() {
                       <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatCurrency(totalCurrentValue)}
                       </td>
+                      <td className="px-4 py-3.5"></td>
                       <td className="px-4 py-3.5"></td>
                       <td className="px-4 py-3.5"></td>
                     </tr>
@@ -738,6 +994,453 @@ export default function BondsHoldingsPage() {
           </div>
         )}
       </main>
+
+      {/* ADD BOND MODAL */}
+      {showAddModal && (
+        <AddBondModal
+          onClose={() => {
+            setShowAddModal(false);
+            setFormData({
+              issuer: '',
+              amount: '',
+              couponRate: '',
+              couponFrequency: 'Annual',
+              maturityDate: ''
+            });
+          }}
+          onSave={handleAddBond}
+          formData={formData}
+          setFormData={setFormData}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* EDIT BOND MODAL */}
+      {showEditModal && selectedBond && (
+        <EditBondModal
+          bond={selectedBond}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedBond(null);
+          }}
+          onSave={handleEditBond}
+          formData={formData}
+          setFormData={setFormData}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* DELETE CONFIRMATION DIALOG */}
+      {showDeleteConfirm && bondToDelete && (
+        <DeleteBondDialog
+          bond={bondToDelete}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setBondToDelete(null);
+          }}
+          onConfirm={handleDeleteBond}
+          isLoading={isLoading}
+          formatCurrency={formatCurrency}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Add Bond Modal Component
+ */
+function AddBondModal({ 
+  onClose, 
+  onSave,
+  formData,
+  setFormData,
+  isLoading,
+  formatCurrency
+}: { 
+  onClose: () => void; 
+  onSave: (data: any) => void;
+  formData: any;
+  setFormData: any;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.issuer || !formData.amount) {
+      return;
+    }
+    
+    const amount = parseFloat(formData.amount);
+    if (amount <= 0) {
+      return;
+    }
+    
+    onSave({
+      issuer: formData.issuer,
+      amount: amount,
+      couponRate: formData.couponRate ? parseFloat(formData.couponRate) : undefined,
+      couponFrequency: formData.couponFrequency || 'Annual',
+      maturityDate: formData.maturityDate || undefined,
+    });
+  };
+
+  const investedValue = formData.amount ? parseFloat(formData.amount) : 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155]">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Add Bond Holding</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-[#F3F4F6] dark:hover:bg-[#334155] rounded-lg transition-colors"
+            type="button"
+          >
+            <X className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Issuer Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.issuer}
+              onChange={(e) => setFormData({ ...formData, issuer: e.target.value })}
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              required
+              autoFocus
+              placeholder="e.g., NTPC, Government of India"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Investment Amount (₹) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.amount}
+              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              required
+              placeholder="100000"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Coupon Rate (%)
+            </label>
+            <input
+              type="number"
+              value={formData.couponRate}
+              onChange={(e) => setFormData({ ...formData, couponRate: e.target.value })}
+              min="0"
+              step="0.01"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              placeholder="e.g., 7.5"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Coupon Frequency
+            </label>
+            <select
+              value={formData.couponFrequency}
+              onChange={(e) => setFormData({ ...formData, couponFrequency: e.target.value })}
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+            >
+              <option value="Annual">Annual</option>
+              <option value="Semi-Annual">Semi-Annual</option>
+              <option value="Quarterly">Quarterly</option>
+              <option value="Monthly">Monthly</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Maturity Date
+            </label>
+            <input
+              type="date"
+              value={formData.maturityDate}
+              onChange={(e) => setFormData({ ...formData, maturityDate: e.target.value })}
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+            />
+          </div>
+
+          {investedValue > 0 && (
+            <div className="bg-[#F3F4F6] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
+              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">Invested Value</div>
+              <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+                {formatCurrency(investedValue)}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F3F4F6] dark:hover:bg-[#334155] transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Adding...' : 'Add Bond'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Edit Bond Modal Component
+ */
+function EditBondModal({ 
+  bond, 
+  onClose, 
+  onSave,
+  formData,
+  setFormData,
+  isLoading,
+  formatCurrency
+}: { 
+  bond: BondHolding; 
+  onClose: () => void; 
+  onSave: (data: any) => void;
+  formData: any;
+  setFormData: any;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.issuer || !formData.amount) {
+      return;
+    }
+    
+    const amount = parseFloat(formData.amount);
+    if (amount <= 0) {
+      return;
+    }
+    
+    onSave({
+      issuer: formData.issuer,
+      amount: amount,
+      couponRate: formData.couponRate ? parseFloat(formData.couponRate) : undefined,
+      couponFrequency: formData.couponFrequency || 'Annual',
+      maturityDate: formData.maturityDate || undefined,
+    });
+  };
+
+  const newInvestedValue = formData.amount ? parseFloat(formData.amount) : 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155]">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Edit Bond Holding</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-[#F3F4F6] dark:hover:bg-[#334155] rounded-lg transition-colors"
+            type="button"
+          >
+            <X className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="bg-[#F3F4F6] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
+            <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-lg">{bond.name}</div>
+            {bond.issuer && (
+              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{bond.issuer}</div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Issuer Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.issuer}
+              onChange={(e) => setFormData({ ...formData, issuer: e.target.value })}
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              required
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Investment Amount (₹) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.amount}
+              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+              min="0.01"
+              step="0.01"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Coupon Rate (%)
+            </label>
+            <input
+              type="number"
+              value={formData.couponRate}
+              onChange={(e) => setFormData({ ...formData, couponRate: e.target.value })}
+              min="0"
+              step="0.01"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Coupon Frequency
+            </label>
+            <select
+              value={formData.couponFrequency}
+              onChange={(e) => setFormData({ ...formData, couponFrequency: e.target.value })}
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+            >
+              <option value="Annual">Annual</option>
+              <option value="Semi-Annual">Semi-Annual</option>
+              <option value="Quarterly">Quarterly</option>
+              <option value="Monthly">Monthly</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Maturity Date
+            </label>
+            <input
+              type="date"
+              value={formData.maturityDate}
+              onChange={(e) => setFormData({ ...formData, maturityDate: e.target.value })}
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+            />
+          </div>
+
+          {newInvestedValue > 0 && (
+            <div className="bg-[#F3F4F6] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
+              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">New Invested Value</div>
+              <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+                {formatCurrency(newInvestedValue)}
+              </div>
+              <div className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                Previous: {formatCurrency(bond.investedValue)}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F3F4F6] dark:hover:bg-[#334155] transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Delete Bond Dialog Component
+ */
+function DeleteBondDialog({ 
+  bond, 
+  onClose, 
+  onConfirm,
+  isLoading,
+  formatCurrency
+}: { 
+  bond: BondHolding; 
+  onClose: () => void; 
+  onConfirm: () => void;
+  isLoading: boolean;
+  formatCurrency: (value: number) => string;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="p-6">
+          <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mb-4">
+            <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
+          </div>
+          
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+            Delete Bond Holding?
+          </h2>
+          
+          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-6">
+            Are you sure you want to delete{' '}
+            <strong className="text-[#0F172A] dark:text-[#F8FAFC]">{bond.name}</strong>?{' '}
+            This will remove a bond holding with invested value of{' '}
+            <strong className="text-[#0F172A] dark:text-[#F8FAFC]">
+              {formatCurrency(bond.investedValue)}
+            </strong>.
+          </p>
+
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 p-4 rounded-r-lg mb-6">
+            <p className="text-sm text-[#0F172A] dark:text-[#F8FAFC]">
+              <strong>Warning:</strong> This action cannot be undone. You'll need to add 
+              this bond again manually or re-upload your CSV if you change your mind.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F3F4F6] dark:hover:bg-[#334155] transition-colors font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isLoading}
+              className="flex-1 px-6 py-3 bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-600 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Deleting...' : 'Delete Bond'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

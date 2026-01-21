@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { classifyAsset } from '@/lib/asset-classification';
 
 interface GoldHoldingRequest {
   user_id: string;
@@ -252,13 +253,28 @@ export async function POST(req: NextRequest) {
 
     // Create asset
     const assetName = createAssetName(gold_type, metadata);
+    
+    // Use classification system to get proper capitalized values
+    // All gold types (SGB, Physical, ETF, Digital) are classified as Commodity
+    const classification = classifyAsset('gold');
+    
+    // For Gold ETF, we might want to use a symbol if ISIN is provided
+    let assetSymbol = assetName.slice(0, 10).toUpperCase().replace(/\s+/g, '');
+    if (gold_type === 'etf' && isin) {
+      // Use ISIN for Gold ETF if available
+      assetSymbol = isin.slice(0, 10).toUpperCase();
+    }
+    
     const { data: asset, error: assetError } = await adminClient
       .from('assets')
       .insert({
         name: assetName,
-        symbol: assetName.slice(0, 10).toUpperCase().replace(/\s+/g, ''),
+        symbol: assetSymbol,
         asset_type: 'gold',
-        asset_class: 'gold',
+        asset_class: classification.assetClass,
+        top_level_bucket: classification.topLevelBucket,
+        risk_behavior: classification.riskBehavior,
+        valuation_method: classification.valuationMethod,
         risk_bucket: 'medium',
         is_active: true,
       })

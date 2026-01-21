@@ -223,10 +223,10 @@ async function upsertHolding(
       currentValue = quantity * priceData.price;
       console.log(`[Manual Investment] Using stored price for ${asset.data.symbol}: ₹${priceData.price} (Yahoo EOD: ${priceData.priceDate})`);
     } else {
-      // No price available - set to null, will be updated by price update job
-      // Do NOT use avg_buy_price as fallback
-      console.warn(`[Manual Investment] No price data for ${asset.data.symbol}, current_value will be null until price update`);
-      currentValue = null;
+      // No price available - use invested_value as temporary fallback until price update job runs
+      // Database requires NOT NULL, so we can't use null
+      console.warn(`[Manual Investment] No price data for ${asset.data.symbol}, using invested_value as temporary current_value until price update`);
+      currentValue = computedInvestedValue;
     }
   } else {
     // For non-equity, current_value = invested_value (no market pricing)

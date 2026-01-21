@@ -176,21 +176,37 @@ export default function GoldHoldingsPage() {
           // Fetch gold price info (IBJA or MCX)
           try {
             const priceResponse = await fetch('/api/gold/prices/update');
-            if (priceResponse.ok) {
-              const priceData = await priceResponse.json();
-              if (priceData.success && priceData.price) {
-                setGoldPriceInfo({
-                  gold_24k: priceData.price.gold_24k,
-                  gold_22k: priceData.price.gold_22k,
-                  date: priceData.price.date,
-                  session: priceData.price.session || null,
-                  source: priceData.price.source || 'IBJA',
-                  isIndicative: priceData.price.source === 'MCX_PROXY' || false,
-                });
-              }
+            const priceData = await priceResponse.json();
+            
+            console.log('[Gold Holdings] Price API response:', {
+              status: priceResponse.status,
+              ok: priceResponse.ok,
+              success: priceData.success,
+              hasPrice: !!priceData.price,
+              data: priceData
+            });
+            
+            if (priceResponse.ok && priceData.success && priceData.price) {
+              console.log('[Gold Holdings] Setting goldPriceInfo:', priceData.price);
+              setGoldPriceInfo({
+                gold_24k: priceData.price.gold_24k,
+                gold_22k: priceData.price.gold_22k,
+                date: priceData.price.date,
+                session: priceData.price.session || null,
+                source: priceData.price.source || 'IBJA',
+                isIndicative: priceData.price.source === 'MCX_PROXY' || false,
+              });
+            } else {
+              // Log the error for debugging
+              console.warn('[Gold Holdings] Failed to fetch gold price info:', {
+                status: priceResponse.status,
+                statusText: priceResponse.statusText,
+                error: priceData.error || 'Unknown error',
+                data: priceData
+              });
             }
           } catch (error) {
-            console.warn('Failed to fetch gold price info:', error);
+            console.error('[Gold Holdings] Error fetching gold price info:', error);
           }
         }
       }
@@ -241,51 +257,67 @@ export default function GoldHoldingsPage() {
         },
       });
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          // Refresh data to show updated prices
-          if (user?.id) {
-            await fetchData(user.id);
-          }
-          // Disable button after successful update
-          setPriceUpdateDisabled(true);
-          // Re-enable after 1 minute
-          setTimeout(() => setPriceUpdateDisabled(false), 60000);
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        // Refresh data to show updated prices
+        if (user?.id) {
+          await fetchData(user.id);
+        }
+        // Disable button after successful update
+        setPriceUpdateDisabled(true);
+        // Re-enable after 1 minute
+        setTimeout(() => setPriceUpdateDisabled(false), 60000);
+        
+        // Show success message with IBJA info
+        const successMsg = data.message || `Gold prices updated successfully (IBJA · ${data.session || 'AM'} · ${new Date(data.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })})`;
+        alert(successMsg);
+        
+        // Refresh gold price info
+        try {
+          const priceResponse = await fetch('/api/gold/prices/update');
+          const priceData = await priceResponse.json();
           
-          // Show success message with IBJA info
-          const successMsg = data.message || `Gold prices updated successfully (IBJA · ${data.session || 'AM'} · ${new Date(data.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })})`;
-          alert(successMsg);
-          
-          // Refresh gold price info
-          try {
-            const priceResponse = await fetch('/api/gold/prices/update');
-            if (priceResponse.ok) {
-              const priceData = await priceResponse.json();
-              if (priceData.success && priceData.price) {
-                setGoldPriceInfo({
-                  gold_24k: priceData.price.gold_24k,
-                  gold_22k: priceData.price.gold_22k,
-                  date: priceData.price.date,
-                  session: priceData.price.session || null,
-                  source: priceData.price.source || 'IBJA',
-                  isIndicative: priceData.price.source === 'MCX_PROXY' || false,
-                });
-              }
-            }
-          } catch (error) {
-            console.warn('Failed to refresh gold price info:', error);
+          if (priceResponse.ok && priceData.success && priceData.price) {
+            setGoldPriceInfo({
+              gold_24k: priceData.price.gold_24k,
+              gold_22k: priceData.price.gold_22k,
+              date: priceData.price.date,
+              session: priceData.price.session || null,
+              source: priceData.price.source || 'IBJA',
+              isIndicative: priceData.price.source === 'MCX_PROXY' || false,
+            });
+          } else {
+            console.warn('Failed to refresh gold price info:', priceData.error || 'Unknown error');
           }
-        } else {
-          console.error('Gold price update failed:', data.error);
-          alert('Failed to update gold prices: ' + (data.error || 'Unknown error'));
+        } catch (error) {
+          console.error('Error refreshing gold price info:', error);
         }
       } else {
-        throw new Error('Failed to update gold prices');
+        // Handle error response
+        const errorMessage = data.error || data.message || 'Failed to update gold prices';
+        console.error('Gold price update failed:', errorMessage, data);
+        
+        // If there's a fallback price, show it but still indicate error
+        if (data.fallback) {
+          alert(`Gold price update failed: ${errorMessage}\n\nUsing last available rates from ${data.fallback.date}`);
+          // Update gold price info with fallback
+          setGoldPriceInfo({
+            gold_24k: data.fallback.gold_24k,
+            gold_22k: data.fallback.gold_22k,
+            date: data.fallback.date,
+            session: data.fallback.session || null,
+            source: data.fallback.source || 'MOCK',
+            isIndicative: data.fallback.source === 'MCX_PROXY' || data.fallback.source === 'MOCK',
+          });
+        } else {
+          alert('Failed to update gold prices: ' + errorMessage);
+        }
       }
     } catch (error) {
       console.error('Error updating gold prices:', error);
-      alert('Error updating gold prices. Using last available IBJA rate.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Error updating gold prices: ${errorMessage}\n\nPlease try again later or check if gold price data is available.`);
     } finally {
       setPriceUpdateLoading(false);
     }

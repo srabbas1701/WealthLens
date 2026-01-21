@@ -1,4 +1,5 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/database';
 
@@ -112,17 +113,13 @@ export function createAdminClient() {
     );
   }
 
-  return createServerClient<Database>(
-    url,
-    serviceKey,
-    {
-      cookies: {
-        getAll() {
-          return [];
-        },
-        setAll() {},
-      },
-    }
-  );
+  // Use @supabase/supabase-js directly for admin client to ensure RLS bypass
+  // The SSR client might not properly bypass RLS even with service role key
+  return createSupabaseClient<Database>(url, serviceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
 }
 
