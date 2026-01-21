@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { fetchStockPrice, fetchStockName } from '@/lib/stock-helpers';
+import { classifyAsset } from '@/lib/asset-classification';
 
 // Helper: Get or create user's primary portfolio
 async function getPrimaryPortfolio(userId: string, supabase: any) {
@@ -57,13 +58,19 @@ async function createOrGetStockAsset(symbol: string, supabase: any) {
   // Create new asset
   const stockName = await fetchStockName(symbol);
   
+  // Use new classification system
+  const classification = classifyAsset('equity');
+  
   const { data: newAsset, error } = await supabase
     .from('assets')
     .insert({
       symbol: symbol.toUpperCase(),
       name: stockName,
       asset_type: 'equity',
-      asset_class: 'equity',
+      asset_class: classification.assetClass,
+      top_level_bucket: classification.topLevelBucket,
+      risk_behavior: classification.riskBehavior,
+      valuation_method: classification.valuationMethod,
       risk_bucket: 'high', // Default for stocks
       is_active: true,
     })

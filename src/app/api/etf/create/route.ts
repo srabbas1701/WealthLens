@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { fetchStockPrice } from '@/lib/stock-helpers';
+import { classifyAsset } from '@/lib/asset-classification';
 
 // Helper: Get or create user's primary portfolio
 async function getPrimaryPortfolio(userId: string, supabase: any) {
@@ -54,14 +55,10 @@ async function createOrGetETFAsset(symbol: string, name: string, category: strin
     return existing.id;
   }
 
-  // Map category to asset_class
-  const assetClassMap: Record<string, string> = {
-    'Equity': 'equity',
-    'Debt': 'debt',
-    'Gold': 'gold',
-    'Hybrid': 'hybrid',
-    'Other': 'equity',
-  };
+  // Use new classification system
+  // Determine if it's a gold ETF based on name or category
+  const isGoldETF = category === 'Gold' || name.toLowerCase().includes('gold');
+  const classification = classifyAsset('etf', { isGoldETF });
 
   // Create new asset
   const { data: newAsset, error } = await supabase
@@ -70,7 +67,10 @@ async function createOrGetETFAsset(symbol: string, name: string, category: strin
       symbol: symbol.toUpperCase(),
       name,
       asset_type: 'etf',
-      asset_class: assetClassMap[category] || 'equity',
+      asset_class: classification.assetClass,
+      top_level_bucket: classification.topLevelBucket,
+      risk_behavior: classification.riskBehavior,
+      valuation_method: classification.valuationMethod,
       risk_bucket: category === 'Debt' ? 'low' : category === 'Gold' ? 'medium' : 'high',
       is_active: true,
     })

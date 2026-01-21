@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { classifyAsset } from '@/lib/asset-classification';
 
 // Helper: Get or create user's primary portfolio
 async function getPrimaryPortfolio(userId: string, supabase: any) {
@@ -70,13 +71,20 @@ async function createOrGetMFAsset(name: string, isin: string | undefined, supaba
   // Create new asset
   const symbol = isin ? isin.toUpperCase() : `MF_${Date.now()}`;
   
+  // Use new classification system
+  // Default to equity-oriented MF (most common)
+  const classification = classifyAsset('mutual_fund', { isEquityMF: true });
+  
   const { data: newAsset, error } = await supabase
     .from('assets')
     .insert({
       symbol,
       name,
       asset_type: 'mutual_fund',
-      asset_class: 'equity', // Default, can be updated based on category
+      asset_class: classification.assetClass,
+      top_level_bucket: classification.topLevelBucket,
+      risk_behavior: classification.riskBehavior,
+      valuation_method: classification.valuationMethod,
       risk_bucket: 'medium',
       is_active: true,
     })

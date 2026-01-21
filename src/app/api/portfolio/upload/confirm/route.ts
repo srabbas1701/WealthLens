@@ -65,9 +65,9 @@ import {
   calculateInvestedValue,
   calculateWeightedAveragePrice,
   calculatePortfolioMetrics,
-  getAssetClass,
   formatIndianCurrency,
 } from '@/lib/portfolio-calculations';
+import { classifyAsset } from '@/lib/asset-classification';
 import { getISINsBySchemeCode } from '@/lib/mf-scheme-master';
 
 type Asset = Database['public']['Tables']['assets']['Row'];
@@ -77,10 +77,20 @@ type Asset = Database['public']['Tables']['assets']['Row'];
 // ============================================================================
 
 /**
- * Get asset class from asset type
+ * Get asset class from asset type (deprecated - use classifyAsset instead)
+ * @deprecated Use classifyAsset from @/lib/asset-classification instead
  */
 function getAssetClassFromType(assetType: AssetType): 'equity' | 'debt' | 'gold' | 'cash' | 'hybrid' {
-  return getAssetClass(assetType) as 'equity' | 'debt' | 'gold' | 'cash' | 'hybrid';
+  const classification = classifyAsset(assetType);
+  // Map new capitalized values to old lowercase format for backward compatibility
+  const mapping: Record<string, 'equity' | 'debt' | 'gold' | 'cash' | 'hybrid'> = {
+    'Equity': 'equity',
+    'FixedIncome': 'debt',
+    'Hybrid': 'hybrid',
+    'Commodity': 'gold',
+    'Cash': 'cash',
+  };
+  return mapping[classification.assetClass] || 'equity';
 }
 
 /**
@@ -465,34 +475,14 @@ async function createAsset(
     ? ((holding as any)._schemeCode || null) // Use scheme_code from resolution
     : (holding.symbol?.toUpperCase() || null); // ETFs and stocks use trading symbols
   
-  // Get asset_class, but ensure it's valid for database constraint
-  // Database only allows: 'equity', 'debt', 'gold', 'cash', 'hybrid'
-  // getAssetClass can return 'other' for unknown types, which violates the constraint
-  let assetClass = getAssetClass(holding.asset_type);
-  
-  // Ensure asset_class is always valid - convert 'other' to a safe default
-  if (!assetClass || assetClass === 'other') {
-    // Default based on asset_type
-    if (isMF || holding.asset_type === 'index_fund') {
-      assetClass = 'equity'; // Most MFs/index funds are equity-oriented
-    } else if (holding.asset_type === 'fd' || holding.asset_type === 'bond' || holding.asset_type === 'ppf' || holding.asset_type === 'epf') {
-      assetClass = 'debt';
-    } else if (holding.asset_type === 'gold') {
-      assetClass = 'gold';
-    } else if (holding.asset_type === 'cash') {
-      assetClass = 'cash';
-    } else if (holding.asset_type === 'nps') {
-      assetClass = 'hybrid';
-    } else if (holding.asset_type === 'etf') {
-      assetClass = 'equity'; // ETFs are typically equity-oriented
-    } else {
-      // Safe fallback for completely unknown types
-      assetClass = 'hybrid';
-    }
-  }
-  
-  // Type cast to ensure TypeScript knows it's valid
-  const validAssetClass = assetClass as 'equity' | 'debt' | 'gold' | 'cash' | 'hybrid';
+  // Use new classification system to get proper capitalized values
+  // This ensures compatibility with database constraints
+  const classification = classifyAsset(holding.asset_type, {
+    isEquityMF: isMF && holding.asset_type === 'mutual_fund',
+    isDebtMF: false, // Would need additional logic to detect debt MFs
+    isHybridMF: false, // Would need additional logic to detect hybrid MFs
+    isGoldETF: isETF && holding.name?.toLowerCase().includes('gold'),
+  });
 
   const { data: newAsset, error } = await supabase
     .from('assets')
@@ -501,7 +491,10 @@ async function createAsset(
       asset_type: holding.asset_type,
       symbol: symbol, // scheme_code for MF, symbol for others
       isin: holding.isin?.toUpperCase() || null, // ISIN from scheme master (ONLY source of truth)
-      asset_class: validAssetClass, // Ensure valid value for database constraint
+      asset_class: classification.assetClass, // Use capitalized value from classification system
+      top_level_bucket: classification.topLevelBucket,
+      risk_behavior: classification.riskBehavior,
+      valuation_method: classification.valuationMethod,
       risk_bucket: getRiskBucket(holding.asset_type),
       is_active: true,
     })

@@ -33,9 +33,9 @@ import { createAdminClient } from '@/lib/supabase/server';
 import {
   calculateInvestedValue,
   calculatePortfolioMetrics,
-  getAssetClass,
   formatIndianCurrency,
 } from '@/lib/portfolio-calculations';
+import { classifyAsset } from '@/lib/asset-classification';
 
 // ============================================================================
 // TYPES
@@ -162,13 +162,19 @@ async function createAsset(
   assetName: string,
   metadata: Record<string, unknown>
 ): Promise<string> {
+  // Use new classification system to get proper capitalized values
+  const classification = classifyAsset(assetType);
+  
   const { data: asset, error } = await adminClient
     .from('assets')
     .insert({
       name: assetName,
       symbol: assetName.slice(0, 10).toUpperCase().replace(/\s+/g, ''),
       asset_type: assetType,
-      asset_class: getAssetClass(assetType),
+      asset_class: classification.assetClass,
+      top_level_bucket: classification.topLevelBucket,
+      risk_behavior: classification.riskBehavior,
+      valuation_method: classification.valuationMethod,
       risk_bucket: getRiskBucket(assetType),
       is_active: true,
     })
