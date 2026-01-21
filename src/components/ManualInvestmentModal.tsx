@@ -21,6 +21,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { XIcon, CheckCircleIcon, AlertTriangleIcon, ArrowLeftIcon } from '@/components/icons';
 import { useCurrency } from '@/components/AppHeader';
 
@@ -40,7 +41,7 @@ interface ManualInvestmentModalProps {
   onGoldSelected?: () => void; // Callback when Gold is selected
 }
 
-type AssetTypeOption = 'fd' | 'bond' | 'gold' | 'cash' | 'epf' | 'ppf' | 'nps';
+type AssetTypeOption = 'fd' | 'bond' | 'gold' | 'cash' | 'epf' | 'ppf' | 'nps' | 'real_estate';
 type Step = 'select' | 'form' | 'review' | 'saving' | 'success' | 'error';
 
 interface FormData {
@@ -105,6 +106,7 @@ export default function ManualInvestmentModal({
   onEPFSelected,
   onGoldSelected,
 }: ManualInvestmentModalProps) {
+  const router = useRouter();
   const { formatCurrency } = useCurrency();
   const [step, setStep] = useState<Step>('select');
   const [formData, setFormData] = useState<FormData>({
@@ -198,6 +200,13 @@ export default function ManualInvestmentModal({
     // Special handling for Gold - redirect to comprehensive Gold modal
     if (type === 'gold' && onGoldSelected) {
       onGoldSelected();
+      return;
+    }
+    
+    // Special handling for Real Estate - navigate to Real Estate dashboard
+    if (type === 'real_estate') {
+      onClose();
+      router.push('/portfolio/real-estate');
       return;
     }
     
@@ -362,6 +371,7 @@ export default function ManualInvestmentModal({
                     { id: 'epf' as AssetTypeOption, label: 'EPF', description: 'Employee Provident Fund' },
                     { id: 'ppf' as AssetTypeOption, label: 'PPF', description: 'Public Provident Fund' },
                     { id: 'nps' as AssetTypeOption, label: 'NPS', description: 'National Pension System' },
+                    { id: 'real_estate' as AssetTypeOption, label: 'Real Estate', description: 'Residential, commercial, land' },
                   ].map((option) => (
                     <button
                       key={option.id}

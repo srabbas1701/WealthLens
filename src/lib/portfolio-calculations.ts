@@ -438,8 +438,12 @@ export interface PortfolioMetrics {
 
 /**
  * Map asset_type to asset_class for allocation calculation
+ * 
+ * @deprecated Use classifyAsset from @/lib/asset-classification instead
+ * This function is kept for backward compatibility but should be migrated
  */
 export function getAssetClass(assetType: string): 'equity' | 'debt' | 'gold' | 'cash' | 'hybrid' | 'other' {
+  // Map old asset types to old format for backward compatibility
   const mapping: Record<string, 'equity' | 'debt' | 'gold' | 'cash' | 'hybrid' | 'other'> = {
     'equity': 'equity',
     'mutual_fund': 'equity',  // Most MFs are equity-oriented

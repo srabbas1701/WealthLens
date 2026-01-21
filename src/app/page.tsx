@@ -22,6 +22,7 @@ import { useAuthSession } from '@/lib/auth';
 import { AppHeader } from '@/components/AppHeader';
 import { LogoLockup } from '@/components/LogoLockup';
 import { Logo } from '@/components/Logo';
+import RealEstateHighlights from '@/components/home/RealEstateHighlights';
 
 /**
  * LensOnWealth Landing Page - Best-in-Class Fintech Design
@@ -462,6 +463,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Real Estate Highlights Section */}
+      <RealEstateHighlights />
 
       {/* What You Can Track Section */}
       <section id="platforms" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC]">

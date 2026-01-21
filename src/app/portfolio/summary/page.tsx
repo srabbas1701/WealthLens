@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   ChevronDownIcon, 
   ChevronUpIcon, 
@@ -51,6 +51,7 @@ interface PortfolioSummaryData {
 
 export default function PortfolioSummaryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
@@ -58,6 +59,22 @@ export default function PortfolioSummaryPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<PortfolioSummaryData | null>(null);
   const [expandedAssets, setExpandedAssets] = useState<Set<string>>(new Set());
+  
+  // Get bucket filter from query params
+  const bucketFilter = searchParams?.get('bucket') || null;
+  
+  // Bucket labels
+  const bucketLabels: Record<string, string> = {
+    'Growth': 'Growth Assets',
+    'IncomeAllocation': 'Income & Allocation',
+    'RealAsset': 'Real Assets',
+    'Commodity': 'Commodities',
+    'Cash': 'Cash & Liquidity',
+  };
+  
+  const pageTitle = bucketFilter 
+    ? `${bucketLabels[bucketFilter] || bucketFilter} Portfolio Summary`
+    : 'Portfolio Summary';
 
   // Fetch portfolio summary data
   const fetchData = useCallback(async (userId: string) => {
@@ -70,6 +87,91 @@ export default function PortfolioSummaryPage() {
     fetchingRef.current = true;
     setLoading(true);
     try {
+      // Special handling for Real Assets bucket - fetch Real Estate data separately
+      if (bucketFilter === 'RealAsset') {
+        const response = await fetch('/api/real-estate/assets');
+        
+        if (response.ok) {
+          const result = await response.json();
+          const assets = result.success && result.data ? result.data : [];
+          
+          if (assets.length === 0) {
+            // No real estate assets
+            setData({
+              totalValue: 0,
+              totalInvested: 0,
+              totalGainLoss: 0,
+              totalGainLossPercent: 0,
+              totalHoldings: 0,
+              assetSummaries: [],
+              lastUpdated: new Date().toISOString(),
+            });
+            return;
+          }
+          
+          // Import Real Estate analytics
+          const { getRealEstateDashboardData } = await import('@/analytics/realEstateDashboard.mapper');
+          const dashboardData = await getRealEstateDashboardData(assets, null);
+          
+          // Calculate invested value (purchase price) and current value
+          const totalInvested = assets.reduce((sum: number, a: any) => {
+            return sum + (a.ownershipAdjusted?.purchasePrice || 0);
+          }, 0);
+          
+          const netWorth = dashboardData.summary.netRealEstateWorth || 0;
+          const totalGainLoss = netWorth - totalInvested;
+          const gainLossPercent = totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0;
+          
+          // Format Real Estate as AssetSummary
+          const realEstateSummary: AssetSummary = {
+            assetType: 'Real Estate',
+            totalValue: netWorth,
+            investedValue: totalInvested,
+            gainLoss: totalGainLoss,
+            gainLossPercent: gainLossPercent,
+            holdingsCount: assets.length,
+              topHoldings: assets
+              .sort((a: any, b: any) => {
+                const aValue = a.ownershipAdjusted?.currentValue || 0;
+                const bValue = b.ownershipAdjusted?.currentValue || 0;
+                return bValue - aValue;
+              })
+              .slice(0, 5)
+              .map((a: any) => {
+                const currentValue = a.ownershipAdjusted?.currentValue || 0;
+                return {
+                  name: a.asset.property_nickname || 'Unnamed Property',
+                  value: currentValue,
+                  percentage: netWorth > 0 ? (currentValue / netWorth) * 100 : 0,
+                };
+              }),
+          };
+          
+          setData({
+            totalValue: netWorth,
+            totalInvested,
+            totalGainLoss,
+            totalGainLossPercent: gainLossPercent,
+            totalHoldings: assets.length,
+            assetSummaries: [realEstateSummary],
+            lastUpdated: new Date().toISOString(),
+          });
+        } else {
+          console.error('Failed to fetch real estate assets');
+          setData({
+            totalValue: 0,
+            totalInvested: 0,
+            totalGainLoss: 0,
+            totalGainLossPercent: 0,
+            totalHoldings: 0,
+            assetSummaries: [],
+            lastUpdated: new Date().toISOString(),
+          });
+        }
+        return;
+      }
+      
+      // For other buckets, use portfolio data API
       const params = new URLSearchParams({ user_id: userId });
       const response = await fetch(`/api/portfolio/data?${params}`);
       
@@ -78,12 +180,28 @@ export default function PortfolioSummaryPage() {
         if (result.success && result.data) {
           // Transform dashboard data into summary format
           const portfolioData = result.data;
-          // CRITICAL: Calculate from ALL holdings, not just allocation items
+          
+          // Filter holdings by bucket if bucket filter is provided
+          let filteredHoldings = portfolioData.holdings;
+          if (bucketFilter) {
+            filteredHoldings = portfolioData.holdings.filter((h: any) => {
+              // Map bucket names to match holdings' topLevelBucket
+              const bucketMap: Record<string, string> = {
+                'Growth': 'Growth',
+                'IncomeAllocation': 'IncomeAllocation',
+                'Commodity': 'Commodity',
+                'Cash': 'Cash',
+              };
+              return h.topLevelBucket === bucketMap[bucketFilter] || h.topLevelBucket === bucketFilter;
+            });
+          }
+          
+          // CRITICAL: Calculate from filtered holdings
           // This ensures no asset types are missed (like Gold if it's missing from allocation)
-          const allAssetTypes = new Set(portfolioData.holdings.map((h: any) => h.assetType).filter(Boolean));
+          const allAssetTypes = new Set(filteredHoldings.map((h: any) => h.assetType).filter(Boolean));
           
           const assetSummaries: AssetSummary[] = Array.from(allAssetTypes).map((assetType: string) => {
-            const assetHoldings = portfolioData.holdings.filter((h: any) => h.assetType === assetType);
+            const assetHoldings = filteredHoldings.filter((h: any) => h.assetType === assetType);
             const totalInvested = assetHoldings.reduce((sum: number, h: any) => sum + (h.investedValue || 0), 0);
             const totalCurrent = assetHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || 0), 0);
             const gainLoss = totalCurrent - totalInvested;
@@ -113,31 +231,22 @@ export default function PortfolioSummaryPage() {
             };
           }).sort((a, b) => b.totalValue - a.totalValue); // Sort by total value descending
 
-          // CRITICAL: Calculate totals from ALL holdings, not just assetSummaries
-          // This ensures totals match the sum of all holdings (including any missing from allocation)
-          const totalInvestedFromHoldings = portfolioData.holdings.reduce((sum: number, h: any) => sum + (h.investedValue || 0), 0);
-          const totalCurrentFromHoldings = portfolioData.holdings.reduce((sum: number, h: any) => sum + (h.currentValue || 0), 0);
+          // CRITICAL: Calculate totals from filtered holdings
+          // This ensures totals match the sum of filtered holdings
+          const totalInvestedFromHoldings = filteredHoldings.reduce((sum: number, h: any) => sum + (h.investedValue || 0), 0);
+          const totalCurrentFromHoldings = filteredHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || 0), 0);
           const totalInvested = assetSummaries.reduce((sum, a) => sum + a.investedValue, 0);
           const totalGainLoss = assetSummaries.reduce((sum, a) => sum + a.gainLoss, 0);
           
-          // VALIDATION: Verify totals match (with small tolerance for rounding)
-          const totalInvestedDiff = Math.abs(totalInvestedFromHoldings - totalInvested);
-          const totalCurrentDiff = Math.abs(totalCurrentFromHoldings - portfolioData.metrics.netWorth);
-          if (totalInvestedDiff > 1 || totalCurrentDiff > 1) {
-            console.warn('[Portfolio Summary] Total mismatch detected:', {
-              totalInvestedFromHoldings,
-              totalInvested,
-              totalCurrentFromHoldings,
-              netWorth: portfolioData.metrics.netWorth,
-            });
-          }
+          // For filtered view, use filtered totals; for full view, use portfolio totals
+          const totalValue = bucketFilter ? totalCurrentFromHoldings : portfolioData.metrics.netWorth;
 
           setData({
-            totalValue: portfolioData.metrics.netWorth,
+            totalValue,
             totalInvested,
             totalGainLoss,
             totalGainLossPercent: totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0,
-            totalHoldings: portfolioData.holdings.length,
+            totalHoldings: filteredHoldings.length,
             assetSummaries,
             lastUpdated: new Date().toISOString(),
           });
@@ -149,7 +258,7 @@ export default function PortfolioSummaryPage() {
       setLoading(false);
       fetchingRef.current = false;
     }
-  }, []);
+  }, [bucketFilter]);
 
   // GUARD: Redirect if not authenticated
   // RULE: Never redirect while authStatus === 'loading'
@@ -202,6 +311,7 @@ export default function PortfolioSummaryPage() {
       'NPS': '/portfolio/nps',
       'Index Funds': '/portfolio/mutualfunds',
       'Gold': '/portfolio/gold',
+      'Real Estate': '/portfolio/real-estate',
       'Other': '/portfolio/summary',
     };
     
@@ -266,8 +376,13 @@ export default function PortfolioSummaryPage() {
       <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24">
         {/* Page Title */}
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Portfolio Summary</h1>
+          <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">{pageTitle}</h1>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+            {bucketFilter && (
+              <span className="inline-block mr-2">
+                Showing only <strong>{bucketLabels[bucketFilter] || bucketFilter}</strong> holdings
+              </span>
+            )}
             Last updated: {formatDate(data.lastUpdated)}
           </p>
         </div>
@@ -276,7 +391,9 @@ export default function PortfolioSummaryPage() {
         <section className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
-              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-2">Total Portfolio Value</p>
+              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-2">
+                {bucketFilter ? 'Total Bucket Value' : 'Total Portfolio Value'}
+              </p>
               <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                 {formatCurrency(data.totalValue)}
               </p>
@@ -332,7 +449,10 @@ export default function PortfolioSummaryPage() {
                     <div>
                       <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{asset.assetType}</h3>
                       <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                        {asset.holdingsCount} holding{asset.holdingsCount !== 1 ? 's' : ''}
+                        {asset.holdingsCount} {asset.assetType === 'Real Estate' 
+                          ? (asset.holdingsCount === 1 ? 'property' : 'properties')
+                          : (asset.holdingsCount === 1 ? 'holding' : 'holdings')
+                        }
                       </p>
                     </div>
                   </div>
@@ -346,7 +466,7 @@ export default function PortfolioSummaryPage() {
                       </p>
                     </div>
                     <Link
-                      href={getAssetRoute(asset.assetType)}
+                      href={asset.assetType === 'Real Estate' ? '/portfolio/real-estate' : getAssetRoute(asset.assetType)}
                       onClick={(e) => e.stopPropagation()}
                       className="text-[#2563EB] dark:text-[#3B82F6] hover:text-[#1E40AF] dark:hover:text-[#2563EB] hover:underline text-sm font-medium transition-all"
                     >
@@ -382,7 +502,9 @@ export default function PortfolioSummaryPage() {
 
                     {asset.topHoldings.length > 0 && (
                       <>
-                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] font-medium mb-3">Top {asset.topHoldings.length} Holdings</p>
+                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] font-medium mb-3">
+                          Top {asset.topHoldings.length} {asset.assetType === 'Real Estate' ? 'Properties' : 'Holdings'}
+                        </p>
                         <div className="space-y-2">
                           {asset.topHoldings.map((holding, idx) => (
                             <div key={idx} className="flex items-center justify-between py-2">
@@ -399,10 +521,10 @@ export default function PortfolioSummaryPage() {
                           ))}
                         </div>
                         <Link
-                          href={`/portfolio/${asset.assetType.toLowerCase().replace(/\s+/g, '')}`}
+                          href={asset.assetType === 'Real Estate' ? '/portfolio/real-estate' : `/portfolio/${asset.assetType.toLowerCase().replace(/\s+/g, '')}`}
                           className="inline-block mt-3 text-sm text-[#2563EB] dark:text-[#3B82F6] hover:text-[#1E40AF] dark:hover:text-[#2563EB] font-medium"
                         >
-                          View all {asset.holdingsCount} holdings →
+                          View all {asset.holdingsCount} {asset.assetType === 'Real Estate' ? 'properties' : 'holdings'} →
                         </Link>
                       </>
                     )}
@@ -420,7 +542,10 @@ export default function PortfolioSummaryPage() {
             <div>
               <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">Data Verified</p>
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                Total portfolio value matches dashboard: {formatCurrency(data.totalValue)} ✓
+                {bucketFilter 
+                  ? `Showing ${data.totalHoldings} holdings from ${bucketLabels[bucketFilter] || bucketFilter} bucket`
+                  : `Total portfolio value matches dashboard: ${formatCurrency(data.totalValue)} ✓`
+                }
               </p>
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                 All values computed from transaction history and current holdings.

@@ -12,10 +12,7 @@ const nextConfig: NextConfig = {
 
   // Skip static optimization for pages that require runtime data
   // This prevents build errors when Supabase env vars aren't available
-  experimental: {
-    // Allow pages to opt out of static generation
-    missingSuspenseWithCSRBailout: false,
-  },
+  // Note: Removed invalid experimental option that was causing warnings
 };
 
 export default nextConfig;

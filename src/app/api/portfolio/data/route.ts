@@ -73,6 +73,8 @@ interface HoldingDetail {
   allocationPct: number;
   sector: string | null;
   assetClass: string | null;
+  topLevelBucket: string | null;
+  riskBehavior: string | null;
   notes: string | null;
   navDate?: string | null; // NAV date for mutual funds (YYYY-MM-DD)
   priceDate?: string | null; // Price date for equity/stocks (YYYY-MM-DD)
@@ -123,26 +125,62 @@ interface PortfolioDataResponse {
 // CONSTANTS
 // ============================================================================
 
-// Colors for allocation chart - distinct, accessible colors
-// Using distinct colors to avoid similar shades (especially greens)
-const ALLOCATION_COLORS: Record<string, string> = {
-  'equity': '#2563EB',      // Blue - Stocks (changed from green)
-  'mutual_fund': '#7C3AED', // Purple - Mutual Funds (changed from green)
-  'index_fund': '#7C3AED',  // Purple - Index Funds (changed from teal)
-  'etf': '#10B981',         // Emerald - ETFs (only green, kept distinct)
-  'debt': '#6366F1',        // Indigo - Debt category
-  'fd': '#F59E0B',          // Amber - FDs (changed from indigo)
-  'bond': '#6366F1',        // Indigo - Bonds
-  'gold': '#DC2626',        // Red - Gold (changed from amber)
-  'ppf': '#8B5CF6',         // Violet - PPF
-  'epf': '#8B5CF6',         // Violet - EPF (changed from purple)
-  'nps': '#EC4899',         // Pink - NPS
-  'cash': '#64748B',        // Slate - Cash
-  'hybrid': '#F472B6',      // Pink lighter - Hybrid
-  'other': '#64748B',       // Gray - Other
+// Colors for top-level buckets (bright, distinct colors)
+const BUCKET_COLORS: Record<string, string> = {
+  'Growth': '#2563EB',           // Bright blue
+  'IncomeAllocation': '#10B981', // Bright emerald/green
+  'RealAsset': '#F97316',        // Bright orange
+  'Commodity': '#EAB308',        // Bright yellow/gold
+  'Cash': '#9333EA',             // Bright purple
+  'Insurance': '#EC4899',        // Bright pink
+  'Liability': '#DC2626',        // Bright red
 };
 
-// Human-readable asset type names
+// Labels for top-level buckets
+const BUCKET_LABELS: Record<string, string> = {
+  'Growth': 'Growth Assets',
+  'IncomeAllocation': 'Income & Allocation',
+  'RealAsset': 'Real Assets',
+  'Commodity': 'Commodities',
+  'Cash': 'Cash & Liquidity',
+  'Insurance': 'Insurance',
+  'Liability': 'Liabilities',
+};
+
+// Bucket order for display
+const BUCKET_ORDER = [
+  'Growth',
+  'IncomeAllocation',
+  'RealAsset',
+  'Commodity',
+  'Cash',
+  'Insurance',
+  'Liability',
+];
+
+// Buckets to include in allocation chart (excludes Insurance and Liabilities)
+const ALLOCATION_BUCKETS = ['Growth', 'IncomeAllocation', 'RealAsset', 'Commodity', 'Cash'];
+
+// Legacy asset type colors (kept for backwards compatibility if needed)
+const ALLOCATION_COLORS: Record<string, string> = {
+  'equity': '#2563EB',
+  'mutual_fund': '#7C3AED',
+  'index_fund': '#7C3AED',
+  'etf': '#10B981',
+  'debt': '#6366F1',
+  'fd': '#F59E0B',
+  'bond': '#6366F1',
+  'gold': '#DC2626',
+  'ppf': '#8B5CF6',
+  'epf': '#8B5CF6',
+  'nps': '#EC4899',
+  'cash': '#64748B',
+  'hybrid': '#F472B6',
+  'real_estate': '#2563EB',
+  'other': '#64748B',
+};
+
+// Human-readable asset type names (kept for backwards compatibility)
 const ASSET_TYPE_LABELS: Record<string, string> = {
   'equity': 'Stocks',
   'mutual_fund': 'Mutual Funds',
@@ -156,6 +194,7 @@ const ASSET_TYPE_LABELS: Record<string, string> = {
   'nps': 'NPS',
   'cash': 'Cash',
   'hybrid': 'Hybrid',
+  'real_estate': 'Real Estate',
   'other': 'Other',
 };
 
@@ -239,6 +278,9 @@ export async function GET(request: NextRequest) {
         current_value,
         average_price,
         notes,
+        top_level_bucket,
+        asset_class,
+        risk_behavior,
         assets (
           id,
           name,
@@ -246,7 +288,9 @@ export async function GET(request: NextRequest) {
           symbol,
           isin,
           sector,
-          asset_class
+          asset_class,
+          top_level_bucket,
+          risk_behavior
         )
       `)
       .eq('portfolio_id', portfolio.id)
@@ -262,7 +306,7 @@ export async function GET(request: NextRequest) {
       // Fallback: Query holdings and assets separately (handles 406 errors)
       const { data: holdingsOnly, error: holdingsOnlyError } = await supabase
         .from('holdings')
-        .select('id, asset_id, quantity, invested_value, current_value, average_price, notes')
+        .select('id, asset_id, quantity, invested_value, current_value, average_price, notes, top_level_bucket, asset_class, risk_behavior')
         .eq('portfolio_id', portfolio.id)
         .order('invested_value', { ascending: false });
       
@@ -279,7 +323,7 @@ export async function GET(request: NextRequest) {
         const assetIds = [...new Set(holdingsOnly.map((h: any) => h.asset_id).filter(Boolean))];
         const { data: assets, error: assetsError } = await supabase
           .from('assets')
-          .select('id, name, asset_type, symbol, isin, sector, asset_class')
+          .select('id, name, asset_type, symbol, isin, sector, asset_class, top_level_bucket, risk_behavior')
           .in('id', assetIds);
         
         if (assetsError) {
@@ -563,33 +607,94 @@ export async function GET(request: NextRequest) {
       // Add to total
       totalValue += valueToUse;
       
-      // Add to allocation map
-      // IMPORTANT: Use computed current value (valueToUse) for ALL asset types
-      // This ensures allocation percentages are based on current values, not invested values
-      allocationMap.set(assetType, (allocationMap.get(assetType) || 0) + valueToUse);
+      // Add to allocation map by top_level_bucket (not assetType)
+      // Get bucket from holdings (denormalized) or fallback to asset
+      const bucket = (h as any).top_level_bucket || (h.assets as any)?.top_level_bucket;
+      
+      if (bucket) {
+        // IMPORTANT: Use computed current value (valueToUse) for ALL asset types
+        // This ensures allocation percentages are based on current values, not invested values
+        allocationMap.set(bucket, (allocationMap.get(bucket) || 0) + valueToUse);
+      } else {
+        // Fallback: If no bucket, classify by asset type (shouldn't happen after backfill)
+        console.warn(`[Portfolio Data API] Holding ${(h as any).id} has no top_level_bucket, falling back to asset_type`);
+        allocationMap.set(assetType, (allocationMap.get(assetType) || 0) + valueToUse);
+      }
     });
     
-    // CRITICAL VALIDATION: Verify all asset types are included
-    // This prevents missing asset types (like Gold) from being excluded from totals
-    const assetTypesInHoldings = new Set(holdings.map(h => (h.assets as any)?.asset_type).filter(Boolean));
-    const assetTypesInAllocation = new Set(allocationMap.keys());
-    const missingTypes = Array.from(assetTypesInHoldings).filter(t => !assetTypesInAllocation.has(t));
-    if (missingTypes.length > 0 && process.env.NODE_ENV === 'development') {
-      console.warn(`[Portfolio Data API] Asset types in holdings but not in allocation: ${missingTypes.join(', ')}`);
+    // 4.5. Fetch Real Estate assets and add to total value
+    // Real Estate is stored in a separate table, not in holdings
+    let realEstateValue = 0;
+    try {
+      // Import required functions
+      const { getUserRealEstateAssets } = await import('@/lib/real-estate/get-assets');
+      const { getRealEstateDashboardData } = await import('@/analytics/realEstateDashboard.mapper');
+      
+      // Create a regular client for Real Estate (not admin, uses RLS)
+      const { createClient } = await import('@/lib/supabase/server');
+      const realEstateSupabase = await createClient();
+      
+      // Fetch real estate assets (uses RLS, so user can only see their own)
+      const realEstateAssets = await getUserRealEstateAssets(realEstateSupabase, userId);
+      
+      if (realEstateAssets && realEstateAssets.length > 0) {
+        // Calculate dashboard data to get net real estate worth (net of loans)
+        const dashboardData = await getRealEstateDashboardData(realEstateAssets, null);
+        realEstateValue = dashboardData.summary.netRealEstateWorth || 0;
+        
+        // Add Real Estate to total value
+        totalValue += realEstateValue;
+        
+        // Add Real Estate to allocation map by bucket
+        if (realEstateValue > 0) {
+          allocationMap.set('RealAsset', (allocationMap.get('RealAsset') || 0) + realEstateValue);
+        }
+      }
+    } catch (error) {
+      // Log error but don't fail the entire request
+      console.error('[Portfolio Data API] Error fetching Real Estate assets:', error);
     }
     
-    // 5. Calculate allocation by asset type (already computed above)
+    // 5. Calculate allocation by top-level bucket (excludes Insurance and Liabilities from allocation chart)
     
-    // Convert to allocation array with percentages
+    // Calculate allocation total (excludes Insurance and Liabilities)
+    const allocationTotal = Array.from(allocationMap.entries())
+      .filter(([bucket]) => ALLOCATION_BUCKETS.includes(bucket))
+      .reduce((sum, [, value]) => sum + value, 0);
+    
+    // Convert to allocation array with percentages (only allocation buckets)
     let allocation: AllocationItem[] = Array.from(allocationMap.entries())
-      .map(([type, value]) => ({
-        name: ASSET_TYPE_LABELS[type] || type,
-        percentage: calculateAllocationPercentage(value, totalValue),
-        color: ALLOCATION_COLORS[type] || '#64748b',
+      .filter(([bucket]) => ALLOCATION_BUCKETS.includes(bucket))
+      .map(([bucket, value]) => ({
+        name: BUCKET_LABELS[bucket] || bucket,
+        percentage: calculateAllocationPercentage(value, allocationTotal),
+        color: BUCKET_COLORS[bucket] || '#64748b',
         value: value,
       }))
       .filter(a => a.percentage > 0)
-      .sort((a, b) => b.percentage - a.percentage);
+      .sort((a, b) => {
+        // Sort by bucket order first, then by value
+        const aOrder = BUCKET_ORDER.indexOf(a.name === 'Growth Assets' ? 'Growth' : 
+          a.name === 'Income & Allocation' ? 'IncomeAllocation' : 
+          a.name === 'Real Assets' ? 'RealAsset' : 
+          a.name === 'Commodities' ? 'Commodity' : 
+          a.name === 'Cash & Liquidity' ? 'Cash' : '');
+        const bOrder = BUCKET_ORDER.indexOf(b.name === 'Growth Assets' ? 'Growth' : 
+          b.name === 'Income & Allocation' ? 'IncomeAllocation' : 
+          b.name === 'Real Assets' ? 'RealAsset' : 
+          b.name === 'Commodities' ? 'Commodity' : 
+          b.name === 'Cash & Liquidity' ? 'Cash' : '');
+        if (aOrder !== -1 && bOrder !== -1) return aOrder - bOrder;
+        if (aOrder !== -1) return -1;
+        if (bOrder !== -1) return 1;
+        return b.percentage - a.percentage;
+      });
+    
+    // Validation: Ensure Insurance and Liabilities are NOT in allocation
+    console.assert(
+      !allocation.some(a => a.name === 'Insurance' || a.name === 'Liabilities'),
+      'Insurance and Liabilities must not appear in allocation charts'
+    );
     
     // Normalize allocations to sum to 100%
     if (allocation.length > 0 && totalValue > 0) {
@@ -695,6 +800,10 @@ export async function GET(request: NextRequest) {
         ? currentValue
         : investedValue;
       
+      // Get bucket and risk behavior from holdings (denormalized) or fallback to asset
+      const bucket = (h as any).top_level_bucket || (asset as any)?.top_level_bucket;
+      const riskBehavior = (h as any).risk_behavior || (asset as any)?.risk_behavior;
+      
       return {
         id: h.id,
         name: asset?.name || 'Unknown',
@@ -708,6 +817,8 @@ export async function GET(request: NextRequest) {
         allocationPct: calculateAllocationPercentage(valueForAllocation, totalValue),
         sector: asset?.sector || null,
         assetClass: asset?.asset_class || null,
+        topLevelBucket: bucket || null,
+        riskBehavior: riskBehavior || null,
         notes: h.notes || null,
         navDate: isMF ? ((h as any)._navDate || null) : null, // Include NAV date for MF holdings
         priceDate: isEquity ? ((h as any)._priceDate || null) : null, // Include price date for equity/ETF holdings
