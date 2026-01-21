@@ -73,11 +73,14 @@ export default function GeographyExposurePage() {
           const allHoldings = portfolioData.holdings || [];
           
           // Filter to get direct equity holdings (Stocks/Equity)
+          // Use new classification: topLevelBucket === 'Growth' and assetClass === 'Equity'
           const directEquityHoldingsRaw = allHoldings.filter((h: any) => 
-            h.assetType === 'Equity' || h.assetType === 'Stocks'
+            (h.assetType === 'Equity' || h.assetType === 'Stocks') &&
+            (h.topLevelBucket === 'Growth' || h.assetClass === 'Equity')
           );
           
           // Filter to get MF holdings (Mutual Funds, Index Funds)
+          // MFs can be in Growth bucket (Equity MFs) or IncomeAllocation bucket (Debt/Hybrid MFs)
           const mfHoldingsRaw = allHoldings.filter((h: any) => 
             h.assetType === 'Mutual Funds' || 
             h.assetType === 'Index Funds'

@@ -66,7 +66,6 @@ import EPFAddModal from '@/components/EPFAddModal';
 import GoldAddModal from '@/components/GoldAddModal';
 import VerificationBanner from '@/components/VerificationBanner';
 import InsightsLimitBanner from '@/components/InsightsLimitBanner';
-import OnboardingChecklist from '@/components/OnboardingChecklist';
 import OnboardingHint from '@/components/OnboardingHint';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
 import { useAuth, useAuthAppData } from '@/lib/auth';
@@ -74,6 +73,8 @@ import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { aggregatePortfolioData, validatePortfolioData } from '@/lib/portfolio-aggregation';
 import type { DailySummaryResponse, WeeklySummaryResponse, Status, RiskAlignmentStatus } from '@/types/copilot';
 import { calculateXIRRFromHoldings, formatXIRR } from '@/lib/xirr-calculator';
+import { fetchPortfolioHealthScore } from '@/services/portfolioAnalytics';
+import type { PortfolioHealthScore } from '@/lib/portfolio-intelligence/health-score';
 
 // ============================================================================
 // TYPES
@@ -91,7 +92,12 @@ interface HoldingDetail {
   currentValue: number;
   allocationPct: number;
   sector: string | null;
+  assetClass: string | null;
+  topLevelBucket: string | null;
+  riskBehavior: string | null;
 }
+
+// PortfolioHealthScore type imported from health-score module
 
 interface AllocationItem {
   name: string;
@@ -265,6 +271,16 @@ function DashboardContent() {
   
   // Expanded insights state
   const [expandedInsightId, setExpandedInsightId] = useState<number | null>(null);
+  
+  // Expanded bucket state for drill-down
+  const [expandedBucket, setExpandedBucket] = useState<string | null>(null);
+  
+  // Portfolio Health Score expanded state
+  const [healthScoreExpanded, setHealthScoreExpanded] = useState(false);
+  
+  // Portfolio Health Score state (fetched from API)
+  const [portfolioHealthScore, setPortfolioHealthScore] = useState<PortfolioHealthScore | null>(null);
+  const [healthScoreLoading, setHealthScoreLoading] = useState(false);
 
   // PERMANENT FIX: Simplified - use portfolioCheckComplete as single source of truth
   // Removed portfolioCheckTimeout to eliminate race conditions
@@ -700,6 +716,33 @@ function DashboardContent() {
   const isDataConsistent = validation.isValid && portfolioData.hasData;
   const portfolio = portfolioData;
 
+  // Fetch Portfolio Health Score from API (same source as health score page)
+  useEffect(() => {
+    if (!user?.id || !isDataConsistent) {
+      setPortfolioHealthScore(null);
+      return;
+    }
+
+    const fetchHealthScore = async () => {
+      setHealthScoreLoading(true);
+      try {
+        const response = await fetchPortfolioHealthScore(user.id);
+        if (response.success && response.data) {
+          setPortfolioHealthScore(response.data);
+        } else {
+          setPortfolioHealthScore(null);
+        }
+      } catch (error) {
+        console.error('Failed to fetch health score:', error);
+        setPortfolioHealthScore(null);
+      } finally {
+        setHealthScoreLoading(false);
+      }
+    };
+
+    fetchHealthScore();
+  }, [user?.id, isDataConsistent]);
+
   // GUARD: Show loading while auth state is being determined
   // PERMANENT FIX: Simplified loading logic
   if (authStatus === 'loading' && !hasValidSession) {
@@ -758,9 +801,6 @@ function DashboardContent() {
       <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24 bg-[#F6F8FB] dark:bg-[#0F172A]">
         {/* Verification Banner (non-blocking) */}
         <VerificationBanner className="mb-8" />
-        
-        {/* Onboarding Checklist - Only show for first-time users */}
-        <OnboardingChecklist />
         
         {/* ============================================================================ */}
         {/* ZONE 1: HEADER */}
@@ -859,7 +899,7 @@ function DashboardContent() {
         >
           <section className="mb-6">
             <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-10">
-              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-4">Total Portfolio Value</p>
+              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-4">Total Net Worth</p>
               {portfolioLoading ? (
                 <div className="h-16 w-64 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-4" />
               ) : !isDataConsistent ? (
@@ -867,6 +907,9 @@ function DashboardContent() {
               ) : (
                 <>
                   <h2 className="text-6xl font-semibold text-[#0A2540] dark:text-[#F8FAFC] number-emphasis mb-4">{formatCurrency(portfolio.metrics.netWorth)}</h2>
+                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-4">
+                    Net Worth = Assets (excluding Insurance) − Liabilities
+                  </p>
                   {portfolio.metrics.netWorthChange !== 0 && (
                     <div className="flex items-center gap-2.5">
                       <TrendingUpIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E]" />
@@ -882,132 +925,245 @@ function DashboardContent() {
         </OnboardingHint>
 
         {/* ============================================================================ */}
-        {/* ZONE 3: ASSET OVERVIEW TILES (Above the Fold) - Dynamic Layout */}
+        {/* PORTFOLIO HEALTH SCORE WIDGET */}
+        {/* ============================================================================ */}
+        {isDataConsistent && (portfolioHealthScore || healthScoreLoading) && (
+          <section className="mb-6">
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+              {healthScoreLoading ? (
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
+                  <span className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Calculating health score...</span>
+                </div>
+              ) : portfolioHealthScore ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-6 flex-1">
+                      {/* Circular Progress Ring */}
+                      <div className="relative w-20 h-20 flex-shrink-0">
+                        {(() => {
+                          const circumference = 2 * Math.PI * 16; // radius = 16
+                          const progress = (portfolioHealthScore.totalScore / 100) * circumference;
+                          const strokeColor = portfolioHealthScore.totalScore >= 70 
+                            ? '#10B981' 
+                            : portfolioHealthScore.totalScore >= 55 
+                              ? '#F59E0B' 
+                              : '#EF4444';
+                          
+                          return (
+                            <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 36 36">
+                              {/* Background circle */}
+                              <circle
+                                cx="18"
+                                cy="18"
+                                r="16"
+                                fill="none"
+                                stroke="#E5E7EB"
+                                strokeWidth="3"
+                                className="dark:stroke-[#334155]"
+                              />
+                              {/* Progress circle */}
+                              <circle
+                                cx="18"
+                                cy="18"
+                                r="16"
+                                fill="none"
+                                stroke={strokeColor}
+                                strokeWidth="3"
+                                strokeDasharray={`${progress}, ${circumference}`}
+                                strokeLinecap="round"
+                                className="transition-all duration-500"
+                              />
+                            </svg>
+                          );
+                        })()}
+                        {/* Score number in center */}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                            {portfolioHealthScore.totalScore}
+                          </span>
+                        </div>
+                      </div>
+
+                  {/* Score details */}
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">
+                      Portfolio Health Score
+                    </h3>
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      {portfolioHealthScore.totalScore} / 100 • {portfolioHealthScore.grade === 'Excellent' ? 'Excellent structure' : 
+                        portfolioHealthScore.grade === 'Good' ? 'Well-balanced portfolio' :
+                        portfolioHealthScore.grade === 'Fair' ? 'Moderate health, needs review' :
+                        'High concentration risk'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Expand/Collapse button */}
+                <button
+                  onClick={() => setHealthScoreExpanded(!healthScoreExpanded)}
+                  className="ml-4 p-2 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
+                  aria-label={healthScoreExpanded ? 'Hide score breakdown' : 'Show score breakdown'}
+                >
+                  {healthScoreExpanded ? (
+                    <ChevronUpIcon className="w-5 h-5" />
+                  ) : (
+                    <ChevronDownIcon className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+
+              {/* Score Breakdown (Expandable) */}
+              {healthScoreExpanded && (
+                <div className="mt-6 pt-6 border-t border-[#E5E7EB] dark:border-[#334155]">
+                  <h4 className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Score Breakdown</h4>
+                  <div className="space-y-3">
+                    {portfolioHealthScore.pillarBreakdown.map((pillar) => {
+                      // Map pillar names to display labels
+                      const pillarLabels: Record<string, string> = {
+                        asset_allocation: 'Asset Allocation',
+                        concentration_risk: 'Concentration Risk',
+                        diversification_overlap: 'Diversification & Overlap',
+                        market_cap_balance: 'Market Cap Balance',
+                        sector_balance: 'Sector Balance',
+                        geography_balance: 'Geography Balance',
+                        investment_quality: 'Investment Quality',
+                      };
+                      
+                      const label = pillarLabels[pillar.name] || pillar.name;
+                      const maxScore = 100; // Each pillar is 0-100
+                      const isGood = pillar.score >= 70;
+                      
+                      return (
+                        <div key={pillar.name} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={isGood ? 'text-[#16A34A] dark:text-[#22C55E]' : pillar.score >= 50 ? 'text-[#F59E0B] dark:text-[#FBBF24]' : 'text-[#EF4444] dark:text-[#F87171]'}>
+                              {isGood ? '✓' : pillar.score >= 50 ? '⚠' : '✗'}
+                            </span>
+                            <span className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{label}</span>
+                          </div>
+                          <span className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                            {Math.round(pillar.score)} / {maxScore}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-[#E5E7EB] dark:border-[#334155]">
+                    <Link
+                      href="/analytics/health"
+                      className="text-sm text-[#2563EB] dark:text-[#3B82F6] hover:underline flex items-center gap-1"
+                    >
+                      View detailed analysis
+                      <ArrowRightIcon className="w-4 h-4" />
+                    </Link>
+                  </div>
+                </div>
+              )}
+                </>
+              ) : null}
+            </div>
+          </section>
+        )}
+
+        {/* ============================================================================ */}
+        {/* ZONE 3: TOP-LEVEL BUCKET CARDS (Above the Fold) - Show All 5 Allocation Buckets */}
         {/* ============================================================================ */}
         {isDataConsistent && (
         <section className="mb-12">
           {(() => {
-            // Helper function to get route for each asset type
-            const getAssetRoute = (assetName: string): string => {
-              const routeMap: Record<string, string> = {
-                'Stocks': '/portfolio/equity',
-                'Equity': '/portfolio/equity',
-                'Mutual Funds': '/portfolio/mutualfunds',
-                'Fixed Deposits': '/portfolio/fixeddeposits',
-                'Fixed Deposit': '/portfolio/fixeddeposits',
-                'Cash': '/portfolio/cash',
-                'Bonds': '/portfolio/bonds',
-                'Bond': '/portfolio/bonds',
-                'ETFs': '/portfolio/etfs',
-                'ETF': '/portfolio/etfs',
-                'PPF': '/portfolio/ppf',
-                'EPF': '/portfolio/epf',
-                'NPS': '/portfolio/nps',
-                'Index Funds': '/portfolio/mutualfunds',
-                'Gold': '/portfolio/gold',
-                'Other': '/portfolio/summary',
-              };
-              return routeMap[assetName] || '/portfolio/summary';
+            // Map allocation names to bucket keys
+            const nameToBucket: Record<string, string> = {
+              'Growth Assets': 'Growth',
+              'Income & Allocation': 'IncomeAllocation',
+              'Real Assets': 'RealAsset',
+              'Commodities': 'Commodity',
+              'Cash & Liquidity': 'Cash',
             };
 
-            // Helper function to determine if an asset is stock-based (priority for tiles)
-            const isStockBasedAsset = (assetName: string): boolean => {
-              const stockBasedAssets = [
-                'Equity',
-                'Stocks',
-                'Mutual Funds',
-                'ETFs',
-                'ETF',
-                'Index Funds',
-              ];
-              return stockBasedAssets.includes(assetName);
+            const bucketToName: Record<string, string> = {
+              'Growth': 'Growth Assets',
+              'IncomeAllocation': 'Income & Allocation',
+              'RealAsset': 'Real Assets',
+              'Commodity': 'Commodities',
+              'Cash': 'Cash & Liquidity',
             };
 
-            // Sort allocation with secondary priority for stock-based assets when percentages are equal
-            // portfolio.allocation is already sorted by value, but we need to handle ties by percentage
-            const sortedAllocation = [...portfolio.allocation].sort((a, b) => {
-              // Primary sort: by percentage (descending) - more accurate for tie-breaking
-              if (Math.abs(b.percentage - a.percentage) > 0.01) {
-                return b.percentage - a.percentage;
+            const bucketColors: Record<string, string> = {
+              'Growth': '#2563EB',           // Bright blue
+              'IncomeAllocation': '#10B981', // Bright emerald/green
+              'RealAsset': '#F97316',        // Bright orange
+              'Commodity': '#EAB308',        // Bright yellow/gold
+              'Cash': '#9333EA',             // Bright purple
+            };
+
+            const bucketTooltips: Record<string, string> = {
+              'Growth': 'Investments aimed at long-term capital appreciation.',
+              'IncomeAllocation': 'Assets designed to provide stability, income, or balanced exposure across asset classes.',
+              'RealAsset': 'Physical or tangible assets with long-term value.',
+              'Commodity': 'Assets used primarily for inflation protection and diversification.',
+              'Cash': 'Highly liquid assets for short-term needs.',
+            };
+
+            // Bucket order for display (allocation buckets only)
+            const bucketOrder = ['Growth', 'IncomeAllocation', 'RealAsset', 'Commodity', 'Cash'];
+
+            // Create a map from allocation items (from API - includes Real Estate)
+            const allocationMap = new Map<string, AllocationItem>();
+            portfolio.allocation.forEach((item) => {
+              const bucket = nameToBucket[item.name];
+              if (bucket) {
+                allocationMap.set(bucket, item);
               }
-              // Secondary sort: prioritize stock-based assets when percentages are equal (e.g., all at 3%)
-              const aIsStock = isStockBasedAsset(a.name);
-              const bIsStock = isStockBasedAsset(b.name);
-              if (aIsStock && !bIsStock) return -1; // Stock-based assets come first
-              if (!aIsStock && bIsStock) return 1;
-              return 0; // Keep original order if both are same type
             });
 
-            const totalAssets = sortedAllocation.length;
-            
-            // Determine how many tiles to show
-            let tilesToShow: AllocationItem[];
-            let showOthers: boolean;
-            
-            if (totalAssets <= 8) {
-              // Show top 3 + Others (4 tiles total in 1 row)
-              tilesToShow = sortedAllocation.slice(0, 3);
-              showOthers = totalAssets > 3;
-            } else {
-              // Show top 7 + Others (8 tiles total in 2 rows of 4 each)
-              tilesToShow = sortedAllocation.slice(0, 7);
-              showOthers = true;
-            }
-
-            // Calculate Others aggregate if needed
-            let othersData: AllocationItem | null = null;
-            if (showOthers) {
-              const othersAssets = totalAssets <= 8 
-                ? sortedAllocation.slice(3)
-                : sortedAllocation.slice(7);
-              
-              if (othersAssets.length > 0) {
-                othersData = {
-                  name: 'Others',
-                  value: othersAssets.reduce((sum, a) => sum + a.value, 0),
-                  percentage: othersAssets.reduce((sum, a) => sum + a.percentage, 0),
-                  color: '#64748B', // Default gray for Others (matches pie chart)
+            // Get all 5 buckets and sort by value descending
+            const bucketsToShow = bucketOrder
+              .filter(bucket => allocationMap.has(bucket))
+              .map(bucket => {
+                const allocationItem = allocationMap.get(bucket)!;
+                return {
+                  bucket,
+                  allocationItem,
+                  bucketName: bucketToName[bucket],
                 };
-              }
-            }
-
-            const allTiles = showOthers && othersData 
-              ? [...tilesToShow, othersData]
-              : tilesToShow;
-
-            // Grid layout: 1 row (4 cols) if <= 8 assets, 2 rows (4 cols each) if > 8 assets
-            const gridCols = 'grid-cols-1 md:grid-cols-4';
+              })
+              .sort((a, b) => b.allocationItem.value - a.allocationItem.value); // Sort by value descending
 
             return (
-              <div className={`grid ${gridCols} gap-4`}>
-                {allTiles.map((asset, index) => {
-                  const isOthers = asset.name === 'Others';
-                  
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {bucketsToShow.map(({ bucket, allocationItem, bucketName }) => {
+                  const value = allocationItem.value;
+                  const percentage = allocationItem.percentage;
+                  const color = allocationItem.color; // Use color from API allocation (matches pie chart)
+
                   return (
-                    <Link 
-                      key={`${asset.name}-${index}`}
-                      href={getAssetRoute(asset.name)}
+                    <Link
+                      key={bucket}
+                      href={`/portfolio/summary?bucket=${bucket}`}
                       className="relative bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
+                      title={bucketTooltips[bucket]}
                     >
-                      {/* Color Dot - Top Right Corner (matches pie chart) */}
+                      {/* Color Button - Top Right Corner (double size of legend button) */}
+                      {/* Legend uses w-3 h-3 (12px), so tiles use w-6 h-6 (24px) */}
                       <div 
                         className="absolute top-4 right-4 w-6 h-6 rounded-full border-2 border-white dark:border-[#1E293B] shadow-sm"
-                        style={{ backgroundColor: asset.color }}
-                        aria-label={`${asset.name} color indicator`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`${bucketName} color indicator`}
                       />
                       
                       <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6 pr-10">
-                        {asset.name}
+                        {bucketName}
                       </p>
                       {portfolioLoading ? (
                         <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
                       ) : (
                         <>
                           <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
-                            {formatCurrency(asset.value)}
+                            {formatCurrency(value)}
                           </p>
                           <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
-                            {asset.percentage.toFixed(0)}%
+                            {percentage.toFixed(0)}%
                           </p>
                         </>
                       )}

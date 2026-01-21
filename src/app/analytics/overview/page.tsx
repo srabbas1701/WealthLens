@@ -65,13 +65,39 @@ export default function AnalyticsOverviewPage() {
           const portfolioData = result.data;
           
           // Calculate ownership from allocation
-          // Check for both 'Stocks' and 'Equity' (API may return either)
-          const equityAllocation = portfolioData.allocation.find((a: any) => a.name === 'Stocks' || a.name === 'Equity');
-          const equityOwnership = equityAllocation?.value || 0;
-          const mfOwnership = portfolioData.allocation.find((a: any) => a.name === 'Mutual Funds')?.value || 0;
-          const fdOwnership = portfolioData.allocation.find((a: any) => a.name === 'Fixed Deposit' || a.name === 'Fixed Deposits')?.value || 0;
+          // Use new classification system: allocation is by top-level buckets
+          // Growth Assets = Equity, Income & Allocation = Fixed Income + Hybrid
+          const growthAllocation = portfolioData.allocation.find((a: any) => a.name === 'Growth Assets');
+          const incomeAllocation = portfolioData.allocation.find((a: any) => a.name === 'Income & Allocation');
+          
+          // For analytics, we need to separate direct equity from MF equity exposure
+          // Direct equity holdings
+          const directEquityHoldings = portfolioData.holdings.filter((h: any) => 
+            h.assetType === 'Stocks' || h.assetType === 'Equity'
+          );
+          const equityOwnership = directEquityHoldings.reduce((sum: number, h: any) => 
+            sum + (h.currentValue || h.investedValue), 0
+          );
+          
+          // MF holdings (from Growth bucket or IncomeAllocation bucket)
+          const mfHoldings = portfolioData.holdings.filter((h: any) => 
+            h.assetType === 'Mutual Funds' || h.assetType === 'Index Funds'
+          );
+          const mfOwnership = mfHoldings.reduce((sum: number, h: any) => 
+            sum + (h.currentValue || h.investedValue), 0
+          );
+          
+          // Fixed Deposits and other debt instruments
+          const fdHoldings = portfolioData.holdings.filter((h: any) => 
+            h.assetType === 'Fixed Deposits' || h.assetType === 'Fixed Deposit'
+          );
+          const fdOwnership = fdHoldings.reduce((sum: number, h: any) => 
+            sum + (h.currentValue || h.investedValue), 0
+          );
+          
+          // Others (Commodities, Real Assets, Cash, etc.)
           const othersOwnership = portfolioData.allocation
-            .filter((a: any) => !['Stocks', 'Equity', 'Mutual Funds', 'Fixed Deposit', 'Fixed Deposits'].includes(a.name))
+            .filter((a: any) => !['Growth Assets', 'Income & Allocation'].includes(a.name))
             .reduce((sum: number, a: any) => sum + a.value, 0);
           
           setOwnership({

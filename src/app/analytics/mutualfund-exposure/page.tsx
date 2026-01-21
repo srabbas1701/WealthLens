@@ -73,8 +73,17 @@ export default function MFExposurePage() {
         const result = await response.json();
         if (result.success && result.data) {
           const portfolioData = result.data;
-          const mfHoldings = portfolioData.holdings.filter((h: any) => h.assetType === 'Mutual Funds');
-          const equityHoldings = portfolioData.holdings.filter((h: any) => h.assetType === 'Equity' || h.assetType === 'Stocks');
+          
+          // Filter MF holdings using new classification system
+          // MFs can be in Growth bucket (Equity MFs) or IncomeAllocation bucket (Debt/Hybrid MFs)
+          const mfHoldings = portfolioData.holdings.filter((h: any) => 
+            h.assetType === 'Mutual Funds' || h.assetType === 'Index Funds'
+          );
+          
+          // Direct equity holdings (Stocks/Equity)
+          const equityHoldings = portfolioData.holdings.filter((h: any) => 
+            h.assetType === 'Equity' || h.assetType === 'Stocks'
+          );
           
           const totalMF = mfHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || h.investedValue), 0);
           const totalEquity = equityHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || h.investedValue), 0);
@@ -83,10 +92,33 @@ export default function MFExposurePage() {
           setDirectEquity(totalEquity);
           setPortfolioTotal(portfolioData.metrics.netWorth);
 
-          // Calculate exposure (mock - in production from factsheet)
-          const equityExposure = totalMF * 0.85;
-          const debtExposure = totalMF * 0.12;
-          const otherExposure = totalMF * 0.03;
+          // Calculate exposure based on asset_class from new classification system
+          // Use proper exposure calculation with asset_class
+          let equityExposure = 0;
+          let debtExposure = 0;
+          let otherExposure = 0;
+          
+          mfHoldings.forEach((h: any) => {
+            const value = h.currentValue || h.investedValue;
+            const assetClass = h.assetClass || '';
+            
+            if (assetClass === 'FixedIncome') {
+              // Debt funds: 10% equity, 85% debt, 5% other
+              equityExposure += value * 0.10;
+              debtExposure += value * 0.85;
+              otherExposure += value * 0.05;
+            } else if (assetClass === 'Hybrid') {
+              // Hybrid funds: 50% equity, 45% debt, 5% other
+              equityExposure += value * 0.50;
+              debtExposure += value * 0.45;
+              otherExposure += value * 0.05;
+            } else {
+              // Equity funds (default): 85% equity, 12% debt, 3% other
+              equityExposure += value * 0.85;
+              debtExposure += value * 0.12;
+              otherExposure += value * 0.03;
+            }
+          });
 
           setExposure({
             equity: equityExposure,
@@ -95,13 +127,30 @@ export default function MFExposurePage() {
             total: totalMF,
           });
 
-          // Generate scheme-wise breakdown (mock data)
+          // Generate scheme-wise breakdown based on asset_class
           const schemeBreakdown: SchemeExposure[] = mfHoldings.map((h: any, idx: number) => {
             const value = h.currentValue || h.investedValue;
-            // Vary exposure percentages per scheme
-            const equityPct = 80 + (idx % 3) * 5; // 80%, 85%, 90%
-            const debtPct = 15 - (idx % 3) * 2.5; // 15%, 12.5%, 10%
-            const otherPct = 5 - (idx % 3) * 2.5; // 5%, 2.5%, 0%
+            const assetClass = h.assetClass || '';
+            
+            // Determine exposure percentages based on asset_class
+            let equityPct: number;
+            let debtPct: number;
+            let otherPct: number;
+            
+            if (assetClass === 'FixedIncome') {
+              equityPct = 10;
+              debtPct = 85;
+              otherPct = 5;
+            } else if (assetClass === 'Hybrid') {
+              equityPct = 50;
+              debtPct = 45;
+              otherPct = 5;
+            } else {
+              // Equity funds (default)
+              equityPct = 85;
+              debtPct = 12;
+              otherPct = 3;
+            }
             
             return {
               id: h.id,
@@ -113,8 +162,8 @@ export default function MFExposurePage() {
               equityPct,
               debtPct,
               otherPct,
-              dataSource: idx < 3 ? 'factsheet' : 'estimated',
-              asOfDate: idx < 3 ? '2024-11-30' : undefined,
+              dataSource: 'estimated', // Will be 'factsheet' when factsheet data is available
+              asOfDate: undefined,
             };
           });
 

@@ -338,6 +338,40 @@ Analytics Overview
 
 **All 5 Advanced Analytics screens are now live and ready for testing! 🎉**
 
+---
+
+## 🔧 Asset Classification System Integration (January 2025)
+
+**Status**: ✅ Complete
+
+**Changes Made**:
+- Updated all analytics pages to use new asset classification system (`top_level_bucket`, `asset_class`)
+- Fixed exposure calculations to use proper asset class values (`Equity`, `FixedIncome`, `Hybrid` instead of old `debt`, `hybrid`)
+- Updated filtering logic to work with new classification buckets
+- Fixed MF exposure calculation to properly identify Equity, Debt, and Hybrid funds
+
+**Files Updated**:
+1. `src/lib/portfolio-intelligence/exposure-analytics.ts` - Updated to use `FixedIncome` and `Hybrid` (capitalized)
+2. `src/app/analytics/overview/page.tsx` - Updated to use new bucket-based allocation
+3. `src/app/analytics/mutualfund-exposure/page.tsx` - Updated to use `assetClass` for exposure calculation
+4. `src/app/analytics/sector-exposure/page.tsx` - Updated to calculate MF equity exposure by asset class
+5. `src/app/analytics/marketcap-exposure/page.tsx` - Updated to calculate MF equity exposure by asset class
+6. `src/app/analytics/geography-exposure/page.tsx` - Updated filtering to use new classification
+
+**Key Changes**:
+- **Before**: Analytics filtered by `assetType === 'Mutual Funds'` and used hardcoded 85% equity exposure
+- **After**: Analytics filter by `assetType === 'Mutual Funds' || 'Index Funds'` and calculate exposure based on `assetClass`:
+  - `FixedIncome`: 10% equity, 85% debt, 5% other
+  - `Hybrid`: 50% equity, 45% debt, 5% other
+  - `Equity` (default): 85% equity, 12% debt, 3% other
+
+**Testing**:
+- ✅ All analytics pages now correctly identify holdings using new classification
+- ✅ MF exposure calculations use proper asset class values
+- ✅ Exposure breakdowns reflect actual fund types (Equity/Debt/Hybrid)
+
+---
+
 **Key Principle Reminder:**
 ```
 Dashboard: What you OWN

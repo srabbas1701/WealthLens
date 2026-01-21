@@ -84,20 +84,21 @@ export function calculateMFExposure(
     }
     
     // Fallback to estimates based on asset class
-    const assetClass = holding.assetClass?.toLowerCase() || '';
+    // Use new classification system: Equity, FixedIncome, Hybrid (capitalized)
+    const assetClass = holding.assetClass || '';
     
-    if (assetClass === 'debt') {
+    if (assetClass === 'FixedIncome') {
       // Debt funds
       totalEquity += value * 0.10;
       totalDebt += value * 0.85;
       totalOther += value * 0.05;
-    } else if (assetClass === 'hybrid') {
+    } else if (assetClass === 'Hybrid') {
       // Hybrid funds
       totalEquity += value * 0.50;
       totalDebt += value * 0.45;
       totalOther += value * 0.05;
     } else {
-      // Equity funds (default)
+      // Equity funds (default) - includes 'Equity' and any other/unknown
       totalEquity += value * 0.85;
       totalDebt += value * 0.12;
       totalOther += value * 0.03;

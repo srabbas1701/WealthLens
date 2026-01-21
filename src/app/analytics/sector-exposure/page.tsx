@@ -46,12 +46,34 @@ export default function SectorExposurePage() {
         const result = await response.json();
         if (result.success && result.data) {
           const portfolioData = result.data;
-          const equityHoldings = portfolioData.holdings.filter((h: any) => h.assetType === 'Equity' || h.assetType === 'Stocks');
-          const mfHoldings = portfolioData.allocation.find((a: any) => a.name === 'Mutual Funds');
+          
+          // Direct equity holdings
+          const equityHoldings = portfolioData.holdings.filter((h: any) => 
+            h.assetType === 'Equity' || h.assetType === 'Stocks'
+          );
+          
+          // MF holdings - calculate equity exposure based on asset_class
+          const mfHoldings = portfolioData.holdings.filter((h: any) => 
+            h.assetType === 'Mutual Funds' || h.assetType === 'Index Funds'
+          );
           
           const direct = equityHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || h.investedValue), 0);
-          const mfValue = mfHoldings?.value || 0;
-          const viaMF = mfValue * 0.85; // 85% equity exposure
+          
+          // Calculate MF equity exposure based on asset_class
+          let viaMF = 0;
+          mfHoldings.forEach((h: any) => {
+            const value = h.currentValue || h.investedValue;
+            const assetClass = h.assetClass || '';
+            
+            if (assetClass === 'FixedIncome') {
+              viaMF += value * 0.10; // 10% equity in debt funds
+            } else if (assetClass === 'Hybrid') {
+              viaMF += value * 0.50; // 50% equity in hybrid funds
+            } else {
+              viaMF += value * 0.85; // 85% equity in equity funds
+            }
+          });
+          
           const total = direct + viaMF;
 
           setDirectEquity(direct);
