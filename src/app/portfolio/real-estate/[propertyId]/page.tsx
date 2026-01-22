@@ -33,7 +33,7 @@ import type { RealEstatePropertyDetailData } from '@/types/realEstatePropertyDet
 import { getPropertyAlerts } from '@/analytics/realEstatePropertyAlerts.engine';
 import type { RealEstatePropertyAlert } from '@/types/realEstatePropertyAlerts.types';
 import UpdateRentalModal from '@/components/real-estate/UpdateRentalModal';
-import UpdateLoanOutstandingModal from '@/components/real-estate/UpdateLoanOutstandingModal';
+import AddOrUpdateLoanModal from '@/components/real-estate/AddOrUpdateLoanModal';
 import UpdateValuationModal from '@/components/real-estate/UpdateValuationModal';
 import EditPropertyModal from '@/components/real-estate/EditPropertyModal';
 import SellHoldSimulation from '@/components/real-estate/SellHoldSimulation';
@@ -98,27 +98,237 @@ function InfoRow({
 }
 
 /**
- * Chart Placeholder Component
- * Empty container for future chart implementation
+ * Value vs Purchase Price Chart
+ * Two-point line chart: purchase (date, price) → now (current value)
  */
-function ChartPlaceholder({
-  title,
-  description,
+function ValueVsPurchaseChart({
+  purchaseDate,
+  purchasePrice,
+  currentValue,
+  formatValue,
+  formatDate,
 }: {
-  title: string;
-  description?: string;
+  purchaseDate: string | null;
+  purchasePrice: number | null;
+  currentValue: number | null;
+  formatValue: (v: number | null) => string;
+  formatDate: (d: string | null) => string;
 }) {
+  const hasData = purchasePrice != null && purchasePrice > 0 && currentValue != null && currentValue >= 0;
+  const labelStart = purchaseDate ? formatDate(purchaseDate) : 'Purchase';
+  const labelEnd = 'Now';
+
+  if (!hasData) {
+    return (
+      <Card className="h-full bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
+        <CardHeader>
+          <CardTitle className="text-lg text-[#0F172A] dark:text-[#F8FAFC]">Value vs Purchase Price</CardTitle>
+          <CardDescription className="text-[#6B7280] dark:text-[#94A3B8]">
+            Property value trend over time
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-[300px] bg-[#F6F8FB] dark:bg-[#0F172A] rounded-lg border border-dashed border-[#E5E7EB] dark:border-[#334155]">
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+              Add purchase price and valuation to see the trend
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const minVal = Math.min(purchasePrice, currentValue);
+  const maxVal = Math.max(purchasePrice, currentValue);
+  const range = maxVal - minVal || 1;
+  const padding = { top: 24, right: 24, bottom: 40, left: 56 };
+  const w = 320;
+  const h = 280;
+  const chartW = w - padding.left - padding.right;
+  const chartH = h - padding.top - padding.bottom;
+
+  const y = (v: number) => padding.top + chartH - ((v - minVal) / range) * chartH;
+  const x0 = padding.left;
+  const x1 = padding.left + chartW;
+
+  const pathLine = `M ${x0} ${y(purchasePrice)} L ${x1} ${y(currentValue)}`;
+  const pathArea = `M ${x0} ${y(purchasePrice)} L ${x1} ${y(currentValue)} L ${x1} ${padding.top + chartH} L ${x0} ${padding.top + chartH} Z`;
+
   return (
     <Card className="h-full bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
       <CardHeader>
-        <CardTitle className="text-lg text-[#0F172A] dark:text-[#F8FAFC]">{title}</CardTitle>
-        {description && (
-          <CardDescription className="text-[#6B7280] dark:text-[#94A3B8]">{description}</CardDescription>
-        )}
+        <CardTitle className="text-lg text-[#0F172A] dark:text-[#F8FAFC]">Value vs Purchase Price</CardTitle>
+        <CardDescription className="text-[#6B7280] dark:text-[#94A3B8]">
+          Property value trend over time
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-center h-[300px] bg-[#F6F8FB] dark:bg-[#0F172A] rounded-lg border border-dashed border-[#E5E7EB] dark:border-[#334155]">
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Chart placeholder</p>
+        <div className="flex flex-col gap-3">
+          <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[300px]" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <linearGradient id="value-trend-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#2563EB" stopOpacity={0.25} />
+                <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <path d={pathArea} fill="url(#value-trend-gradient)" />
+            <path
+              d={pathLine}
+              fill="none"
+              stroke="#2563EB"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx={x0} cy={y(purchasePrice)} r={4} fill="#2563EB" />
+            <circle cx={x1} cy={y(currentValue)} r={4} fill="#2563EB" />
+            <text
+              x={x0}
+              y={padding.top + chartH + 20}
+              textAnchor="middle"
+              fill="currentColor"
+              className="text-xs text-[#6B7280] dark:text-[#94A3B8]"
+            >
+              {labelStart}
+            </text>
+            <text
+              x={x1}
+              y={padding.top + chartH + 20}
+              textAnchor="middle"
+              fill="currentColor"
+              className="text-xs text-[#6B7280] dark:text-[#94A3B8]"
+            >
+              {labelEnd}
+            </text>
+          </svg>
+          <div className="flex justify-between text-sm">
+            <span className="text-[#6B7280] dark:text-[#94A3B8]">
+              {labelStart}: <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatValue(purchasePrice)}</span>
+            </span>
+            <span className="text-[#6B7280] dark:text-[#94A3B8]">
+              {labelEnd}: <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatValue(currentValue)}</span>
+            </span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Loan Outstanding Trend Chart
+ * Two-point line chart: loan start (amount) → now (outstanding)
+ */
+function LoanOutstandingChart({
+  loanAmount,
+  outstandingBalance,
+  purchaseDate,
+  hasLoan,
+  formatValue,
+  formatDate,
+}: {
+  loanAmount: number | null;
+  outstandingBalance: number | null;
+  purchaseDate: string | null;
+  hasLoan: boolean;
+  formatValue: (v: number | null) => string;
+  formatDate: (d: string | null) => string;
+}) {
+  const labelStart = purchaseDate ? formatDate(purchaseDate) : 'Loan Start';
+  const labelEnd = 'Now';
+
+  if (!hasLoan || loanAmount == null || loanAmount <= 0) {
+    return (
+      <Card className="h-full bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
+        <CardHeader>
+          <CardTitle className="text-lg text-[#0F172A] dark:text-[#F8FAFC]">Loan Outstanding Trend</CardTitle>
+          <CardDescription className="text-[#6B7280] dark:text-[#94A3B8]">
+            Remaining loan balance over time
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-[300px] bg-[#F6F8FB] dark:bg-[#0F172A] rounded-lg border border-dashed border-[#E5E7EB] dark:border-[#334155]">
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+              No loan. Add loan details to see the paydown trend.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const ob = outstandingBalance ?? loanAmount;
+  const minVal = Math.min(0, ob);
+  const maxVal = Math.max(loanAmount, ob);
+  const range = maxVal - minVal || 1;
+  const padding = { top: 24, right: 24, bottom: 40, left: 56 };
+  const w = 320;
+  const h = 280;
+  const chartW = w - padding.left - padding.right;
+  const chartH = h - padding.top - padding.bottom;
+
+  const y = (v: number) => padding.top + chartH - ((v - minVal) / range) * chartH;
+  const x0 = padding.left;
+  const x1 = padding.left + chartW;
+
+  const pathLine = `M ${x0} ${y(loanAmount)} L ${x1} ${y(ob)}`;
+  const pathArea = `M ${x0} ${y(loanAmount)} L ${x1} ${y(ob)} L ${x1} ${padding.top + chartH} L ${x0} ${padding.top + chartH} Z`;
+
+  return (
+    <Card className="h-full bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
+      <CardHeader>
+        <CardTitle className="text-lg text-[#0F172A] dark:text-[#F8FAFC]">Loan Outstanding Trend</CardTitle>
+        <CardDescription className="text-[#6B7280] dark:text-[#94A3B8]">
+          Remaining loan balance over time
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col gap-3">
+          <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[300px]" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <linearGradient id="loan-trend-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#F59E0B" stopOpacity={0.25} />
+                <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <path d={pathArea} fill="url(#loan-trend-gradient)" />
+            <path
+              d={pathLine}
+              fill="none"
+              stroke="#F59E0B"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx={x0} cy={y(loanAmount)} r={4} fill="#F59E0B" />
+            <circle cx={x1} cy={y(ob)} r={4} fill="#F59E0B" />
+            <text
+              x={x0}
+              y={padding.top + chartH + 20}
+              textAnchor="middle"
+              fill="currentColor"
+              className="text-xs text-[#6B7280] dark:text-[#94A3B8]"
+            >
+              {labelStart}
+            </text>
+            <text
+              x={x1}
+              y={padding.top + chartH + 20}
+              textAnchor="middle"
+              fill="currentColor"
+              className="text-xs text-[#6B7280] dark:text-[#94A3B8]"
+            >
+              {labelEnd}
+            </text>
+          </svg>
+          <div className="flex justify-between text-sm">
+            <span className="text-[#6B7280] dark:text-[#94A3B8]">
+              {labelStart}: <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatValue(loanAmount)}</span>
+            </span>
+            <span className="text-[#6B7280] dark:text-[#94A3B8]">
+              {labelEnd}: <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatValue(ob)}</span>
+            </span>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -197,7 +407,7 @@ export default function PropertyDetailPage() {
 
   // Modal states
   const [showRentalModal, setShowRentalModal] = useState(false);
-  const [showLoanModal, setShowLoanModal] = useState(false);
+  const [showLoanDetailsModal, setShowLoanDetailsModal] = useState(false);
   const [showValuationModal, setShowValuationModal] = useState(false);
   const [showEditPropertyModal, setShowEditPropertyModal] = useState(false);
 
@@ -510,13 +720,20 @@ export default function PropertyDetailPage() {
               {activeTab === 'performance' && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <ChartPlaceholder
-                      title="Value vs Purchase Price"
-                      description="Property value trend over time"
+                    <ValueVsPurchaseChart
+                      purchaseDate={data.purchaseDate}
+                      purchasePrice={data.purchasePrice}
+                      currentValue={data.currentEstimatedValue}
+                      formatValue={formatValue}
+                      formatDate={formatDate}
                     />
-                    <ChartPlaceholder
-                      title="Loan Outstanding Trend"
-                      description="Remaining loan balance over time"
+                    <LoanOutstandingChart
+                      loanAmount={data.loanAmount}
+                      outstandingBalance={data.outstandingBalance}
+                      purchaseDate={data.purchaseDate}
+                      hasLoan={!!data.loanId}
+                      formatValue={formatValue}
+                      formatDate={formatDate}
                     />
                   </div>
                   <Card className="bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
@@ -677,15 +894,13 @@ export default function PropertyDetailPage() {
                         Mortgage and loan information
                       </p>
                     </div>
-                    {data.loanId && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowLoanModal(true)}
-                      >
-                        Update Outstanding
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowLoanDetailsModal(true)}
+                    >
+                      {data.loanId ? 'Update Loan Details' : 'Add Loan'}
+                    </Button>
                   </div>
                   <Card className="bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
                     <CardContent className="pt-6">
@@ -830,12 +1045,19 @@ export default function PropertyDetailPage() {
             }}
           />
 
-          <UpdateLoanOutstandingModal
-            isOpen={showLoanModal}
-            onClose={() => setShowLoanModal(false)}
-            loanId={data.loanId}
-            currentOutstanding={data.outstandingBalance}
-            loanAmount={data.loanAmount}
+          <AddOrUpdateLoanModal
+            isOpen={showLoanDetailsModal}
+            onClose={() => setShowLoanDetailsModal(false)}
+            propertyId={propertyId}
+            hasExistingLoan={!!data.loanId}
+            currentData={{
+              lenderName: data.lenderName,
+              loanAmount: data.loanAmount,
+              interestRate: data.interestRate,
+              emi: data.emi,
+              tenureMonths: data.tenureMonths,
+              outstandingBalance: data.outstandingBalance,
+            }}
             onSuccess={() => {
               if (user?.id) {
                 fetchData(user.id, propertyId);

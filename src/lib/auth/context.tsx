@@ -287,20 +287,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthStatus('loading');
       sessionStorage.setItem('auth_loading_start', Date.now().toString());
       
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      
-      if (!isMounted) return;
-      
-      if (session) {
-        setSession(session);
-        setUser(session.user);
-        setAuthStatus('authenticated');
-        sessionStorage.removeItem('auth_loading_start');
-        // NOTE: App data (profile, portfolio) is NOT fetched here
-        // It will be fetched lazily when useAuthAppData() is called
-      } else {
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+        
+        if (!isMounted) return;
+        
+        // Handle invalid refresh token error - clear session and treat as unauthenticated
+        if (sessionError && (
+          sessionError.message?.includes('Refresh Token Not Found') || 
+          sessionError.message?.includes('refresh_token_not_found') ||
+          (sessionError as any)?.code === 'refresh_token_not_found'
+        )) {
+          // Clear invalid session
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setAuthStatus('unauthenticated');
+          sessionStorage.removeItem('auth_loading_start');
+          console.warn('[Auth] Invalid refresh token - cleared session');
+          return;
+        }
+        
+        if (session) {
+          setSession(session);
+          setUser(session.user);
+          setAuthStatus('authenticated');
+          sessionStorage.removeItem('auth_loading_start');
+          // NOTE: App data (profile, portfolio) is NOT fetched here
+          // It will be fetched lazily when useAuthAppData() is called
+        } else {
+          setSession(null);
+          setUser(null);
+          setAuthStatus('unauthenticated');
+          sessionStorage.removeItem('auth_loading_start');
+        }
+      } catch (error) {
+        // Handle any unexpected errors during session initialization
+        if (!isMounted) return;
+        console.error('[Auth] Error initializing session:', error);
         setSession(null);
         setUser(null);
         setAuthStatus('unauthenticated');

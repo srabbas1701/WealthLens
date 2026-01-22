@@ -75,9 +75,45 @@ export async function middleware(request: NextRequest) {
   // Refresh session (critical for production - ensures session is valid)
   const { data: { user }, error: sessionError } = await supabase.auth.getUser();
   
-  // Log session errors in production for debugging (non-blocking)
-  if (sessionError && process.env.NODE_ENV === 'production') {
-    console.error('[Middleware] Session error:', sessionError.message);
+  // Handle invalid refresh token error - clear cookies and treat as unauthenticated
+  if (sessionError) {
+    // Check if it's a refresh token error
+    if (sessionError.message?.includes('Refresh Token Not Found') || 
+        sessionError.message?.includes('refresh_token_not_found') ||
+        (sessionError as any)?.code === 'refresh_token_not_found') {
+      // Clear all Supabase auth-related cookies to prevent repeated errors
+      // Supabase SSR uses cookies with pattern: sb-<project-ref>-auth-token
+      const allCookies = request.cookies.getAll();
+      allCookies.forEach(cookie => {
+        if (cookie.name.startsWith('sb-') && cookie.name.includes('-auth-token')) {
+          response.cookies.delete(cookie.name);
+        }
+      });
+      
+      // Log only in development to reduce noise
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[Middleware] Invalid refresh token - cleared auth cookies');
+      }
+      
+      // Treat as unauthenticated user
+      const pathname = request.nextUrl.pathname;
+      const isProtectedRoute = PROTECTED_ROUTES.some(route => 
+        pathname.startsWith(route)
+      );
+      
+      if (isProtectedRoute) {
+        const loginUrl = new URL('/login', request.url);
+        loginUrl.searchParams.set('redirect', pathname);
+        return NextResponse.redirect(loginUrl);
+      }
+      
+      return response;
+    }
+    
+    // Log other session errors in production for debugging (non-blocking)
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[Middleware] Session error:', sessionError.message);
+    }
   }
 
   const pathname = request.nextUrl.pathname;

@@ -169,20 +169,23 @@ function AssetAllocationChart({
   }));
 
   // Bright, distinct colors for all asset classes - NO REPEATS
-  // Each unique asset class gets a unique color
+  // Each unique asset class gets a unique, sharp color
   const colors: Record<string, string> = {
     real_estate: '#2563EB',      // Blue - Real Estate
-    equity: '#10B981',            // Emerald Green - Equity
+    equity: '#10B981',            // Emerald Green - Equity/Stocks
     stocks: '#10B981',            // Emerald Green - Stocks (same as equity)
+    stock: '#10B981',             // Emerald Green - Stock (same as equity)
     mutual_funds: '#7C3AED',     // Purple - Mutual Funds
     mutual_fund: '#7C3AED',      // Purple - Mutual Fund (same as mutual_funds)
+    hybrid: '#7C3AED',            // Purple - Hybrid (same as mutual_funds)
     fixed_income: '#F59E0B',     // Amber - Fixed Income
     fixed_deposit: '#F59E0B',    // Amber - Fixed Deposit (same as fixed_income)
     fd: '#F59E0B',                // Amber - FD (same as fixed_income)
-    cash: '#06B6D4',              // Cyan - Cash
     bonds: '#6366F1',             // Indigo - Bonds
     bond: '#6366F1',              // Indigo - Bond (same as bonds)
+    cash: '#06B6D4',              // Cyan - Cash
     gold: '#DC2626',              // Red - Gold
+    commodity: '#DC2626',         // Red - Commodity (same as gold)
     ppf: '#8B5CF6',               // Violet - PPF
     epf: '#14B8A6',               // Teal - EPF (different from PPF)
     nps: '#EC4899',               // Pink - NPS
@@ -469,8 +472,30 @@ export default function RealEstateDashboard() {
             if (portfolioResult.success && portfolioResult.data?.metrics) {
               totalNetWorth = portfolioResult.data.metrics.netWorth || null;
               
-              // Get full allocation from portfolio data
-              if (portfolioResult.data.allocation) {
+              // Get holdings to aggregate by individual asset class (not buckets)
+              // This ensures each asset class gets its own distinct color
+              if (portfolioResult.data.holdings && Array.isArray(portfolioResult.data.holdings)) {
+                const { aggregateByClassification } = await import('@/lib/portfolio-classification-aggregation');
+                
+                // Aggregate holdings by individual asset class
+                const classification = aggregateByClassification(
+                  portfolioResult.data.holdings.map((h: any) => ({
+                    id: h.id,
+                    name: h.name,
+                    assetType: h.assetType,
+                    investedValue: h.investedValue || 0,
+                    currentValue: h.currentValue || 0,
+                    metadata: h.metadata || {},
+                  }))
+                );
+                
+                // Use individual asset class allocation (not buckets)
+                fullAllocation = classification.allocation.map((item: any) => ({
+                  assetClass: item.assetClass.toLowerCase(),
+                  value: item.value || 0,
+                }));
+              } else if (portfolioResult.data.allocation) {
+                // Fallback: Use allocation if holdings not available
                 fullAllocation = portfolioResult.data.allocation.map((item: any) => ({
                   assetClass: item.name.toLowerCase().replace(/\s+/g, '_'),
                   value: item.value || 0,
@@ -485,21 +510,30 @@ export default function RealEstateDashboard() {
           // Merge real estate allocation with other asset classes for the chart
           if (fullAllocation.length > 0) {
             // Normalize asset class names to match color mapping
+            // Classification system uses PascalCase (Equity, FixedIncome, etc.)
+            // We need to map to lowercase keys that match the color mapping
             const normalizedAllocation = fullAllocation.map(item => {
               let normalizedClass = item.assetClass.toLowerCase().trim();
               
-              // Map variations to standard names
-              // IMPORTANT: Keep distinct asset classes separate to avoid color collisions
-              if (normalizedClass === 'stocks' || normalizedClass === 'stock') {
+              // Map classification system asset classes to color keys
+              // Classification uses: Equity, FixedIncome, Hybrid, Commodity, RealAsset, Cash
+              if (normalizedClass === 'equity' || normalizedClass === 'stocks' || normalizedClass === 'stock') {
                 normalizedClass = 'equity';
-              } else if (normalizedClass === 'mutual fund' || normalizedClass === 'mutualfunds' || normalizedClass === 'mf') {
-                normalizedClass = 'mutual_funds';
-              } else if (normalizedClass === 'fixed deposit' || normalizedClass === 'fixeddeposits' || normalizedClass === 'fd') {
+              } else if (normalizedClass === 'fixedincome' || normalizedClass === 'fixed_income' || 
+                         normalizedClass === 'fixed deposit' || normalizedClass === 'fixeddeposits' || 
+                         normalizedClass === 'fd' || normalizedClass === 'bond' || normalizedClass === 'bonds') {
                 normalizedClass = 'fixed_income';
-              } else if (normalizedClass === 'bond' || normalizedClass === 'bonds') {
-                normalizedClass = 'bonds';
-              } else if (normalizedClass === 'real estate' || normalizedClass === 'realestate' || normalizedClass === 'property') {
+              } else if (normalizedClass === 'hybrid' || normalizedClass === 'mutual fund' || 
+                         normalizedClass === 'mutualfunds' || normalizedClass === 'mf') {
+                normalizedClass = 'mutual_funds';
+              } else if (normalizedClass === 'commodity' || normalizedClass === 'gold') {
+                normalizedClass = 'gold'; // Commodity is primarily gold
+              } else if (normalizedClass === 'realasset' || normalizedClass === 'real_asset' || 
+                         normalizedClass === 'real estate' || normalizedClass === 'realestate' || 
+                         normalizedClass === 'property') {
                 normalizedClass = 'real_estate';
+              } else if (normalizedClass === 'cash') {
+                normalizedClass = 'cash';
               } else if (normalizedClass === 'etf' || normalizedClass === 'etfs') {
                 normalizedClass = 'etf'; // Keep ETF separate from equity
               } else if (normalizedClass === 'ppf') {

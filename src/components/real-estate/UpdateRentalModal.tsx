@@ -64,13 +64,7 @@ export default function UpdateRentalModal({
     setLoading(true);
 
     try {
-      if (!cashflowId) {
-        // Need to create cashflow via asset upsert endpoint
-        // For now, show error - user should add rental details first via onboarding
-        throw new Error('Rental details not found. Please add rental information first.');
-      }
-
-      // Prepare update payload
+      // Prepare payload
       const payload: any = {
         monthly_rent: monthlyRent ? parseFloat(monthlyRent) : null,
         maintenance_monthly: maintenanceMonthly ? parseFloat(maintenanceMonthly) : null,
@@ -84,9 +78,17 @@ export default function UpdateRentalModal({
         throw new Error('Monthly rent must be greater than 0');
       }
 
-      // Update cashflow
-      const response = await fetch(`/api/real-estate/cashflows/${cashflowId}`, {
-        method: 'PUT',
+      // Determine rental status based on monthly rent
+      if (payload.monthly_rent && payload.monthly_rent > 0) {
+        payload.rental_status = 'rented';
+      } else {
+        payload.rental_status = 'self_occupied';
+      }
+
+      // Always use upsert (create or update by asset). Avoids 404 when cashflowId
+      // is missing, stale, or points to a deleted cashflow.
+      const response = await fetch(`/api/real-estate/assets/${propertyId}/cashflow`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
