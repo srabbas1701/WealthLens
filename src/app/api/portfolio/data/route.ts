@@ -76,6 +76,8 @@ interface HoldingDetail {
   topLevelBucket: string | null;
   riskBehavior: string | null;
   notes: string | null;
+  createdAt?: string | null; // Holding creation date (fallback for XIRR)
+  purchaseDate?: string | null; // Purchase date (YYYY-MM-DD) - primary source for XIRR calculation
   navDate?: string | null; // NAV date for mutual funds (YYYY-MM-DD)
   priceDate?: string | null; // Price date for equity/stocks (YYYY-MM-DD)
 }
@@ -278,6 +280,8 @@ export async function GET(request: NextRequest) {
         current_value,
         average_price,
         notes,
+        created_at,
+        purchase_date,
         top_level_bucket,
         asset_class,
         risk_behavior,
@@ -306,7 +310,7 @@ export async function GET(request: NextRequest) {
       // Fallback: Query holdings and assets separately (handles 406 errors)
       const { data: holdingsOnly, error: holdingsOnlyError } = await supabase
         .from('holdings')
-        .select('id, asset_id, quantity, invested_value, current_value, average_price, notes, top_level_bucket, asset_class, risk_behavior')
+        .select('id, asset_id, quantity, invested_value, current_value, average_price, notes, created_at, purchase_date, top_level_bucket, asset_class, risk_behavior')
         .eq('portfolio_id', portfolio.id)
         .order('invested_value', { ascending: false });
       
@@ -820,6 +824,8 @@ export async function GET(request: NextRequest) {
         topLevelBucket: bucket || null,
         riskBehavior: riskBehavior || null,
         notes: h.notes || null,
+        createdAt: (h as any).created_at || null, // Include creation date (fallback)
+        purchaseDate: (h as any).purchase_date || null, // Include purchase date for XIRR calculation
         navDate: isMF ? ((h as any)._navDate || null) : null, // Include NAV date for MF holdings
         priceDate: isEquity ? ((h as any)._priceDate || null) : null, // Include price date for equity/ETF holdings
       };

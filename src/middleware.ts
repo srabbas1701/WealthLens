@@ -96,15 +96,19 @@ export async function middleware(request: NextRequest) {
       }
       
       // Treat as unauthenticated user
+      // For auto-logout scenarios, redirect to home page (not login)
+      // This provides consistent experience with client-side logout
       const pathname = request.nextUrl.pathname;
       const isProtectedRoute = PROTECTED_ROUTES.some(route => 
         pathname.startsWith(route)
       );
       
       if (isProtectedRoute) {
-        const loginUrl = new URL('/login', request.url);
-        loginUrl.searchParams.set('redirect', pathname);
-        return NextResponse.redirect(loginUrl);
+        // Redirect to home page with session_expired flag for auto-logout scenarios
+        // User can see landing page and choose to login again
+        const homeUrl = new URL('/', request.url);
+        homeUrl.searchParams.set('session_expired', 'true');
+        return NextResponse.redirect(homeUrl);
       }
       
       return response;

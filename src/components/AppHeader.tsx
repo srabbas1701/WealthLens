@@ -119,7 +119,9 @@ export function AppHeader({
       setShowLogoutModal(false);
       setShowUserMenu(false);
       try {
-        await signOut();
+        // For manual logout, skip redirect in signOut and handle it here
+        // This allows us to redirect to login page for manual logout
+        await signOut({ reason: 'manual', skipRedirect: true });
       } catch (error) {
         console.error('[AppHeader] Error during logout:', error);
         // Continue with redirect even if signOut fails
@@ -256,7 +258,8 @@ export function AppHeader({
       // LOGOUT FLOW:
       // 1. Call signOut (clears state and cache)
       // 2. Redirect to login immediately to avoid conflicts with page guards
-      await signOut();
+      // For manual logout, skip redirect in signOut and handle it here
+      await signOut({ reason: 'manual', skipRedirect: true });
     } catch (error) {
       console.error('[AppHeader] Error during logout:', error);
       // Continue with redirect even if signOut fails

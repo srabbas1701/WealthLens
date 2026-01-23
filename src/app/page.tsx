@@ -39,16 +39,29 @@ export default function HomePage() {
   const { user, authStatus } = useAuthSession();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [showTimeoutMessage, setShowTimeoutMessage] = useState(false);
+  const [showSessionExpiredMessage, setShowSessionExpiredMessage] = useState(false);
   
   // Check for timeout message from auto-logout
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
+    
+    // Handle inactivity timeout
     if (searchParams.get('timeout') === 'true') {
       setShowTimeoutMessage(true);
       // Remove query param from URL
       window.history.replaceState({}, '', '/');
       // Hide message after 5 seconds
       const timer = setTimeout(() => setShowTimeoutMessage(false), 5000);
+      return () => clearTimeout(timer);
+    }
+    
+    // Handle session expiration
+    if (searchParams.get('session_expired') === 'true') {
+      setShowSessionExpiredMessage(true);
+      // Remove query param from URL
+      window.history.replaceState({}, '', '/');
+      // Hide message after 5 seconds
+      const timer = setTimeout(() => setShowSessionExpiredMessage(false), 5000);
       return () => clearTimeout(timer);
     }
   }, []);
@@ -127,6 +140,20 @@ export default function HomePage() {
               <CheckCircleIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0 mt-0.5" />
               <p className="text-sm text-[#166534] dark:text-[#86EFAC]">
                 You were logged out due to inactivity to keep your account secure. Please sign in again to continue.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Session Expired Message */}
+      {showSessionExpiredMessage && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-md mx-4">
+          <div className="bg-[#FEF3C7] dark:bg-[#78350F] border border-[#FDE68A] dark:border-[#92400E] rounded-lg p-4 shadow-lg">
+            <div className="flex items-start gap-3">
+              <CheckCircleIcon className="w-5 h-5 text-[#D97706] dark:text-[#FBBF24] flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-[#92400E] dark:text-[#FCD34D]">
+                Your session has expired for security reasons. Please sign in again to continue.
               </p>
             </div>
           </div>

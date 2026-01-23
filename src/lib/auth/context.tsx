@@ -52,7 +52,7 @@ interface AuthSessionState {
   authStatus: AuthStatus;
   user: User | null;
   session: Session | null;
-  signOut: () => Promise<void>;
+  signOut: (options?: { reason?: 'manual' | 'inactivity' | 'session_expired' | 'token_expired'; skipRedirect?: boolean }) => Promise<void>;
 }
 
 interface AuthAppDataState {
@@ -301,12 +301,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           sessionError.message?.includes('refresh_token_not_found') ||
           (sessionError as any)?.code === 'refresh_token_not_found'
         )) {
-          // Clear invalid session
-          await supabase.auth.signOut();
-          setSession(null);
-          setUser(null);
-          setAuthStatus('unauthenticated');
-          sessionStorage.removeItem('auth_loading_start');
+          // Use unified logout handler for consistency
+          try {
+            const { handleLogout } = await import('@/lib/auth/logout');
+            await handleLogout({
+              reason: 'token_expired',
+              redirectTo: '/',
+              skipRedirect: false,
+            });
+          } catch (error) {
+            console.error('[Auth] Error using unified logout for token expiration:', error);
+            // Fallback: clear session directly
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+            setAuthStatus('unauthenticated');
+            sessionStorage.removeItem('auth_loading_start');
+            if (typeof window !== 'undefined') {
+              window.location.href = '/?session_expired=true';
+            }
+          }
           console.warn('[Auth] Invalid refresh token - cleared session');
           return;
         }
@@ -549,13 +563,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   /**
    * Sign out - LOGOUT FLOW
+   * Uses unified logout handler for consistency.
+   * For manual logout, redirects to home page.
+   * For auto-logout, the unified handler handles redirect.
+   * 
    * 1. Clear frontend state immediately
    * 2. Clear client-side cache
    * 3. Call backend logout (clears backend session)
    * 4. State will be cleared by onAuthStateChange SIGNED_OUT event
    */
-  const signOut = async () => {
-    console.log('[Auth] Signing out...');
+  const signOut = async (options?: { reason?: 'manual' | 'inactivity' | 'session_expired' | 'token_expired'; skipRedirect?: boolean }) => {
+    const reason = options?.reason || 'manual';
+    const skipRedirect = options?.skipRedirect || false;
+    
+    console.log('[Auth] Signing out, reason:', reason);
     
     // Step 1: Clear all frontend state immediately
     setUser(null);
@@ -573,10 +594,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Step 2: Clear client-side cache
     clearAuthCache();
     
-    // Step 3: Call backend logout (clears backend session)
-    // This will trigger onAuthStateChange SIGNED_OUT event
-    if (supabase) {
-      await supabase.auth.signOut();
+    // Step 3: Use unified logout handler for backend logout and redirect
+    // This ensures consistent behavior across all logout scenarios
+    try {
+      // Import dynamically to avoid circular dependency
+      const { handleLogout } = await import('@/lib/auth/logout');
+      await handleLogout({
+        reason,
+        redirectTo: '/', // Always redirect to home page
+        skipRedirect,
+      });
+    } catch (error) {
+      console.error('[Auth] Error using unified logout, falling back to direct signOut:', error);
+      // Fallback to direct Supabase signOut if unified handler fails
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+      // If not skipping redirect and unified handler failed, do manual redirect
+      if (!skipRedirect && typeof window !== 'undefined') {
+        window.location.href = '/';
+      }
     }
     
     console.log('[Auth] Sign out complete');

@@ -12,7 +12,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, units, avgBuyNav, user_id } = body;
+    const { id, units, avgBuyNav, folio, purchaseDate, user_id } = body;
 
     // Validation
     if (!id || !units || !avgBuyNav) {
@@ -68,14 +68,42 @@ export async function PUT(request: NextRequest) {
     // Calculate new current value based on updated units
     const currentValue = parseFloat(units) * currentNAV;
 
+    // Parse existing metadata and update folio if provided
+    let metadata: any = {};
+    try {
+      if (existingHolding.notes) {
+        metadata = typeof existingHolding.notes === 'string' 
+          ? JSON.parse(existingHolding.notes) 
+          : existingHolding.notes;
+      }
+    } catch (e) {
+      console.warn('[MF Update API] Failed to parse existing notes:', e);
+    }
+
+    // Update folio in metadata if provided
+    if (folio !== undefined) {
+      metadata.folio = folio || null; // Allow empty string to clear folio
+    }
+
+    // Update purchase date in metadata if provided
+    if (purchaseDate !== undefined) {
+      metadata.purchase_date = purchaseDate || null; // Allow empty string to clear purchase date
+    }
+
     // Update holding
     const updateData: any = {
       quantity: parseFloat(units),
       average_price: parseFloat(avgBuyNav),
       invested_value: investedValue,
       current_value: currentValue,
+      notes: JSON.stringify(metadata),
       updated_at: new Date().toISOString(),
     };
+    
+    // Update purchase_date column if provided (store in both column and metadata for backward compatibility)
+    if (purchaseDate !== undefined) {
+      updateData.purchase_date = purchaseDate || null;
+    }
 
     const { data: holding, error: updateError } = await supabase
       .from('holdings')

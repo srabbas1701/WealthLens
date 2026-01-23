@@ -14,6 +14,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/server';
+import { extractAMC, extractCategory, extractPlan } from '@/lib/mf-extraction-utils';
 
 // ============================================================================
 // TYPES
@@ -275,17 +276,31 @@ export async function updateSchemeMaster(): Promise<number> {
     
     // Prepare data for batch upsert
     // DO NOT store NAV values or nav_date - only scheme master data
-    const dataToUpsert = schemes.map(scheme => ({
-      scheme_code: scheme.schemeCode,
-      scheme_name: scheme.schemeName, // Must come ONLY from column 3
-      fund_house: scheme.fundHouse || null,
-      scheme_type: scheme.schemeType || null,
-      isin_growth: scheme.isinGrowth || null,
-      isin_div_payout: scheme.isinDivPayout || null,
-      isin_div_reinvest: scheme.isinDivReinvest || null,
-      scheme_status: scheme.schemeStatus || 'Active',
-      last_updated: new Date().toISOString(),
-    }));
+    // Also populate normalized columns (amc_name, category, plan_type)
+    const dataToUpsert = schemes.map(scheme => {
+      const schemeName = scheme.schemeName; // Must come ONLY from column 3
+      
+      // Extract metadata from scheme name
+      const amcName = extractAMC(schemeName);
+      const category = extractCategory(schemeName);
+      const planType = extractPlan(schemeName);
+      
+      return {
+        scheme_code: scheme.schemeCode,
+        scheme_name: schemeName,
+        fund_house: scheme.fundHouse || null,
+        scheme_type: scheme.schemeType || null,
+        isin_growth: scheme.isinGrowth || null,
+        isin_div_payout: scheme.isinDivPayout || null,
+        isin_div_reinvest: scheme.isinDivReinvest || null,
+        scheme_status: scheme.schemeStatus || 'Active',
+        // Populate normalized columns
+        amc_name: amcName === 'Other' ? null : amcName,
+        category: category === 'Other' ? null : category,
+        plan_type: planType,
+        last_updated: new Date().toISOString(),
+      };
+    });
     
     // Batch upsert in chunks of 1000 (Supabase limit)
     const chunkSize = 1000;

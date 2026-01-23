@@ -2,22 +2,26 @@
  * Session Timeout Hook
  * 
  * Tracks user activity and manages automatic logout after inactivity.
+ * Also checks Supabase session expiration to ensure consistency.
  * 
  * SECURITY REQUIREMENTS:
  * - Auto logout after 30 minutes of inactivity
+ * - Check Supabase session expiration (primary mechanism)
  * - Inactivity = no user interaction or API activity
  * - Clear authentication state on logout
  * - Sync logout across tabs
+ * - All auto-logouts redirect to home/landing page
  */
 
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import { handleLogout, isSessionExpired } from '@/lib/auth/logout';
 
 const INACTIVITY_WARNING_TIME = 28 * 60 * 1000; // 28 minutes (2 minutes before logout)
 const INACTIVITY_LOGOUT_TIME = 30 * 60 * 1000; // 30 minutes
+const SESSION_CHECK_INTERVAL = 60 * 1000; // Check session expiration every minute
 
 interface UseSessionTimeoutOptions {
   onWarning?: () => void;
@@ -30,13 +34,14 @@ export function useSessionTimeout({
   onLogout,
   enabled = true,
 }: UseSessionTimeoutOptions = {}) {
-  const router = useRouter();
-  const { signOut, user } = useAuth();
+  const { user } = useAuth();
   const lastActivityRef = useRef<number>(Date.now());
   const warningShownRef = useRef<boolean>(false);
   const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
   const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
   const activityCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const sessionCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isLoggingOutRef = useRef<boolean>(false);
 
   /**
    * Update last activity timestamp
@@ -78,8 +83,8 @@ export function useSessionTimeout({
   /**
    * Check inactivity and trigger warnings/logout
    */
-  const checkInactivity = useCallback(() => {
-    if (!enabled || !user) return;
+  const checkInactivity = useCallback(async () => {
+    if (!enabled || !user || isLoggingOutRef.current) return;
 
     const now = Date.now();
     const timeSinceActivity = now - lastActivityRef.current;
@@ -92,42 +97,50 @@ export function useSessionTimeout({
 
     // Auto logout at 30 minutes
     if (timeSinceActivity >= INACTIVITY_LOGOUT_TIME) {
-      handleAutoLogout();
+      await handleAutoLogout('inactivity');
     }
   }, [enabled, user, onWarning]);
 
   /**
-   * Handle automatic logout
+   * Handle automatic logout using unified logout handler
    */
-  const handleAutoLogout = useCallback(async () => {
+  const handleAutoLogout = useCallback(async (reason: 'inactivity' | 'session_expired' | 'token_expired' = 'inactivity') => {
+    // Prevent multiple simultaneous logout attempts
+    if (isLoggingOutRef.current) return;
+    isLoggingOutRef.current = true;
+
     // Clear all timers
     if (warningTimerRef.current) {
       clearTimeout(warningTimerRef.current);
+      warningTimerRef.current = null;
     }
     if (logoutTimerRef.current) {
       clearTimeout(logoutTimerRef.current);
+      logoutTimerRef.current = null;
     }
     if (activityCheckIntervalRef.current) {
       clearInterval(activityCheckIntervalRef.current);
+      activityCheckIntervalRef.current = null;
+    }
+    if (sessionCheckIntervalRef.current) {
+      clearInterval(sessionCheckIntervalRef.current);
+      sessionCheckIntervalRef.current = null;
     }
 
-    // Clear localStorage
-    localStorage.removeItem('lastActivity');
-    localStorage.removeItem('sessionWarningShown');
-
-    // Sign out
-    await signOut();
-    
-    // Notify other tabs
-    localStorage.setItem('sessionLogout', Date.now().toString());
-    localStorage.removeItem('sessionLogout');
-
-    // Redirect to landing page (not login) to avoid confusion
-    // User can see the landing page and choose to login again
-    router.push('/?timeout=true');
-    
-    onLogout?.();
-  }, [signOut, router, onLogout]);
+    try {
+      // Use unified logout handler (redirects to home page)
+      await handleLogout({
+        reason,
+        redirectTo: '/', // Always redirect to home/landing page
+        skipRedirect: false,
+      });
+      
+      onLogout?.();
+    } catch (error) {
+      console.error('[SessionTimeout] Error during logout:', error);
+      isLoggingOutRef.current = false;
+    }
+  }, [onLogout]);
 
   /**
    * Handle "Stay signed in" action
@@ -140,8 +153,28 @@ export function useSessionTimeout({
    * Handle "Log out now" action
    */
   const handleLogoutNow = useCallback(async () => {
-    await handleAutoLogout();
+    await handleAutoLogout('inactivity');
   }, [handleAutoLogout]);
+
+  /**
+   * Check if Supabase session is expired
+   * This is the primary mechanism - if session is expired, logout immediately
+   */
+  const checkSessionExpiration = useCallback(async () => {
+    if (!enabled || !user || isLoggingOutRef.current) return;
+
+    try {
+      const expired = await isSessionExpired();
+      if (expired) {
+        console.log('[SessionTimeout] Session expired, logging out...');
+        await handleAutoLogout('session_expired');
+      }
+    } catch (error) {
+      console.error('[SessionTimeout] Error checking session expiration:', error);
+      // On error, assume session is expired for safety
+      await handleAutoLogout('session_expired');
+    }
+  }, [enabled, user, handleAutoLogout]);
 
   /**
    * Listen for cross-tab activity updates
@@ -157,7 +190,7 @@ export function useSessionTimeout({
       
       // Handle logout from another tab
       if (e.key === 'sessionLogout') {
-        handleAutoLogout();
+        handleAutoLogout('inactivity');
       }
     };
 
@@ -211,6 +244,12 @@ export function useSessionTimeout({
     // Check inactivity every 30 seconds
     activityCheckIntervalRef.current = setInterval(checkInactivity, 30000);
 
+    // Check session expiration every minute (primary mechanism)
+    sessionCheckIntervalRef.current = setInterval(checkSessionExpiration, SESSION_CHECK_INTERVAL);
+
+    // Initial session check
+    checkSessionExpiration();
+
     return () => {
       events.forEach(event => {
         document.removeEventListener(event, handleActivity);
@@ -219,8 +258,11 @@ export function useSessionTimeout({
       if (activityCheckIntervalRef.current) {
         clearInterval(activityCheckIntervalRef.current);
       }
+      if (sessionCheckIntervalRef.current) {
+        clearInterval(sessionCheckIntervalRef.current);
+      }
     };
-  }, [enabled, user, handleActivity, checkInactivity, updateActivity]);
+  }, [enabled, user, handleActivity, checkInactivity, updateActivity, checkSessionExpiration]);
 
   return {
     handleStaySignedIn,

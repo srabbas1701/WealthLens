@@ -8,6 +8,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { calculatePortfolioXIRR } from '@/lib/xirr-calculator';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React from 'react';
@@ -46,6 +47,7 @@ interface MFHolding {
   gainLossPercent: number;
   allocationPct: number;
   navDate: string | null; // NAV date (YYYY-MM-DD)
+  purchaseDate: string | null; // Purchase date (YYYY-MM-DD) for XIRR calculation
 }
 
 export default function MutualFundsPage() {
@@ -85,10 +87,12 @@ export default function MutualFundsPage() {
     folio: '',
     units: '',
     avgBuyNav: '',
-    isin: ''
+    isin: '',
+    scheme_code: '',
+    purchaseDate: '' // Purchase date for XIRR calculation
   });
 
-  const fetchData = useCallback(async (userId: string) => {
+  const fetchData = useCallback(async (userId: string, showLoadingScreen: boolean = true) => {
     // Prevent duplicate simultaneous fetches
     if (fetchingRef.current) {
       console.log('[MF Page] Skipping duplicate fetch');
@@ -96,7 +100,10 @@ export default function MutualFundsPage() {
     }
     
     fetchingRef.current = true;
-    setLoading(true);
+    // Only show full loading screen on initial load, not on background refreshes
+    if (showLoadingScreen) {
+      setLoading(true);
+    }
     try {
       const params = new URLSearchParams({ user_id: userId });
       const response = await fetch(`/api/portfolio/data?${params}`);
@@ -108,58 +115,45 @@ export default function MutualFundsPage() {
           const mfHoldings = portfolioData.holdings
             .filter((h: any) => h.assetType === 'Mutual Funds')
             .map((h: any, idx: number) => {
-              // Extract AMC from scheme name (human-readable, no abbreviations)
-              // Scheme name pattern: "AMC Name Scheme Name Direct/Regular Growth/Dividend"
-              // Extract AMC name (typically first 2-3 words before scheme type keywords)
-              let amc = 'Other';
-              const schemeName = h.name || '';
-              
-              // Try to extract AMC name by matching common patterns
-              // Pattern 1: Extract before common scheme keywords
-              const amcPatterns = [
-                /^([A-Za-z\s&]+?)\s+(?:Mutual Fund|MF|Fund|Equity|Debt|Hybrid|Balanced)/i,
-                /^([A-Za-z\s&]+?)\s+(?:Flexi Cap|Large Cap|Mid Cap|Small Cap|Multi Cap)/i,
-                /^([A-Za-z\s&]+?)\s+Direct/i,
-              ];
-              
-              for (const pattern of amcPatterns) {
-                const match = schemeName.match(pattern);
-                if (match && match[1]) {
-                  amc = match[1].trim();
-                  break;
+              // Parse metadata from notes
+              let metadata: any = {};
+              try {
+                if (h.notes) {
+                  metadata = typeof h.notes === 'string' ? JSON.parse(h.notes) : h.notes;
                 }
+              } catch (e) {
+                console.warn('[MF Page] Failed to parse notes:', e);
               }
               
-              // Fallback: Extract first 2-3 words if no pattern matches
-              if (amc === 'Other') {
-                const words = schemeName.split(/\s+/);
-                if (words.length >= 2) {
-                  amc = words.slice(0, Math.min(3, words.length - 1)).join(' ');
-                } else {
-                  amc = schemeName.split(' ')[0] || 'Other';
-                }
-              }
+              // Extract metadata fields (use metadata if available, otherwise fallback to extraction)
+              const amc = metadata.amc || 'Other';
+              const category = metadata.category || 'Large Cap';
+              const plan = metadata.plan || 'Direct - Growth';
+              const folio = metadata.folio || ''; // Use actual folio from metadata, empty string if not set
               
-              // Mock categories
-              const categories = ['Large Cap', 'Flexi Cap', 'Mid Cap', 'Small Cap', 'Debt', 'Hybrid'];
-              const category = categories[idx % categories.length];
-              
-              // Mock XIRR (would come from actual calculation)
-              const xirr = 8 + Math.random() * 10; // Random between 8-18%
+              // Get purchase date: prefer dedicated column, fallback to metadata, then null
+              const purchaseDate = h.purchaseDate || metadata.purchase_date || null;
               
               // Calculate NAV fields
               const units = h.quantity || 0;
               const avgBuyNav = h.averagePrice || 0;
+              const investedValue = h.investedValue || 0;
               const currentValue = h.currentValue || h.investedValue;
               const latestNav = units > 0 ? currentValue / units : 0;
+              
+              // Calculate actual XIRR using purchase date
+              // If no purchase date, XIRR cannot be calculated accurately
+              const xirr = purchaseDate 
+                ? calculatePortfolioXIRR(investedValue, currentValue, purchaseDate)
+                : null;
               
               return {
                 id: h.id,
                 name: h.name,
                 amc,
                 category,
-                plan: 'Direct - Growth',
-                folio: `${Math.floor(10000 + Math.random() * 90000)}/${Math.floor(10 + Math.random() * 90)}`,
+                plan,
+                folio,
                 units,
                 avgBuyNav,
                 latestNav,
@@ -172,6 +166,7 @@ export default function MutualFundsPage() {
                   : 0,
                 allocationPct: h.allocationPct,
                 navDate: h.navDate || null, // Extract NAV date from API response
+                purchaseDate: purchaseDate || null, // Store purchase date for edit form
               };
             });
 
@@ -188,7 +183,10 @@ export default function MutualFundsPage() {
     } catch (error) {
       console.error('Failed to fetch MF holdings:', error);
     } finally {
-      setLoading(false);
+      // Only reset loading state if we set it
+      if (showLoadingScreen) {
+        setLoading(false);
+      }
       fetchingRef.current = false;
     }
   }, []);
@@ -213,6 +211,15 @@ export default function MutualFundsPage() {
     if (navUpdateLoading) return;
     
     setNavUpdateLoading(true);
+    
+    // Show loading toast
+    showToast({
+      type: 'info',
+      title: 'Updating NAVs',
+      message: 'Fetching latest NAV data from AMFI for all mutual fund schemes...',
+      duration: 30000, // 30 seconds max - should be enough for the update
+    });
+    
     try {
       const response = await fetch('/api/mf/navs/update', {
         method: 'POST',
@@ -225,28 +232,43 @@ export default function MutualFundsPage() {
         const data = await response.json();
         
         if (data.success && data.updated > 0) {
-          // Refresh data to show updated NAVs
+          // Refresh data to show updated NAVs (background refresh, no loading screen)
           if (user?.id) {
-            await fetchData(user.id);
+            await fetchData(user.id, false);
           }
-          alert(`NAVs updated successfully! ${data.updated} schemes updated.`);
+          showToast({
+            type: 'success',
+            title: 'NAVs Updated Successfully',
+            message: `Updated ${data.updated} scheme${data.updated === 1 ? '' : 's'} with latest NAV data.`,
+            duration: 5000,
+          });
         } else if (data.success && data.updated === 0) {
           // Success but no NAVs updated - might be because they're already up to date
-          // Still refresh to ensure we have latest data
+          // Still refresh to ensure we have latest data (background refresh, no loading screen)
           if (user?.id) {
-            await fetchData(user.id);
+            await fetchData(user.id, false);
           }
-          alert(`NAV update completed. ${data.updated} schemes updated (may already be up to date).`);
+          showToast({
+            type: 'info',
+            title: 'NAVs Already Up to Date',
+            message: 'All NAVs are current. No updates were needed.',
+            duration: 5000,
+          });
         } else {
           const errorMsg = data.error || `Failed to update NAVs. ${data.failed || 0} failed out of ${data.updated + (data.failed || 0)} requested.`;
           console.error('[MF Page] ❌ NAV update failed:', errorMsg);
           console.error('[MF Page] Full error response:', data);
-          alert('Failed to update NAVs: ' + errorMsg);
+          showToast({
+            type: 'error',
+            title: 'Update Failed',
+            message: errorMsg,
+            duration: 7000,
+          });
         }
       } else {
         const errorText = await response.text();
         console.error('[MF Page] NAV update failed:', response.status, errorText);
-        let errorMessage = 'Failed to update NAVs: ' + response.status;
+        let errorMessage = 'Failed to update NAVs. Please try again later.';
         try {
           const errorData = JSON.parse(errorText);
           if (errorData.error) {
@@ -258,15 +280,25 @@ export default function MutualFundsPage() {
             errorMessage = errorText.substring(0, 200);
           }
         }
-        alert(errorMessage);
+        showToast({
+          type: 'error',
+          title: 'Update Failed',
+          message: errorMessage,
+          duration: 7000,
+        });
         throw new Error(errorMessage);
       }
     } catch (error) {
-      alert('Error updating NAVs. Please try again.');
+      showToast({
+        type: 'error',
+        title: 'Update Failed',
+        message: 'An error occurred while updating NAVs. Please try again later.',
+        duration: 7000,
+      });
     } finally {
       setNavUpdateLoading(false);
     }
-  }, [navUpdateLoading, user?.id, fetchData]);
+  }, [navUpdateLoading, user?.id, fetchData, showToast]);
 
   // Handlers
   const handleAddMF = () => {
@@ -279,7 +311,9 @@ export default function MutualFundsPage() {
       folio: '', 
       units: '', 
       avgBuyNav: '',
-      isin: ''
+      isin: '',
+      scheme_code: '',
+      purchaseDate: ''
     });
     setShowAddMFModal(true);
   };
@@ -294,7 +328,9 @@ export default function MutualFundsPage() {
       folio: mf.folio,
       units: mf.units.toString(),
       avgBuyNav: mf.avgBuyNav.toString(),
-      isin: ''
+      isin: '',
+      scheme_code: '',
+      purchaseDate: mf.purchaseDate || ''
     });
     setShowEditModal(true);
   };
@@ -313,6 +349,7 @@ export default function MutualFundsPage() {
     units: number;
     avgBuyNav: number;
     isin?: string;
+    purchaseDate?: string;
   }) => {
     setIsLoading(true);
     
@@ -339,6 +376,7 @@ export default function MutualFundsPage() {
           units: mfData.units,
           avgBuyNav: mfData.avgBuyNav,
           isin: mfData.isin,
+          purchaseDate: mfData.purchaseDate,
           user_id: user.id
         })
       });
@@ -348,8 +386,8 @@ export default function MutualFundsPage() {
         throw new Error(error.error || 'Failed to add mutual fund');
       }
       
-      // Refresh data
-      await fetchData(user.id);
+      // Refresh data (background refresh, no loading screen)
+      await fetchData(user.id, false);
       setShowAddMFModal(false);
       setFormData({ 
         name: '', 
@@ -359,7 +397,9 @@ export default function MutualFundsPage() {
         folio: '', 
         units: '', 
         avgBuyNav: '',
-        isin: ''
+        isin: '',
+        scheme_code: '',
+        purchaseDate: ''
       });
       
       showToast({
@@ -385,6 +425,8 @@ export default function MutualFundsPage() {
   const handleEditMFSubmit = async (mfData: {
     units: number;
     avgBuyNav: number;
+    folio?: string;
+    purchaseDate?: string;
   }) => {
     if (!selectedMF || !user?.id) return;
     
@@ -398,6 +440,8 @@ export default function MutualFundsPage() {
           id: selectedMF.id,
           units: mfData.units,
           avgBuyNav: mfData.avgBuyNav,
+          folio: mfData.folio || '',
+          purchaseDate: mfData.purchaseDate || '',
           user_id: user.id
         })
       });
@@ -407,8 +451,8 @@ export default function MutualFundsPage() {
         throw new Error(error.error || 'Failed to update mutual fund');
       }
       
-      // Refresh data
-      await fetchData(user.id);
+      // Refresh data (background refresh, no loading screen)
+      await fetchData(user.id, false);
       setShowEditModal(false);
       setSelectedMF(null);
       
@@ -447,8 +491,8 @@ export default function MutualFundsPage() {
         throw new Error(error.error || 'Failed to delete mutual fund');
       }
 
-      // Refresh data
-      await fetchData(user.id);
+      // Refresh data (background refresh, no loading screen)
+      await fetchData(user.id, false);
       setShowDeleteConfirm(false);
       const deletedName = mfToDelete.name;
       setMfToDelete(null);
@@ -1055,7 +1099,9 @@ export default function MutualFundsPage() {
               folio: '', 
               units: '', 
               avgBuyNav: '',
-              isin: ''
+              isin: '',
+              scheme_code: '',
+              purchaseDate: ''
             });
           }}
           onSave={handleAddMFSubmit}
@@ -1117,10 +1163,180 @@ function AddMFModal({
   isLoading: boolean;
   formatCurrency: (value: number) => string;
 }) {
+  const [amcList, setAmcList] = useState<string[]>([]);
+  const [categoryList, setCategoryList] = useState<string[]>([]);
+  const [planList, setPlanList] = useState<string[]>([]);
+  const [schemeList, setSchemeList] = useState<Array<{scheme_name: string; scheme_code: string; isin_growth?: string; isin_div_payout?: string; isin_div_reinvest?: string}>>([]);
+  const [loadingAMCs, setLoadingAMCs] = useState(false);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [loadingPlans, setLoadingPlans] = useState(false);
+  const [loadingSchemes, setLoadingSchemes] = useState(false);
+
+  // Load AMCs on mount
+  useEffect(() => {
+    const fetchAMCs = async () => {
+      setLoadingAMCs(true);
+      try {
+        // Add cache-busting parameter to ensure fresh data
+        const response = await fetch(`/api/mf/schemes/list?t=${Date.now()}`);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Error fetching AMCs - response not ok:', response.status, errorData);
+          setAmcList([]);
+          return;
+        }
+        
+        const data = await response.json();
+        console.log('AMCs API response:', data);
+        console.log('AMCs API response type:', Array.isArray(data) ? 'array' : typeof data);
+        console.log('AMCs API response length:', Array.isArray(data) ? data.length : 'N/A');
+        if (Array.isArray(data) && data.length > 0) {
+          console.log('First 5 AMCs:', data.slice(0, 5));
+        }
+        
+        // Ensure we have an array of strings (AMC names), not scheme names
+        if (Array.isArray(data)) {
+          const validAMCs = data.filter((item: any) => {
+            // Must be a string
+            if (typeof item !== 'string') {
+              console.warn('Filtered out non-string AMC:', item, typeof item);
+              return false;
+            }
+            const trimmed = item.trim();
+            // Must be reasonable length (AMC names are typically 2-50 chars, not 100+ like scheme names)
+            const isValid = trimmed.length > 1 && trimmed.length < 100;
+            if (!isValid && item) {
+              console.warn('Filtered out invalid AMC (wrong length):', trimmed, 'length:', trimmed.length);
+            }
+            return isValid;
+          }).map((item: string) => item.trim());
+          
+          console.log(`Loaded ${validAMCs.length} valid AMCs`);
+          if (validAMCs.length > 0) {
+            console.log('Sample valid AMCs:', validAMCs.slice(0, 10));
+          }
+          setAmcList(validAMCs);
+        } else {
+          console.error('AMCs API did not return an array:', typeof data, data);
+          setAmcList([]);
+        }
+      } catch (error) {
+        console.error('Error fetching AMCs:', error);
+        setAmcList([]);
+      } finally {
+        setLoadingAMCs(false);
+      }
+    };
+    fetchAMCs();
+  }, []);
+
+  // Load categories when AMC changes
+  useEffect(() => {
+    if (formData.amc) {
+      const fetchCategories = async () => {
+        setLoadingCategories(true);
+        try {
+          const response = await fetch(`/api/mf/schemes/list?amc=${encodeURIComponent(formData.amc)}`);
+          if (response.ok) {
+            const data = await response.json();
+            setCategoryList(data);
+            // Reset category, plan, and scheme when AMC changes
+            setFormData((prev) => ({ ...prev, category: '', plan: '', name: '', scheme_code: '', isin: '' }));
+          }
+        } catch (error) {
+          console.error('Error fetching categories:', error);
+          setCategoryList([]);
+        } finally {
+          setLoadingCategories(false);
+        }
+      };
+      fetchCategories();
+    } else {
+      setCategoryList([]);
+      setFormData((prev) => ({ ...prev, category: '', plan: '', name: '', scheme_code: '', isin: '' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.amc]);
+
+  // Load plans when AMC + Category changes
+  useEffect(() => {
+    if (formData.amc && formData.category) {
+      const fetchPlans = async () => {
+        setLoadingPlans(true);
+        try {
+          const response = await fetch(`/api/mf/schemes/list?amc=${encodeURIComponent(formData.amc)}&category=${encodeURIComponent(formData.category)}`);
+          if (response.ok) {
+            const data = await response.json();
+            setPlanList(data);
+            // Reset plan and scheme when category changes
+            setFormData((prev) => ({ ...prev, plan: '', name: '', scheme_code: '', isin: '' }));
+          }
+        } catch (error) {
+          console.error('Error fetching plans:', error);
+          setPlanList([]);
+        } finally {
+          setLoadingPlans(false);
+        }
+      };
+      fetchPlans();
+    } else {
+      setPlanList([]);
+      setFormData((prev) => ({ ...prev, plan: '', name: '', scheme_code: '', isin: '' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.amc, formData.category]);
+
+  // Load schemes when AMC + Category + Plan changes
+  useEffect(() => {
+    if (formData.amc && formData.category && formData.plan) {
+      const fetchSchemes = async () => {
+        setLoadingSchemes(true);
+        try {
+          const response = await fetch(`/api/mf/schemes/list?amc=${encodeURIComponent(formData.amc)}&category=${encodeURIComponent(formData.category)}&plan=${encodeURIComponent(formData.plan)}`);
+          if (response.ok) {
+            const data = await response.json();
+            setSchemeList(data);
+            // Reset scheme when plan changes
+            setFormData((prev) => ({ ...prev, name: '', scheme_code: '', isin: '' }));
+          }
+        } catch (error) {
+          console.error('Error fetching schemes:', error);
+          setSchemeList([]);
+        } finally {
+          setLoadingSchemes(false);
+        }
+      };
+      fetchSchemes();
+    } else {
+      setSchemeList([]);
+      setFormData((prev) => ({ ...prev, name: '', scheme_code: '', isin: '' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.amc, formData.category, formData.plan]);
+
+  // Handle scheme selection
+  const handleSchemeChange = (schemeName: string) => {
+    const selectedScheme = schemeList.find(s => s.scheme_name === schemeName);
+    if (selectedScheme) {
+      // Determine ISIN based on plan type
+      let isin = selectedScheme.isin_growth || '';
+      if (formData.plan?.includes('Dividend')) {
+        isin = selectedScheme.isin_div_payout || selectedScheme.isin_div_reinvest || isin;
+      }
+      
+      setFormData((prev) => ({
+        ...prev,
+        name: schemeName,
+        scheme_code: selectedScheme.scheme_code,
+        isin: isin
+      }));
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.units || !formData.avgBuyNav) {
+    if (!formData.name || !formData.units || !formData.avgBuyNav || !formData.amc) {
       return;
     }
     
@@ -1137,10 +1353,12 @@ function AddMFModal({
       amc: formData.amc || 'Other',
       category: formData.category || 'Large Cap',
       plan: formData.plan,
-      folio: formData.folio || `${Math.floor(10000 + Math.random() * 90000)}/${Math.floor(10 + Math.random() * 90)}`,
+      folio: formData.folio || '', // Use empty string if not provided, don't generate random
       units: parseFloat(formData.units),
       avgBuyNav: parseFloat(formData.avgBuyNav),
-      isin: formData.isin
+      isin: formData.isin,
+      scheme_code: formData.scheme_code,
+      purchaseDate: formData.purchaseDate || ''
     });
   };
 
@@ -1163,66 +1381,121 @@ function AddMFModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* AMC Field - First */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              AMC (Asset Management Company) <span className="text-destructive">*</span>
+            </label>
+            <select
+              value={formData.amc}
+              onChange={(e) => setFormData({ ...formData, amc: e.target.value, category: '', plan: '', name: '', scheme_code: '', isin: '' })}
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+              disabled={loadingAMCs}
+            >
+              <option value="">Select AMC</option>
+              {amcList.length > 0 ? (
+                amcList.map((amc) => (
+                  <option key={amc} value={amc}>
+                    {amc}
+                  </option>
+                ))
+              ) : (
+                !loadingAMCs && <option value="" disabled>No AMCs available</option>
+              )}
+            </select>
+            {loadingAMCs && (
+              <p className="text-xs text-muted-foreground mt-1">Loading AMCs...</p>
+            )}
+            {!loadingAMCs && amcList.length === 0 && (
+              <p className="text-xs text-destructive mt-1">
+                No AMCs found. Please check if mf_scheme_master table has data.
+              </p>
+            )}
+          </div>
+
+          {/* Category Field - Second */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Category <span className="text-destructive">*</span>
+            </label>
+            <select
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value, plan: '', name: '', scheme_code: '', isin: '' })}
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+              disabled={!formData.amc || loadingCategories}
+            >
+              <option value="">{formData.amc ? 'Select Category' : 'Select AMC first'}</option>
+              {categoryList.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+            {loadingCategories && (
+              <p className="text-xs text-muted-foreground mt-1">Loading categories...</p>
+            )}
+            {formData.amc && !loadingCategories && categoryList.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-1">No categories found for this AMC</p>
+            )}
+          </div>
+
+          {/* Plan Field - Third */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Plan <span className="text-destructive">*</span>
+            </label>
+            <select
+              value={formData.plan}
+              onChange={(e) => {
+                const newPlan = e.target.value;
+                setFormData({ ...formData, plan: newPlan, name: '', scheme_code: '', isin: '' });
+              }}
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              required
+              disabled={!formData.amc || !formData.category || loadingPlans}
+            >
+              <option value="">{formData.amc && formData.category ? 'Select Plan' : 'Select AMC and Category first'}</option>
+              {planList.map((plan) => (
+                <option key={plan} value={plan}>
+                  {plan}
+                </option>
+              ))}
+            </select>
+            {loadingPlans && (
+              <p className="text-xs text-muted-foreground mt-1">Loading plans...</p>
+            )}
+            {formData.amc && formData.category && !loadingPlans && planList.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-1">No plans found for this AMC and Category</p>
+            )}
+          </div>
+
+          {/* Scheme Name Field - Fourth (filtered by AMC + Category + Plan) */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               Scheme Name <span className="text-destructive">*</span>
             </label>
-            <input
-              type="text"
+            <select
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g., HDFC Flexi Cap Fund Direct Growth"
+              onChange={(e) => handleSchemeChange(e.target.value)}
               className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
               required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
-              AMC (Asset Management Company)
-            </label>
-            <input
-              type="text"
-              value={formData.amc}
-              onChange={(e) => setFormData({ ...formData, amc: e.target.value })}
-              placeholder="e.g., HDFC Mutual Fund"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
-              Category
-            </label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              disabled={!formData.amc || !formData.category || !formData.plan || loadingSchemes}
             >
-              <option value="Large Cap">Large Cap</option>
-              <option value="Mid Cap">Mid Cap</option>
-              <option value="Small Cap">Small Cap</option>
-              <option value="Flexi Cap">Flexi Cap</option>
-              <option value="Multi Cap">Multi Cap</option>
-              <option value="Debt">Debt</option>
-              <option value="Hybrid">Hybrid</option>
+              <option value="">{formData.amc && formData.category && formData.plan ? 'Select Scheme' : 'Select AMC, Category, and Plan first'}</option>
+              {schemeList.map((scheme) => (
+                <option key={scheme.scheme_code} value={scheme.scheme_name}>
+                  {scheme.scheme_name}
+                </option>
+              ))}
             </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
-              Plan
-            </label>
-            <select
-              value={formData.plan}
-              onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
-            >
-              <option value="Direct - Growth">Direct - Growth</option>
-              <option value="Direct - Dividend">Direct - Dividend</option>
-              <option value="Regular - Growth">Regular - Growth</option>
-              <option value="Regular - Dividend">Regular - Dividend</option>
-            </select>
+            {loadingSchemes && (
+              <p className="text-xs text-muted-foreground mt-1">Loading schemes...</p>
+            )}
+            {formData.amc && formData.category && formData.plan && !loadingSchemes && schemeList.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-1">No schemes found for this combination</p>
+            )}
           </div>
 
           <div>
@@ -1272,14 +1545,30 @@ function AddMFModal({
 
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
-              ISIN (Optional)
+              Purchase Date <span className="text-muted-foreground text-xs">(for XIRR calculation)</span>
+            </label>
+            <input
+              type="date"
+              value={formData.purchaseDate}
+              onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
+              max={new Date().toISOString().split('T')[0]} // Cannot be future date
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Required for accurate XIRR calculation. For SIP, use the first purchase date.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              ISIN (Auto-filled)
             </label>
             <input
               type="text"
               value={formData.isin}
-              onChange={(e) => setFormData({ ...formData, isin: e.target.value })}
-              placeholder="e.g., INF209K01YH5"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              readOnly
+              placeholder="Auto-filled based on scheme and plan"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg text-muted-foreground cursor-not-allowed"
             />
           </div>
 
@@ -1302,7 +1591,7 @@ function AddMFModal({
             </button>
             <button
               type="submit"
-              disabled={isLoading || !formData.name || !formData.units || !formData.avgBuyNav}
+              disabled={isLoading || !formData.name || !formData.units || !formData.avgBuyNav || !formData.amc || !formData.category || !formData.plan}
               className="flex-1 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Adding...' : 'Add MF'}
@@ -1347,7 +1636,9 @@ function EditMFModal({
     
     onSave({
       units: parseFloat(formData.units),
-      avgBuyNav: parseFloat(formData.avgBuyNav)
+      avgBuyNav: parseFloat(formData.avgBuyNav),
+      folio: formData.folio || '',
+      purchaseDate: formData.purchaseDate || ''
     });
   };
 
@@ -1404,6 +1695,35 @@ function EditMFModal({
               className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
               required
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Folio Number
+            </label>
+            <input
+              type="text"
+              value={formData.folio || ''}
+              onChange={(e) => setFormData({ ...formData, folio: e.target.value })}
+              placeholder="e.g., 12345/67"
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Purchase Date <span className="text-muted-foreground text-xs">(for XIRR calculation)</span>
+            </label>
+            <input
+              type="date"
+              value={formData.purchaseDate || ''}
+              onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
+              max={new Date().toISOString().split('T')[0]} // Cannot be future date
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Required for accurate XIRR calculation. For SIP, use the first purchase date.
+            </p>
           </div>
 
           {newInvestedValue > 0 && (

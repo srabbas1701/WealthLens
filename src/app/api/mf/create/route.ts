@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { classifyAsset } from '@/lib/asset-classification';
+import { extractAMC } from '@/lib/mf-extraction-utils';
 
 // Helper: Get or create user's primary portfolio
 async function getPrimaryPortfolio(userId: string, supabase: any) {
@@ -101,12 +102,12 @@ async function createOrGetMFAsset(name: string, isin: string | undefined, supaba
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, amc, category, plan, folio, units, avgBuyNav, isin, user_id } = body;
+    const { name, amc, category, plan, folio, units, avgBuyNav, isin, user_id, scheme_code, purchaseDate } = body;
 
     // Validation
-    if (!name || !units || !avgBuyNav) {
+    if (!name || !units || !avgBuyNav || !amc) {
       return NextResponse.json(
-        { error: 'Missing required fields: name, units, avgBuyNav' },
+        { error: 'Missing required fields: name, amc, units, avgBuyNav' },
         { status: 400 }
       );
     }
@@ -120,11 +121,93 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
+    // Server-side validation: Verify scheme exists in mf_scheme_master
+    let validatedIsin = isin;
+    if (scheme_code) {
+      const { data: schemeData, error: schemeError } = await supabase
+        .from('mf_scheme_master')
+        .select('scheme_code, scheme_name, amc_name, isin_growth, isin_div_payout, isin_div_reinvest')
+        .eq('scheme_code', scheme_code)
+        .eq('scheme_name', name)
+        .eq('scheme_status', 'Active')
+        .maybeSingle();
+
+      if (schemeError || !schemeData) {
+        return NextResponse.json(
+          { error: 'Invalid scheme. Please select a valid scheme from the dropdown.' },
+          { status: 400 }
+        );
+      }
+
+      // Validate AMC matches - use amc_name column if available, otherwise extract
+      const schemeAMC = schemeData.amc_name || extractAMC(schemeData.scheme_name);
+      const amcLower = amc.toLowerCase().trim();
+      const schemeAMCLower = schemeAMC.toLowerCase().trim();
+      
+      // Check if they match or if one contains the other (for variations)
+      if (amcLower !== schemeAMCLower && 
+          !amcLower.includes(schemeAMCLower) && 
+          !schemeAMCLower.includes(amcLower)) {
+        return NextResponse.json(
+          { error: 'AMC mismatch. Please select a valid scheme from the dropdown.' },
+          { status: 400 }
+        );
+      }
+
+      // Use the correct ISIN from the database
+      if (!validatedIsin) {
+        if (plan?.includes('Dividend')) {
+          validatedIsin = schemeData.isin_div_payout || schemeData.isin_div_reinvest || schemeData.isin_growth || '';
+        } else {
+          validatedIsin = schemeData.isin_growth || '';
+        }
+      }
+    } else {
+      // Fallback: Try to find scheme by name and validate AMC
+      const { data: schemeData, error: schemeError } = await supabase
+        .from('mf_scheme_master')
+        .select('scheme_code, scheme_name, amc_name, isin_growth, isin_div_payout, isin_div_reinvest')
+        .eq('scheme_name', name)
+        .eq('scheme_status', 'Active')
+        .maybeSingle();
+
+      if (schemeError || !schemeData) {
+        return NextResponse.json(
+          { error: 'Invalid scheme. Please select a valid scheme from the dropdown.' },
+          { status: 400 }
+        );
+      }
+
+      // Validate AMC matches - use amc_name column if available, otherwise extract
+      const schemeAMC = schemeData.amc_name || extractAMC(schemeData.scheme_name);
+      const amcLower = amc.toLowerCase().trim();
+      const schemeAMCLower = schemeAMC.toLowerCase().trim();
+      
+      // Check if they match or if one contains the other (for variations)
+      if (amcLower !== schemeAMCLower && 
+          !amcLower.includes(schemeAMCLower) && 
+          !schemeAMCLower.includes(amcLower)) {
+        return NextResponse.json(
+          { error: 'AMC mismatch. Please select a valid scheme from the dropdown.' },
+          { status: 400 }
+        );
+      }
+
+      // Use the correct ISIN from the database
+      if (!validatedIsin) {
+        if (plan?.includes('Dividend')) {
+          validatedIsin = schemeData.isin_div_payout || schemeData.isin_div_reinvest || schemeData.isin_growth || '';
+        } else {
+          validatedIsin = schemeData.isin_growth || '';
+        }
+      }
+    }
+
     // Get or create portfolio
     const portfolioId = await getPrimaryPortfolio(user_id, supabase);
 
     // Create or get asset
-    const assetId = await createOrGetMFAsset(name, isin, supabase);
+    const assetId = await createOrGetMFAsset(name, validatedIsin, supabase);
 
     // Calculate values
     const investedValue = parseFloat(units) * parseFloat(avgBuyNav);
@@ -137,22 +220,30 @@ export async function POST(request: NextRequest) {
       category: category || 'Large Cap',
       plan: plan || 'Direct - Growth',
       folio: folio || null,
-      isin: isin || null,
+      isin: validatedIsin || null,
+      purchase_date: purchaseDate || null, // Store purchase date for XIRR calculation
     };
 
     // Create holding
+    const holdingData: any = {
+      portfolio_id: portfolioId,
+      asset_id: assetId,
+      quantity: parseFloat(units),
+      average_price: parseFloat(avgBuyNav),
+      invested_value: investedValue,
+      current_value: currentValue,
+      source: 'manual',
+      notes: JSON.stringify(metadata),
+    };
+    
+    // Add purchase_date if provided (store in both column and metadata for backward compatibility)
+    if (purchaseDate) {
+      holdingData.purchase_date = purchaseDate;
+    }
+    
     const { data: holding, error: holdingError } = await supabase
       .from('holdings')
-      .insert({
-        portfolio_id: portfolioId,
-        asset_id: assetId,
-        quantity: parseFloat(units),
-        average_price: parseFloat(avgBuyNav),
-        invested_value: investedValue,
-        current_value: currentValue,
-        source: 'manual',
-        notes: JSON.stringify(metadata),
-      })
+      .insert(holdingData)
       .select(`
         *,
         assets (

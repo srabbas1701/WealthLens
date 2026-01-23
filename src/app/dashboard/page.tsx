@@ -68,6 +68,9 @@ import VerificationBanner from '@/components/VerificationBanner';
 import InsightsLimitBanner from '@/components/InsightsLimitBanner';
 import OnboardingHint from '@/components/OnboardingHint';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { CategoryInfoTooltip } from '@/components/CategoryInfoTooltip';
+import { useWebVitals } from '@/hooks/useWebVitals';
 import { useAuth, useAuthAppData } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { aggregatePortfolioData, validatePortfolioData } from '@/lib/portfolio-aggregation';
@@ -205,6 +208,9 @@ const EMPTY_PORTFOLIO: PortfolioData = {
 // ============================================================================
 
 function DashboardContent() {
+  // Web Vitals Monitoring - tracks performance metrics
+  useWebVitals();
+  
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -339,7 +345,7 @@ function DashboardContent() {
   }, [authStatus, router]);
 
   // GUARD: Redirect if no portfolio
-  // PERMANENT FIX: Simplified redirect logic to prevent race conditions
+  // OPTIMIZATION: Simplified redirect logic to prevent blocking renders
   useEffect(() => {
     // CRITICAL: Only run redirect logic if we're actually on the dashboard route
     if (pathname !== '/dashboard') {
@@ -353,12 +359,21 @@ function DashboardContent() {
       return;
     }
     
+    // OPTIMIZATION: Add timeout to prevent infinite waiting
+    // If portfolio check takes too long, proceed anyway
+    const redirectTimeout = setTimeout(() => {
+      if (!portfolioCheckComplete && !redirectAttemptedRef.current) {
+        console.warn('[Dashboard] Portfolio check timeout - proceeding with dashboard');
+        // Don't redirect if check is taking too long - show dashboard instead
+      }
+    }, 5000); // 5 second timeout
+    
     // GUARD: Wait for portfolio check to complete (or timeout)
-    // PERMANENT FIX: Use portfolioCheckComplete from auth context as single source of truth
     if (!portfolioCheckComplete) {
-      // Portfolio check not complete yet - wait
-      return;
+      return () => clearTimeout(redirectTimeout);
     }
+    
+    clearTimeout(redirectTimeout);
     
     // PERMANENT FIX: Clear redirect state when navigating from home page or header
     // Skip redirect checks if user explicitly navigated from home page
@@ -441,21 +456,39 @@ function DashboardContent() {
   }, [authStatus, user, hasPortfolio, portfolioCheckComplete, router, pathname]);
 
   // Fetch portfolio data
+  // OPTIMIZATION: Added timeout and better error handling to prevent hanging
   const fetchPortfolioData = useCallback(async (userId: string) => {
     // Prevent duplicate simultaneous fetches (React 18 dev mode causes double-calls)
     if (fetchingRef.current) {
+      console.log('[Dashboard] Skipping duplicate portfolio fetch');
       return;
     }
     
     fetchingRef.current = true;
     setPortfolioLoading(true);
     
+    // OPTIMIZATION: Add timeout to prevent hanging
+    const timeoutId = setTimeout(() => {
+      if (fetchingRef.current) {
+        console.warn('[Dashboard] Portfolio data fetch timeout after 10s');
+        setPortfolioLoading(false);
+        fetchingRef.current = false;
+      }
+    }, 10000);
+    
     try {
       const params = new URLSearchParams({ user_id: userId });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout for fetch
+      
       const response = await fetch(`/api/portfolio/data?${params}`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeout);
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         const result = await response.json();
@@ -463,6 +496,8 @@ function DashboardContent() {
           setPortfolioData(result.data);
         } else {
           console.warn('[Dashboard] Portfolio data fetch returned success=false:', result);
+          // Set empty portfolio to prevent UI from hanging
+          setPortfolioData(EMPTY_PORTFOLIO);
         }
       } else {
         console.error('[Dashboard] Portfolio data fetch failed:', {
@@ -470,11 +505,18 @@ function DashboardContent() {
           statusText: response.statusText,
           url: response.url
         });
-        const errorText = await response.text().catch(() => 'Unable to read error response');
-        console.error('[Dashboard] Error response body:', errorText);
+        // Set empty portfolio on error to prevent hanging
+        setPortfolioData(EMPTY_PORTFOLIO);
       }
-    } catch (error) {
-      console.error('[Dashboard] Failed to fetch portfolio data:', error);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.warn('[Dashboard] Portfolio data fetch aborted (timeout)');
+      } else {
+        console.error('[Dashboard] Failed to fetch portfolio data:', error);
+      }
+      // Set empty portfolio on error to prevent hanging
+      setPortfolioData(EMPTY_PORTFOLIO);
     } finally {
       setPortfolioLoading(false);
       fetchingRef.current = false;
@@ -482,6 +524,7 @@ function DashboardContent() {
   }, []);
 
   // Fetch AI daily summary
+  // OPTIMIZATION: Added timeout to prevent hanging
   const fetchAiSummary = useCallback(async (userId: string) => {
     // Prevent duplicate simultaneous fetches
     if (fetchingAiSummaryRef.current) {
@@ -492,12 +535,29 @@ function DashboardContent() {
     setSummaryLoading(true);
     setSummaryError(false);
     
+    // OPTIMIZATION: Add timeout
+    const timeoutId = setTimeout(() => {
+      if (fetchingAiSummaryRef.current) {
+        console.warn('[Dashboard] AI summary fetch timeout');
+        setSummaryLoading(false);
+        setSummaryError(true);
+        fetchingAiSummaryRef.current = false;
+      }
+    }, 8000);
+    
     try {
       const params = new URLSearchParams({ user_id: userId });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000); // 7s timeout
+      
       const response = await fetch(`/api/copilot/daily-summary?${params}`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeout);
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         const data: DailySummaryResponse = await response.json();
@@ -505,8 +565,11 @@ function DashboardContent() {
       } else {
         setSummaryError(true);
       }
-    } catch (error) {
-      console.error('Failed to fetch AI daily summary:', error);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name !== 'AbortError') {
+        console.error('Failed to fetch AI daily summary:', error);
+      }
       setSummaryError(true);
     } finally {
       setSummaryLoading(false);
@@ -515,6 +578,7 @@ function DashboardContent() {
   }, []);
 
   // Fetch AI weekly summary
+  // OPTIMIZATION: Added timeout to prevent hanging
   const fetchWeeklySummary = useCallback(async (userId: string) => {
     // Prevent duplicate simultaneous fetches
     if (fetchingWeeklySummaryRef.current) {
@@ -525,12 +589,29 @@ function DashboardContent() {
     setWeeklyLoading(true);
     setWeeklyError(false);
     
+    // OPTIMIZATION: Add timeout
+    const timeoutId = setTimeout(() => {
+      if (fetchingWeeklySummaryRef.current) {
+        console.warn('[Dashboard] Weekly summary fetch timeout');
+        setWeeklyLoading(false);
+        setWeeklyError(true);
+        fetchingWeeklySummaryRef.current = false;
+      }
+    }, 8000);
+    
     try {
       const params = new URLSearchParams({ user_id: userId });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000); // 7s timeout
+      
       const response = await fetch(`/api/copilot/weekly-summary?${params}`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeout);
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         const data: WeeklySummaryResponse = await response.json();
@@ -538,8 +619,11 @@ function DashboardContent() {
       } else {
         setWeeklyError(true);
       }
-    } catch (error) {
-      console.error('Failed to fetch AI weekly summary:', error);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name !== 'AbortError') {
+        console.error('Failed to fetch AI weekly summary:', error);
+      }
       setWeeklyError(true);
     } finally {
       setWeeklyLoading(false);
@@ -594,15 +678,33 @@ function DashboardContent() {
   }, [authStatus, user?.id, hasPortfolio, portfolioCheckComplete]);
 
   // Fetch data when user is available
+  // OPTIMIZATION: Don't wait for hasPortfolio - fetch data immediately if user exists
+  // This prevents hanging when navigating back to dashboard
   useEffect(() => {
-    if (user?.id && hasPortfolio) {
-      console.log('[Dashboard] Fetching portfolio data for user:', user.id);
-      fetchPortfolioData(user.id);
-      fetchAiSummary(user.id);
-      fetchWeeklySummary(user.id);
+    if (!user?.id) return;
+    
+    // If portfolio check is complete and no portfolio, don't fetch
+    if (portfolioCheckComplete && !hasPortfolio) {
+      return;
     }
+    
+    // Fetch data immediately if user exists, even if portfolio check is in progress
+    // This ensures faster loading when navigating back to dashboard
+    console.log('[Dashboard] Fetching portfolio data for user:', user.id);
+    fetchPortfolioData(user.id);
+    fetchAiSummary(user.id);
+    fetchWeeklySummary(user.id);
+    
+    // OPTIMIZATION: Cleanup function to cancel any pending fetches on unmount
+    return () => {
+      // Reset fetch flags on unmount to allow fresh fetch on remount
+      fetchingRef.current = false;
+      fetchingAiSummaryRef.current = false;
+      fetchingWeeklySummaryRef.current = false;
+    };
+    
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, hasPortfolio]);
+  }, [user?.id, portfolioCheckComplete]);
 
 
   const getRiskAlignmentLabel = (status: RiskAlignmentStatus | undefined): string => {
@@ -716,7 +818,93 @@ function DashboardContent() {
   const isDataConsistent = validation.isValid && portfolioData.hasData;
   const portfolio = portfolioData;
 
+  // OPTIMIZATION: Memoize bucket mapping to prevent recalculation on every render
+  // Moved to top level to comply with Rules of Hooks
+  const bucketCardsContent = useMemo(() => {
+    // Map allocation names to bucket keys
+    const nameToBucket: Record<string, string> = {
+      'Growth Assets': 'Growth',
+      'Income & Allocation': 'IncomeAllocation',
+      'Real Assets': 'RealAsset',
+      'Commodities': 'Commodity',
+      'Cash & Liquidity': 'Cash',
+    };
+
+    const bucketToName: Record<string, string> = {
+      'Growth': 'Growth Assets',
+      'IncomeAllocation': 'Income & Allocation',
+      'RealAsset': 'Real Assets',
+      'Commodity': 'Commodities',
+      'Cash': 'Cash & Liquidity',
+    };
+
+    // Tooltip content for asset categories (exact copy as per requirements)
+    const bucketTooltips: Record<string, string> = {
+      'Growth': 'Investments meant to grow your wealth over time.\nExamples: Stocks, Equity Mutual Funds, Equity ETFs\nThese may fluctuate in the short term but aim for higher long-term returns.',
+      'IncomeAllocation': 'Investments focused on stability or steady income.\nExamples: FD, EPF, PPF, NPS, Debt & Hybrid Mutual Funds\nHelps balance risk and provide predictable returns.',
+      'RealAsset': 'Physical assets with long-term value.\nExamples: Property, Land, REITs\nUsually less liquid but form a strong wealth foundation.',
+      'Commodity': 'Assets that help protect against inflation.\nExamples: Gold, Silver\nOften used for diversification and safety.',
+      'Cash': 'Money that is easily accessible when needed.\nExamples: Savings account, Cash, Liquid funds\nUseful for emergencies and short-term needs.',
+      'Insurance': 'Financial protection for you and your family.\nExamples: Term life insurance, Health insurance\nNot counted as an investment or asset value.',
+      'Liability': 'Amounts you owe that reduce your net worth.\nExamples: Home loan, Personal loan, Credit card dues',
+    };
+
+    // Bucket order for display (allocation buckets only)
+    const bucketOrder = ['Growth', 'IncomeAllocation', 'RealAsset', 'Commodity', 'Cash'];
+
+    // Create a map from allocation items (from API - includes Real Estate)
+    const allocationMap = new Map<string, AllocationItem>();
+    portfolio.allocation.forEach((item) => {
+      const bucket = nameToBucket[item.name];
+      if (bucket) {
+        allocationMap.set(bucket, item);
+      }
+    });
+
+    // Get all 5 buckets and sort by value descending
+    const bucketsToShow = bucketOrder
+      .filter(bucket => allocationMap.has(bucket))
+      .map(bucket => {
+        const allocationItem = allocationMap.get(bucket)!;
+        return {
+          bucket,
+          allocationItem,
+          bucketName: bucketToName[bucket],
+          tooltip: bucketTooltips[bucket],
+        };
+      })
+      .sort((a, b) => b.allocationItem.value - a.allocationItem.value); // Sort by value descending
+
+    return bucketsToShow;
+  }, [portfolio.allocation]);
+
+  // OPTIMIZATION: Memoize XIRR calculation to prevent recalculation on every render
+  // Moved to top level to comply with Rules of Hooks
+  const xirrContent = useMemo(() => {
+    // Calculate XIRR from portfolio data
+    // Use createdAt (portfolio creation date) as start date, or 1 year ago as fallback
+    const startDate = portfolioData.summary.createdAt 
+      ? new Date(portfolioData.summary.createdAt)
+      : portfolioData.summary.lastUpdated
+        ? new Date(portfolioData.summary.lastUpdated)
+        : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000); // 1 year ago as default
+    
+    const xirr = calculateXIRRFromHoldings(
+      portfolioData.holdings.map(h => ({
+        investedValue: h.investedValue,
+        currentValue: h.currentValue,
+      })),
+      startDate
+    );
+    
+    return {
+      xirr,
+      startDate,
+    };
+  }, [portfolioData.holdings, portfolioData.summary.createdAt, portfolioData.summary.lastUpdated]);
+
   // Fetch Portfolio Health Score from API (same source as health score page)
+  // OPTIMIZATION: Added timeout and better error handling
   useEffect(() => {
     if (!user?.id || !isDataConsistent) {
       setPortfolioHealthScore(null);
@@ -725,14 +913,25 @@ function DashboardContent() {
 
     const fetchHealthScore = async () => {
       setHealthScoreLoading(true);
+      
+      // OPTIMIZATION: Add timeout to prevent hanging
+      const timeoutId = setTimeout(() => {
+        console.warn('[Dashboard] Health score fetch timeout');
+        setHealthScoreLoading(false);
+        setPortfolioHealthScore(null);
+      }, 10000);
+      
       try {
         const response = await fetchPortfolioHealthScore(user.id);
+        clearTimeout(timeoutId);
+        
         if (response.success && response.data) {
           setPortfolioHealthScore(response.data);
         } else {
           setPortfolioHealthScore(null);
         }
       } catch (error) {
+        clearTimeout(timeoutId);
         console.error('Failed to fetch health score:', error);
         setPortfolioHealthScore(null);
       } finally {
@@ -769,9 +968,10 @@ function DashboardContent() {
     );
   }
 
-  // PERMANENT FIX: Show loading only if portfolio check is in progress
-  // Simplified - use portfolioCheckComplete as single source of truth
-  if (user && !portfolioCheckComplete) {
+  // OPTIMIZATION: Show loading only if portfolio check is in progress AND we don't have data yet
+  // This prevents hanging when navigating back - show dashboard content even if check is in progress
+  // Only show loading screen if we're truly waiting for initial auth
+  if (user && !portfolioCheckComplete && authStatus === 'loading') {
     return (
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
@@ -795,10 +995,11 @@ function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
-      <AppHeader />
+    <ErrorBoundary>
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
+        <AppHeader />
 
-      <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24 bg-[#F6F8FB] dark:bg-[#0F172A]">
+        <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24 bg-[#F6F8FB] dark:bg-[#0F172A]">
         {/* Verification Banner (non-blocking) */}
         <VerificationBanner className="mb-8" />
         
@@ -928,8 +1129,9 @@ function DashboardContent() {
         {/* PORTFOLIO HEALTH SCORE WIDGET */}
         {/* ============================================================================ */}
         {isDataConsistent && (portfolioHealthScore || healthScoreLoading) && (
-          <section className="mb-6">
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+          <ErrorBoundary sectionName="Portfolio Health Score">
+            <section className="mb-6">
+              <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
               {healthScoreLoading ? (
                 <div className="flex items-center gap-4">
                   <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
@@ -1064,6 +1266,7 @@ function DashboardContent() {
               ) : null}
             </div>
           </section>
+          </ErrorBoundary>
         )}
 
         {/* ============================================================================ */}
@@ -1071,108 +1274,48 @@ function DashboardContent() {
         {/* ============================================================================ */}
         {isDataConsistent && (
         <section className="mb-12">
-          {(() => {
-            // Map allocation names to bucket keys
-            const nameToBucket: Record<string, string> = {
-              'Growth Assets': 'Growth',
-              'Income & Allocation': 'IncomeAllocation',
-              'Real Assets': 'RealAsset',
-              'Commodities': 'Commodity',
-              'Cash & Liquidity': 'Cash',
-            };
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            {bucketCardsContent.map(({ bucket, allocationItem, bucketName, tooltip }) => {
+              const value = allocationItem.value;
+              const percentage = allocationItem.percentage;
+              const color = allocationItem.color; // Use color from API allocation (matches pie chart)
 
-            const bucketToName: Record<string, string> = {
-              'Growth': 'Growth Assets',
-              'IncomeAllocation': 'Income & Allocation',
-              'RealAsset': 'Real Assets',
-              'Commodity': 'Commodities',
-              'Cash': 'Cash & Liquidity',
-            };
-
-            const bucketColors: Record<string, string> = {
-              'Growth': '#2563EB',           // Bright blue
-              'IncomeAllocation': '#10B981', // Bright emerald/green
-              'RealAsset': '#F97316',        // Bright orange
-              'Commodity': '#EAB308',        // Bright yellow/gold
-              'Cash': '#9333EA',             // Bright purple
-            };
-
-            const bucketTooltips: Record<string, string> = {
-              'Growth': 'Investments aimed at long-term capital appreciation.',
-              'IncomeAllocation': 'Assets designed to provide stability, income, or balanced exposure across asset classes.',
-              'RealAsset': 'Physical or tangible assets with long-term value.',
-              'Commodity': 'Assets used primarily for inflation protection and diversification.',
-              'Cash': 'Highly liquid assets for short-term needs.',
-            };
-
-            // Bucket order for display (allocation buckets only)
-            const bucketOrder = ['Growth', 'IncomeAllocation', 'RealAsset', 'Commodity', 'Cash'];
-
-            // Create a map from allocation items (from API - includes Real Estate)
-            const allocationMap = new Map<string, AllocationItem>();
-            portfolio.allocation.forEach((item) => {
-              const bucket = nameToBucket[item.name];
-              if (bucket) {
-                allocationMap.set(bucket, item);
-              }
-            });
-
-            // Get all 5 buckets and sort by value descending
-            const bucketsToShow = bucketOrder
-              .filter(bucket => allocationMap.has(bucket))
-              .map(bucket => {
-                const allocationItem = allocationMap.get(bucket)!;
-                return {
-                  bucket,
-                  allocationItem,
-                  bucketName: bucketToName[bucket],
-                };
-              })
-              .sort((a, b) => b.allocationItem.value - a.allocationItem.value); // Sort by value descending
-
-            return (
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                {bucketsToShow.map(({ bucket, allocationItem, bucketName }) => {
-                  const value = allocationItem.value;
-                  const percentage = allocationItem.percentage;
-                  const color = allocationItem.color; // Use color from API allocation (matches pie chart)
-
-                  return (
-                    <Link
-                      key={bucket}
-                      href={`/portfolio/summary?bucket=${bucket}`}
-                      className="relative bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all block"
-                      title={bucketTooltips[bucket]}
-                    >
-                      {/* Color Button - Top Right Corner (double size of legend button) */}
-                      {/* Legend uses w-3 h-3 (12px), so tiles use w-6 h-6 (24px) */}
-                      <div 
-                        className="absolute top-4 right-4 w-6 h-6 rounded-full border-2 border-white dark:border-[#1E293B] shadow-sm"
-                        style={{ backgroundColor: color }}
-                        aria-label={`${bucketName} color indicator`}
-                      />
-                      
-                      <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-6 pr-10">
-                        {bucketName}
+              return (
+                <Link
+                  key={bucket}
+                  href={`/portfolio/summary?bucket=${bucket}`}
+                  className="relative bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] block card-hover"
+                >
+                  {/* Color Button - Top Right Corner (double size of legend button) */}
+                  {/* Legend uses w-3 h-3 (12px), so tiles use w-6 h-6 (24px) */}
+                  <div 
+                    className="absolute top-4 right-4 w-6 h-6 rounded-full border-2 border-white dark:border-[#1E293B] shadow-sm"
+                    style={{ backgroundColor: color }}
+                    aria-label={`${bucketName} color indicator`}
+                  />
+                  
+                  <div className="flex items-center gap-2 mb-6 pr-10">
+                    <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]">
+                      {bucketName}
+                    </p>
+                    <CategoryInfoTooltip content={tooltip} />
+                  </div>
+                  {portfolioLoading ? (
+                    <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
+                  ) : (
+                    <>
+                      <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
+                        {formatCurrency(value)}
                       </p>
-                      {portfolioLoading ? (
-                        <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
-                      ) : (
-                        <>
-                          <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
-                            {formatCurrency(value)}
-                          </p>
-                          <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
-                            {percentage.toFixed(0)}%
-                          </p>
-                        </>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            );
-          })()}
+                      <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
+                        {percentage.toFixed(0)}%
+                      </p>
+                    </>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
         </section>
         )}
 
@@ -1337,55 +1480,34 @@ function DashboardContent() {
         {/* ============================================================================ */}
         <section className="mb-8 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
           <div className="text-center">
-            {(() => {
-              // Calculate XIRR from portfolio data
-              // Use createdAt (portfolio creation date) as start date, or 1 year ago as fallback
-              const startDate = portfolioData.summary.createdAt 
-                ? new Date(portfolioData.summary.createdAt)
-                : portfolioData.summary.lastUpdated
-                  ? new Date(portfolioData.summary.lastUpdated)
-                  : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000); // 1 year ago as default
-              
-              const xirr = calculateXIRRFromHoldings(
-                portfolioData.holdings.map(h => ({
-                  investedValue: h.investedValue,
-                  currentValue: h.currentValue,
-                })),
-                startDate
-              );
-              
-              return (
-                <>
-                  <p className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
-                    Portfolio XIRR: {xirr !== null ? formatXIRR(xirr, false) : 'N/A'}
-                  </p>
-                  <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-2">
-                    {xirr !== null 
-                      ? (portfolioData.summary.createdAt 
-                          ? `Since ${new Date(portfolioData.summary.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })} • All asset classes`
-                          : portfolioData.summary.lastUpdated
-                            ? `Since ${new Date(portfolioData.summary.lastUpdated).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })} • All asset classes`
-                            : 'Since inception • All asset classes')
-                      : portfolioData.holdings.length === 0
-                        ? 'Add holdings to calculate XIRR'
-                        : 'Requires at least 30 days of data • All asset classes'
-                    }
-                  </p>
-                </>
-              );
-            })()}
+            <p className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
+              Portfolio XIRR: {xirrContent.xirr !== null ? formatXIRR(xirrContent.xirr, false) : 'N/A'}
+            </p>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-2">
+              {xirrContent.xirr !== null 
+                ? (portfolioData.summary.createdAt 
+                    ? `Since ${new Date(portfolioData.summary.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })} • All asset classes`
+                    : portfolioData.summary.lastUpdated
+                      ? `Since ${new Date(portfolioData.summary.lastUpdated).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })} • All asset classes`
+                      : 'Since inception • All asset classes')
+                : portfolioData.holdings.length === 0
+                  ? 'Add holdings to calculate XIRR'
+                  : 'Requires at least 30 days of data • All asset classes'
+              }
+            </p>
           </div>
         </section>
 
         {/* ============================================================================ */}
         {/* ZONE 6: INSIGHTS & ALERTS (Below the Fold) */}
         {/* ============================================================================ */}
-        <OnboardingHint
-          id="insights-section"
-          message="Portfolio insights are generated based on your holdings. More complete data leads to more accurate insights."
-          position="top"
-        >
-          <section className="mb-16 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden">
+        <ErrorBoundary sectionName="Insights & Alerts">
+          <OnboardingHint
+            id="insights-section"
+            message="Portfolio insights are generated based on your holdings. More complete data leads to more accurate insights."
+            position="top"
+          >
+            <section className="mb-16 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden">
             <div className="px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
               <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Insights & Alerts</h2>
             </div>
@@ -1457,7 +1579,8 @@ function DashboardContent() {
             </div>
           )}
           </section>
-        </OnboardingHint>
+          </OnboardingHint>
+        </ErrorBoundary>
 
         {/* ============================================================================ */}
         {/* ANALYTICS LINK (Below the Fold) */}
@@ -1483,8 +1606,9 @@ function DashboardContent() {
           {/* All Investments Table - Moved to separate page */}
         </div>
       </main>
+      </div>
 
-      {/* Floating Copilot - Positioned top-right for better visibility */}
+      {/* Floating Copilot - Positioned top-right for better visibility (outside ErrorBoundary) */}
       <FloatingCopilot 
         source="dashboard" 
         userId={user?.id || ''} 
@@ -1565,7 +1689,7 @@ function DashboardContent() {
         onSuccess={handleUploadSuccess}
         existingHolding={null}
       />
-    </div>
+    </ErrorBoundary>
   );
 }
 
