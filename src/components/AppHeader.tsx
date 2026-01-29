@@ -115,21 +115,14 @@ export function AppHeader({
   // Return simple header that doesn't depend on portfolio/onboarding state
   // This ensures / loads instantly without waiting for portfolio queries
   if (isLandingPage || isInDemoMode) {
-    const handleLogout = async () => {
+    const handleLogout = () => {
       setShowLogoutModal(false);
       setShowUserMenu(false);
-      try {
-        // For manual logout, skip redirect in signOut and handle it here
-        // This allows us to redirect to login page for manual logout
-        await signOut({ reason: 'manual', skipRedirect: true });
-      } catch (error) {
-        console.error('[AppHeader] Error during logout:', error);
-        // Continue with redirect even if signOut fails
-      } finally {
-        // Force immediate full page navigation to login to ensure clean state
-        // This ensures redirect happens even if signOut() throws an error
-        window.location.href = '/login';
-      }
+      // CRITICAL: Redirect IMMEDIATELY - never await signOut (it can hang on network)
+      // Full page navigation ensures we never get stuck on "Redirecting..."
+      window.location.href = '/';
+      // Fire signOut in background (clears server session; may not complete before nav)
+      signOut({ reason: 'manual', skipRedirect: true }).catch(() => {});
     };
 
     // Return landing/demo header (no portfolio dependencies)
@@ -250,24 +243,14 @@ export function AppHeader({
   // BELOW THIS POINT: App routes only (dashboard, portfolio, etc.)
   // These routes CAN use portfolio/onboarding state
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     setShowLogoutModal(false);
     setShowUserMenu(false);
-    
-    try {
-      // LOGOUT FLOW:
-      // 1. Call signOut (clears state and cache)
-      // 2. Redirect to login immediately to avoid conflicts with page guards
-      // For manual logout, skip redirect in signOut and handle it here
-      await signOut({ reason: 'manual', skipRedirect: true });
-    } catch (error) {
-      console.error('[AppHeader] Error during logout:', error);
-      // Continue with redirect even if signOut fails
-    } finally {
-      // Force immediate full page navigation to login to ensure clean state
-      // This ensures redirect happens even if signOut() throws an error
-      window.location.href = '/login';
-    }
+    // CRITICAL: Redirect IMMEDIATELY - never await signOut (it can hang on network)
+    // Full page navigation ensures we never get stuck on "Redirecting..."
+    window.location.href = '/';
+    // Fire signOut in background (clears server session; may not complete before nav)
+    signOut({ reason: 'manual', skipRedirect: true }).catch(() => {});
   };
 
   return (

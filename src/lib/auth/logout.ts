@@ -41,48 +41,48 @@ export async function handleLogout(options: LogoutOptions = {}): Promise<void> {
 
   console.log('[Logout] Starting logout process, reason:', reason);
 
-  try {
-    // Step 1: Clear Supabase session (backend)
-    const supabase = createClient();
-    await supabase.auth.signOut();
-
-    // Step 2: Clear localStorage (session activity tracking)
-    localStorage.removeItem('lastActivity');
-    localStorage.removeItem('sessionWarningShown');
-    localStorage.removeItem('sessionLogout');
-
-    // Step 3: Clear sessionStorage (auth state)
-    sessionStorage.removeItem('auth_loading_start');
-    sessionStorage.removeItem('loadAppData_start');
-
-    // Step 4: Notify other tabs about logout
-    localStorage.setItem('sessionLogout', Date.now().toString());
-    // Remove immediately to trigger storage event
-    setTimeout(() => {
-      localStorage.removeItem('sessionLogout');
-    }, 100);
-
-    // Step 5: Redirect if needed
+  const doRedirect = () => {
     if (!skipRedirect && typeof window !== 'undefined') {
-      // Add reason to URL for landing page to show appropriate message
       const url = new URL(redirectTo, window.location.origin);
-      
       if (reason === 'inactivity') {
         url.searchParams.set('timeout', 'true');
       } else if (reason === 'session_expired' || reason === 'token_expired') {
         url.searchParams.set('session_expired', 'true');
       }
-      
       window.location.href = url.toString();
     }
+  };
 
+  try {
+    // Step 1: Clear localStorage (session activity tracking)
+    localStorage.removeItem('lastActivity');
+    localStorage.removeItem('sessionWarningShown');
+    localStorage.removeItem('sessionLogout');
+
+    // Step 2: Clear sessionStorage (auth state)
+    sessionStorage.removeItem('auth_loading_start');
+    sessionStorage.removeItem('loadAppData_start');
+
+    // Step 3: Notify other tabs about logout
+    localStorage.setItem('sessionLogout', Date.now().toString());
+    setTimeout(() => {
+      localStorage.removeItem('sessionLogout');
+    }, 100);
+
+    // Step 4: Clear Supabase session - with 2s timeout so we never get stuck
+    const supabase = createClient();
+    const signOutPromise = supabase.auth.signOut();
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(resolve, 2000);
+    });
+    await Promise.race([signOutPromise, timeoutPromise]);
+
+    // Step 5: Redirect (always runs - either after signOut or after timeout)
+    doRedirect();
     console.log('[Logout] Logout complete, reason:', reason);
   } catch (error) {
     console.error('[Logout] Error during logout:', error);
-    // Even if logout fails, try to redirect
-    if (!skipRedirect && typeof window !== 'undefined') {
-      window.location.href = redirectTo;
-    }
+    doRedirect();
     throw error;
   }
 }

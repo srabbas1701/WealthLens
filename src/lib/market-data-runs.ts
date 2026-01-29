@@ -12,6 +12,23 @@ export interface CompleteRunStats {
   skippedCount: number;
   failedCount: number;
   targetDate?: string | null; // YYYY-MM-DD or null
+  notes?: string | null;
+}
+
+/** Options for starting a market data run (ISIN backfill, etc.) */
+export interface StartRunOptions {
+  assetType: 'stocks' | 'mutual_fund' | 'isin_backfill';
+  runType: 'cron' | 'manual';
+  triggerSource: 'supabase_cron' | 'ui_button';
+  targetDate?: string | null; // YYYY-MM-DD or null
+}
+
+/** Stats for completing a market data run */
+export interface CompleteRunOptions {
+  successCount: number;
+  skippedCount: number;
+  failedCount: number;
+  notes?: string | null;
 }
 
 /**
@@ -112,5 +129,91 @@ export async function failRun(
     return;
   }
   
+  console.error(`[MarketDataRuns] Failed run ${runId}: ${errorMessage}`);
+}
+
+// =============================================================================
+// Extended API for ISIN backfill and other run types (migration 012 schema)
+// =============================================================================
+
+/**
+ * Start a market data run (extended API for isin_backfill, etc.)
+ * Uses schema: asset_type in ('stocks', 'mutual_fund', 'isin_backfill')
+ */
+export async function startMarketDataRun(options: StartRunOptions): Promise<string> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('market_data_runs')
+    .insert({
+      asset_type: options.assetType,
+      run_type: options.runType,
+      trigger_source: options.triggerSource,
+      target_date: options.targetDate || null,
+      started_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('[MarketDataRuns] Error starting run:', error);
+    throw new Error(`Failed to start market data run: ${error.message}`);
+  }
+
+  if (!data?.id) {
+    throw new Error('Failed to start market data run: no ID returned');
+  }
+
+  console.log(`[MarketDataRuns] Started run ${data.id} for ${options.assetType} (${options.runType})`);
+  return data.id;
+}
+
+/**
+ * Complete a market data run with stats (extended API)
+ */
+export async function completeMarketDataRun(
+  runId: string,
+  stats: CompleteRunOptions
+): Promise<void> {
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from('market_data_runs')
+    .update({
+      completed_at: new Date().toISOString(),
+      status: 'completed',
+      success_count: stats.successCount,
+      skipped_count: stats.skippedCount,
+      failed_count: stats.failedCount,
+      notes: stats.notes || null,
+      error: null,
+    })
+    .eq('id', runId);
+
+  if (error) {
+    console.error(`[MarketDataRuns] Error completing run ${runId}:`, error);
+    throw new Error(`Failed to complete market data run: ${error.message}`);
+  }
+
+  console.log(`[MarketDataRuns] Completed run ${runId}: ${stats.successCount} success, ${stats.skippedCount} skipped, ${stats.failedCount} failed`);
+}
+
+/**
+ * Mark a market data run as failed (extended API)
+ */
+export async function failMarketDataRun(runId: string, errorMessage: string): Promise<void> {
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from('market_data_runs')
+    .update({
+      completed_at: new Date().toISOString(),
+      status: 'failed',
+      error: errorMessage,
+    })
+    .eq('id', runId);
+
+  if (error) {
+    console.error(`[MarketDataRuns] Error failing run ${runId}:`, error);
+    return;
+  }
+
   console.error(`[MarketDataRuns] Failed run ${runId}: ${errorMessage}`);
 }

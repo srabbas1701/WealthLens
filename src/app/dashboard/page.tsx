@@ -333,16 +333,13 @@ function DashboardContent() {
 
   // GUARD: Redirect if not authenticated
   // RULE: Never redirect while authStatus === 'loading'
+  // CRITICAL: Use window.location.href (full page nav) - router.replace can fail during logout
   useEffect(() => {
-    // GUARD: Block redirects during loading
     if (authStatus === 'loading') return;
-    
-    // Auth state resolved - check authentication
     if (authStatus === 'unauthenticated') {
-      // Unauthenticated - redirect to login
-      router.replace('/login?redirect=/dashboard');
+      window.location.href = '/login?redirect=/dashboard';
     }
-  }, [authStatus, router]);
+  }, [authStatus]);
 
   // GUARD: Redirect if no portfolio
   // OPTIMIZATION: Simplified redirect logic to prevent blocking renders
@@ -955,9 +952,8 @@ function DashboardContent() {
     );
   }
 
-  // GUARD: Redirect if not authenticated (only after loading is complete)
+  // GUARD: Redirect if not authenticated (useEffect above does window.location.href)
   if (authStatus === 'unauthenticated') {
-    // Redirect happens in useEffect above, just show message briefly
     return (
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
