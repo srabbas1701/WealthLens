@@ -412,6 +412,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const loadingRef = useRef(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastLoadedUserIdRef = useRef<string | null>(null); // Skip reload when navigating between app routes
   
   const loadAppData = useCallback(async () => {
     // PERMANENT FIX: Clear any existing timeout first
@@ -426,6 +427,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setPortfolioCheckComplete(true);
       setAppDataLoading(false);
       loadingRef.current = false;
+      lastLoadedUserIdRef.current = null;
+      return;
+    }
+    
+    // OPTIMIZATION: Skip if we've already loaded app data for this user (prevents redundant fetches when navigating)
+    if (lastLoadedUserIdRef.current === user.id) {
+      console.log('[Auth] loadAppData: Already loaded for user, skipping');
       return;
     }
     
@@ -478,6 +486,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await fetchUserData(user.id);
       setAuthMethod(determineAuthMethod(user));
+      lastLoadedUserIdRef.current = user.id; // Mark as loaded - skip on next trigger
       console.log('[Auth] loadAppData: Successfully loaded app data');
       
       // PERMANENT FIX: Clear timeout on success
@@ -590,6 +599,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsPhoneVerified(false);
     setPortfolioCheckComplete(false);
     setAuthStatus('unauthenticated'); // Auth state resolved (unauthenticated)
+    lastLoadedUserIdRef.current = null; // Allow fresh load on next login
     
     // Step 2: Clear client-side cache
     clearAuthCache();

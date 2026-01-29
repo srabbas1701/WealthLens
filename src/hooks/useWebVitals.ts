@@ -53,7 +53,8 @@ export function useWebVitals() {
         return;
       }
 
-      const { onCLS, onFID, onFCP, onLCP, onTTFB } = webVitalsModule;
+      // web-vitals v5: onFID was replaced by onINP (Interaction to Next Paint)
+      const { onCLS, onINP, onFCP, onLCP, onTTFB } = webVitalsModule;
 
       // Helper function to format metric for logging/API
       const handleMetric = (metric: WebVitalMetric) => {
@@ -86,10 +87,10 @@ export function useWebVitals() {
         }
       };
 
-      // Measure all 5 Core Web Vitals
+      // Measure Core Web Vitals (v5: INP replaced FID)
       try {
         onCLS(handleMetric);
-        onFID(handleMetric);
+        onINP(handleMetric);
         onFCP(handleMetric);
         onLCP(handleMetric);
         onTTFB(handleMetric);

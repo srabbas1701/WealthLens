@@ -133,6 +133,48 @@ interface PortfolioData {
 
 type GroupByOption = 'none' | 'assetType' | 'sector';
 
+// Dashboard cache - persists across route navigations for instant load when returning
+const DASHBOARD_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+let dashboardCache: {
+  userId: string | null;
+  portfolioData: PortfolioData | null;
+  aiSummary: DailySummaryResponse | null;
+  weeklySummary: WeeklySummaryResponse | null;
+  timestamp: number;
+} = { userId: null, portfolioData: null, aiSummary: null, weeklySummary: null, timestamp: 0 };
+
+function getCachedDashboardData(userId: string) {
+  if (dashboardCache.userId !== userId) return null;
+  if (Date.now() - dashboardCache.timestamp > DASHBOARD_CACHE_TTL_MS) return null;
+  if (!dashboardCache.portfolioData?.hasData) return null; // Don't use cache for empty portfolio
+  return {
+    portfolioData: dashboardCache.portfolioData,
+    aiSummary: dashboardCache.aiSummary,
+    weeklySummary: dashboardCache.weeklySummary,
+  };
+}
+
+function mergeDashboardCache(
+  userId: string,
+  updates: Partial<{
+    portfolioData: PortfolioData;
+    aiSummary: DailySummaryResponse | null;
+    weeklySummary: WeeklySummaryResponse | null;
+  }>
+) {
+  if (dashboardCache.userId !== userId) {
+    dashboardCache = { userId, portfolioData: null, aiSummary: null, weeklySummary: null, timestamp: Date.now() };
+  }
+  if (updates.portfolioData) dashboardCache.portfolioData = updates.portfolioData;
+  if (updates.aiSummary !== undefined) dashboardCache.aiSummary = updates.aiSummary;
+  if (updates.weeklySummary !== undefined) dashboardCache.weeklySummary = updates.weeklySummary;
+  dashboardCache.timestamp = Date.now();
+}
+
+function clearDashboardCache() {
+  dashboardCache = { userId: null, portfolioData: null, aiSummary: null, weeklySummary: null, timestamp: 0 };
+}
+
 // ============================================================================
 // COMPONENTS
 // ============================================================================
@@ -223,6 +265,8 @@ function DashboardContent() {
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous portfolio fetches
   const fetchingAiSummaryRef = useRef(false); // Prevent duplicate AI summary fetches
   const fetchingWeeklySummaryRef = useRef(false); // Prevent duplicate weekly summary fetches
+  const lastFetchedUserIdRef = useRef<string | null>(null); // Prevent re-fetch when portfolioCheckComplete changes
+  const fetchingHealthScoreRef = useRef(false); // Prevent duplicate health score fetches
   
   const [greeting, setGreeting] = useState('');
   const [userName, setUserName] = useState('');
@@ -455,14 +499,15 @@ function DashboardContent() {
   // Fetch portfolio data
   // OPTIMIZATION: Added timeout and better error handling to prevent hanging
   const fetchPortfolioData = useCallback(async (userId: string) => {
-    // Prevent duplicate simultaneous fetches (React 18 dev mode causes double-calls)
+    // Guard: Prevent duplicate simultaneous fetches (React 18 dev mode causes double-calls)
     if (fetchingRef.current) {
-      console.log('[Dashboard] Skipping duplicate portfolio fetch');
+      console.log('[Dashboard] Already loading portfolio, skipping...');
       return;
     }
     
     fetchingRef.current = true;
     setPortfolioLoading(true);
+    console.log('[Dashboard] Starting portfolio data load');
     
     // OPTIMIZATION: Add timeout to prevent hanging
     const timeoutId = setTimeout(() => {
@@ -491,6 +536,8 @@ function DashboardContent() {
         const result = await response.json();
         if (result.success && result.data) {
           setPortfolioData(result.data);
+          mergeDashboardCache(userId, { portfolioData: result.data });
+          console.log('[Dashboard] Portfolio data loaded successfully');
         } else {
           console.warn('[Dashboard] Portfolio data fetch returned success=false:', result);
           // Set empty portfolio to prevent UI from hanging
@@ -523,12 +570,14 @@ function DashboardContent() {
   // Fetch AI daily summary
   // OPTIMIZATION: Added timeout to prevent hanging
   const fetchAiSummary = useCallback(async (userId: string) => {
-    // Prevent duplicate simultaneous fetches
+    // Guard: Prevent duplicate simultaneous fetches
     if (fetchingAiSummaryRef.current) {
+      console.log('[Dashboard] Already loading AI summary, skipping...');
       return;
     }
     
     fetchingAiSummaryRef.current = true;
+    console.log('[Dashboard] Starting AI daily summary load');
     setSummaryLoading(true);
     setSummaryError(false);
     
@@ -559,13 +608,15 @@ function DashboardContent() {
       if (response.ok) {
         const data: DailySummaryResponse = await response.json();
         setAiSummary(data);
+        mergeDashboardCache(userId, { aiSummary: data });
+        console.log('[Dashboard] AI daily summary loaded successfully');
       } else {
         setSummaryError(true);
       }
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error.name !== 'AbortError') {
-        console.error('Failed to fetch AI daily summary:', error);
+        console.error('[Dashboard] Error loading AI daily summary:', error);
       }
       setSummaryError(true);
     } finally {
@@ -577,12 +628,14 @@ function DashboardContent() {
   // Fetch AI weekly summary
   // OPTIMIZATION: Added timeout to prevent hanging
   const fetchWeeklySummary = useCallback(async (userId: string) => {
-    // Prevent duplicate simultaneous fetches
+    // Guard: Prevent duplicate simultaneous fetches
     if (fetchingWeeklySummaryRef.current) {
+      console.log('[Dashboard] Already loading weekly summary, skipping...');
       return;
     }
     
     fetchingWeeklySummaryRef.current = true;
+    console.log('[Dashboard] Starting weekly summary load');
     setWeeklyLoading(true);
     setWeeklyError(false);
     
@@ -613,13 +666,15 @@ function DashboardContent() {
       if (response.ok) {
         const data: WeeklySummaryResponse = await response.json();
         setWeeklySummary(data);
+        mergeDashboardCache(userId, { weeklySummary: data });
+        console.log('[Dashboard] Weekly summary loaded successfully');
       } else {
         setWeeklyError(true);
       }
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error.name !== 'AbortError') {
-        console.error('Failed to fetch AI weekly summary:', error);
+        console.error('[Dashboard] Error loading AI weekly summary:', error);
       }
       setWeeklyError(true);
     } finally {
@@ -674,9 +729,17 @@ function DashboardContent() {
     });
   }, [authStatus, user?.id, hasPortfolio, portfolioCheckComplete]);
 
+  // Reset lastFetchedUserIdRef and clear cache when user logs out (allows fresh fetch on next login)
+  useEffect(() => {
+    if (!user?.id) {
+      lastFetchedUserIdRef.current = null;
+      clearDashboardCache();
+    }
+  }, [user?.id]);
+
   // Fetch data when user is available
-  // OPTIMIZATION: Don't wait for hasPortfolio - fetch data immediately if user exists
-  // This prevents hanging when navigating back to dashboard
+  // OPTIMIZATION: Guard against duplicate fetches when portfolioCheckComplete changes
+  // Only fetch once per user - lastFetchedUserIdRef prevents re-fetch on dependency changes
   useEffect(() => {
     if (!user?.id) return;
     
@@ -685,20 +748,31 @@ function DashboardContent() {
       return;
     }
     
-    // Fetch data immediately if user exists, even if portfolio check is in progress
-    // This ensures faster loading when navigating back to dashboard
-    console.log('[Dashboard] Fetching portfolio data for user:', user.id);
+    // Guard: Already fetched for this user - skip (prevents duplicate when portfolioCheckComplete changes)
+    if (lastFetchedUserIdRef.current === user.id) {
+      console.log('[Dashboard] Already fetched for user, skipping duplicate fetch');
+      return;
+    }
+    
+    // OPTIMIZATION: Use cached data when navigating back (instant load)
+    const cached = getCachedDashboardData(user.id);
+    if (cached) {
+      console.log('[Dashboard] Using cached data for instant load');
+      lastFetchedUserIdRef.current = user.id;
+      setPortfolioData(cached.portfolioData);
+      setAiSummary(cached.aiSummary);
+      setWeeklySummary(cached.weeklySummary);
+      setPortfolioLoading(false);
+      setSummaryLoading(false);
+      setWeeklyLoading(false);
+      return;
+    }
+    
+    lastFetchedUserIdRef.current = user.id;
+    console.log('[Dashboard] Starting data fetch for user:', user.id);
     fetchPortfolioData(user.id);
     fetchAiSummary(user.id);
     fetchWeeklySummary(user.id);
-    
-    // OPTIMIZATION: Cleanup function to cancel any pending fetches on unmount
-    return () => {
-      // Reset fetch flags on unmount to allow fresh fetch on remount
-      fetchingRef.current = false;
-      fetchingAiSummaryRef.current = false;
-      fetchingWeeklySummaryRef.current = false;
-    };
     
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, portfolioCheckComplete]);
@@ -737,12 +811,13 @@ function DashboardContent() {
 
   const handleUploadSuccess = () => {
     if (user?.id) {
-      // Force refresh by resetting loading state
+      clearDashboardCache(); // Invalidate cache - user uploaded new data
       setPortfolioLoading(true);
       // Small delay to ensure database write is complete
       setTimeout(() => {
         fetchPortfolioData(user.id);
         fetchAiSummary(user.id);
+        fetchWeeklySummary(user.id);
       }, 500);
     }
   };
@@ -901,7 +976,7 @@ function DashboardContent() {
   }, [portfolioData.holdings, portfolioData.summary.createdAt, portfolioData.summary.lastUpdated]);
 
   // Fetch Portfolio Health Score from API (same source as health score page)
-  // OPTIMIZATION: Added timeout and better error handling
+  // OPTIMIZATION: Added loading guard and timeout to prevent duplicate fetches
   useEffect(() => {
     if (!user?.id || !isDataConsistent) {
       setPortfolioHealthScore(null);
@@ -909,13 +984,22 @@ function DashboardContent() {
     }
 
     const fetchHealthScore = async () => {
+      // Guard: Prevent duplicate simultaneous fetches
+      if (fetchingHealthScoreRef.current) {
+        console.log('[Dashboard] Already loading health score, skipping...');
+        return;
+      }
+      
+      fetchingHealthScoreRef.current = true;
       setHealthScoreLoading(true);
+      console.log('[Dashboard] Starting health score load');
       
       // OPTIMIZATION: Add timeout to prevent hanging
       const timeoutId = setTimeout(() => {
         console.warn('[Dashboard] Health score fetch timeout');
         setHealthScoreLoading(false);
         setPortfolioHealthScore(null);
+        fetchingHealthScoreRef.current = false;
       }, 10000);
       
       try {
@@ -924,15 +1008,17 @@ function DashboardContent() {
         
         if (response.success && response.data) {
           setPortfolioHealthScore(response.data);
+          console.log('[Dashboard] Health score loaded successfully');
         } else {
           setPortfolioHealthScore(null);
         }
       } catch (error) {
         clearTimeout(timeoutId);
-        console.error('Failed to fetch health score:', error);
+        console.error('[Dashboard] Error loading health score:', error);
         setPortfolioHealthScore(null);
       } finally {
         setHealthScoreLoading(false);
+        fetchingHealthScoreRef.current = false;
       }
     };
 
@@ -985,6 +1071,18 @@ function DashboardContent() {
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mx-auto mb-4" />
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Redirecting to onboarding...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // OPTIMIZATION: Full-page loading when portfolio data is initially loading
+  if (portfolioLoading && !portfolioData.hasData) {
+    return (
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-500 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-[#94A3B8]">Loading your portfolio...</p>
         </div>
       </div>
     );
