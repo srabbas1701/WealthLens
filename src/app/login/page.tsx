@@ -43,6 +43,7 @@ import {
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader } from '@/components/AppHeader';
+import { createClient } from '@/lib/supabase/client';
 
 // Authentication method types
 type AuthMethod = 'mobile' | 'email';
@@ -84,6 +85,7 @@ function LoginContent() {
   
   // UI state
   const [isLoading, setIsLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
@@ -193,6 +195,64 @@ function LoginContent() {
       otpInputRefs.current[0].focus();
     }
   }, [otpStep]);
+
+  // Load MSG91 widget script and initialize ONCE, after script load
+  useEffect(() => {
+    // @ts-ignore
+    if (typeof window !== 'undefined' && window.__msg91Initialized) return;
+
+    const script = document.createElement("script");
+    script.id = "msg91-widget";
+    script.src = "https://verify.msg91.com/otp-provider.js";
+    script.async = true;
+
+    script.onload = () => {
+      // @ts-ignore
+      window.initSendOTP({
+        widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
+        tokenAuth: process.env.NEXT_PUBLIC_MSG91_WIDGET_TOKEN,
+        exposeMethods: true,
+        success: () => {},
+        failure: () => {},
+      });
+
+      // @ts-ignore
+      window.__msg91Initialized = true;
+      console.log("MSG91 widget initialized");
+    };
+
+    document.body.appendChild(script);
+  }, []);
+  
+  /**
+   * Guarded MSG91 sendOtp wrapper
+   * Ensures widget is initialized before calling sendOtp
+   */
+  const sendPhoneOtp = (
+    phone: string,
+    onSuccess: () => void,
+    onError: (err: any) => void
+  ) => {
+    // @ts-ignore
+    if (typeof window === 'undefined' || !window.sendOtp) {
+      console.error("MSG91 widget not initialized yet");
+      onError(new Error("MSG91 widget not initialized yet"));
+      return;
+    }
+
+    // @ts-ignore
+    window.sendOtp(
+      phone,
+      () => {
+        console.log("MSG91 OTP sent");
+        onSuccess();
+      },
+      (err: any) => {
+        console.error("MSG91 OTP send failed", err);
+        onError(err);
+      }
+    );
+  };
   
   /**
    * Handle email magic link submission
@@ -221,6 +281,7 @@ function LoginContent() {
   
   /**
    * Handle mobile OTP send
+   * MSG91 OTP Widget integration (replaces Supabase OTP)
    */
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,65 +299,169 @@ function LoginContent() {
     
     try {
       const fullPhone = `${countryCode}${cleanPhone}`;
-      const { error: otpError } = await sendOtp(fullPhone);
       
-      if (otpError) {
-        setError(friendlyErrorMessage(otpError.message));
-      } else {
-        setOtpStep('otp');
-        setResendTimer(30); // 30 second cooldown for resend
-        setSuccess('OTP sent! Check your phone for the 6-digit code.');
+      // Ensure MSG91 widget is initialized (it should be from useEffect)
+      // @ts-ignore
+      if (typeof window === 'undefined' || !window.__msg91Initialized) {
+        setError('OTP service is initializing. Please wait a moment and try again.');
+        setIsLoading(false);
+        return;
       }
-    } catch {
+      
+      // ===============================
+      // SUPABASE PHONE OTP (DISABLED)
+      // Reason: DLT issues in India
+      // Replaced by MSG91 OTP Widget
+      // DO NOT DELETE – rollback safety
+      // ===============================
+      // const { error: otpError } = await sendOtp(fullPhone);
+      
+      // MSG91 OTP Widget - Send OTP
+      sendPhoneOtp(
+        fullPhone,
+        () => {
+          setOtpStep('otp');
+          setResendTimer(30); // 30 second cooldown for resend
+          setSuccess('OTP sent! Check your phone for the 6-digit code.');
+          setIsLoading(false);
+        },
+        (err: any) => {
+          setError('Could not send OTP. Please try again.');
+          setIsLoading(false);
+        }
+      );
+    } catch (err) {
+      console.error('[Login] OTP send error:', err);
       setError('Could not send OTP. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
   
   /**
    * Handle OTP verification
-   * PRODUCTION FIX: Explicitly wait for session before showing success
+   * MSG91 OTP Widget integration (replaces Supabase OTP)
+   * 
+   * ===============================
+   * SUPABASE PHONE OTP (DISABLED)
+   * Reason: DLT issues in India
+   * Replaced by MSG91 OTP Widget
+   * DO NOT DELETE – rollback safety
+   * ===============================
+   * 
+   * ❌ DISABLED — Supabase OTP verification
+   * const { error: verifyError } = await verifyOtp({
+   *   phone: fullPhone,
+   *   token: otp,
+   *   type: "sms",
+   * });
+   * if (verifyError) {
+   *   setError(friendlyErrorMessage(verifyError.message));
+   *   return;
+   * }
+   * 
+   * 💤 FUTURE FALLBACK — Twilio OTP
+   * await sendTwilioOtp(phoneNumber);
+   * await verifyTwilioOtp(phoneNumber, otp);
+   */
+  const verifyPhoneOtp = async (otp: string) => {
+    // Guard: Prevent double-submit
+    if (isVerifying) return;
+    setIsVerifying(true);
+    setError(null);
+
+    // @ts-ignore
+    if (typeof window === 'undefined' || !window.verifyOtp) {
+      console.error("MSG91 widget not initialized yet");
+      setError("OTP service not ready. Please refresh and try again.");
+      setIsVerifying(false);
+      return;
+    }
+
+    // Extract phone number from user input (already in E.164 format)
+    const cleanPhone = phoneNumber.replace(/\D/g, '');
+    const fullPhone = `${countryCode}${cleanPhone}`;
+
+    // MSG91 widget verifies OTP
+    // @ts-ignore
+    window.verifyOtp(
+      otp,
+      async (data: any) => {
+        console.log("MSG91 OTP verified");
+
+        try {
+          // Step 1: Call backend with verified phone number
+          console.log(`Calling backend with phone ${fullPhone}`);
+          const response = await fetch("/api/auth/phone-login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phone: fullPhone, // E.164 format (backend normalizes if needed)
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            console.error("Backend login failed:", errorData);
+            throw new Error(errorData.error || "Backend login failed");
+          }
+
+          const data = await response.json();
+
+          // Step 2: Validate response and get credentials
+          if (!data.success || !data.credentials) {
+            console.error("Invalid response:", data);
+            throw new Error(data.error || "Invalid response: missing credentials");
+          }
+
+          console.log("Session received from backend");
+          console.log("Establishing Supabase session...");
+
+          // Step 3: Sign in with email+password (Supabase standard method)
+          // Note: Email is internal only, never shown to user
+          const supabase = createClient();
+          const { data: sessionData, error: sessionError } = await supabase.auth.signInWithPassword({
+            email: data.credentials.email,
+            password: data.credentials.password,
+          });
+
+          if (sessionError) {
+            console.error("Session error:", sessionError);
+            setError("Failed to create session. Please try again.");
+            setIsVerifying(false);
+            return;
+          }
+
+          // ✅ Session established! Redirect to dashboard
+          console.log("✅ Session created successfully");
+          console.log("Redirecting to /dashboard");
+
+          // Step 4: Redirect to dashboard on success
+          router.push('/dashboard');
+        } catch (error) {
+          console.error("Error during login flow:", error);
+          setError("Login failed. Please try again.");
+          setIsVerifying(false);
+        }
+      },
+      (err: any) => {
+        console.error("OTP verify failed:", err);
+        setError("Invalid OTP. Please try again.");
+        setIsVerifying(false);
+      }
+    );
+  };
+
+  /**
+   * Handle OTP verification (wrapper for button click)
    */
   const handleVerifyOtp = async () => {
-    setError(null);
-    setSuccess(null);
-
     const otpValue = otp.join('');
     if (otpValue.length !== 6) {
       setError('Please enter the complete 6-digit OTP');
       return;
     }
 
-    setIsLoading(true);
-
-    try {
-      const fullPhone = `${countryCode}${phoneNumber.replace(/\D/g, '')}`;
-      const { error: verifyError } = await verifyOtp(fullPhone, otpValue);
-
-      if (verifyError) {
-        setError(friendlyErrorMessage(verifyError.message));
-        // Clear OTP on error so user can retry
-        setOtp(['', '', '', '', '', '']);
-        if (otpInputRefs.current[0]) {
-          otpInputRefs.current[0].focus();
-        }
-        setIsLoading(false);
-      } else {
-        // PRODUCTION FIX: Show success message
-        // The redirect useEffect will handle navigation once authStatus becomes 'authenticated'
-        // Wait for the onAuthStateChange to fire and update authStatus
-        setSuccess('Verified! Please wait...');
-        // Wait a moment for auth state to update, then redirect
-        setTimeout(() => {
-          router.push(redirectUrl);
-        }, 500);
-      }
-    } catch (err) {
-      console.error('[Login] OTP verification error:', err);
-      setError('Could not verify OTP. Please try again.');
-      setIsLoading(false);
-    }
+    await verifyPhoneOtp(otpValue);
   };
   
   /**
@@ -315,8 +480,8 @@ function LoginContent() {
       otpInputRefs.current[index + 1]?.focus();
     }
     
-    // Auto-submit when all 6 digits are entered
-    if (value && index === 5 && newOtp.every(d => d !== '')) {
+    // Auto-submit when all 6 digits are entered (only if not already verifying)
+    if (value && index === 5 && newOtp.every(d => d !== '') && !isVerifying) {
       // Small delay to show the last digit
       setTimeout(() => handleVerifyOtp(), 100);
     }
@@ -341,13 +506,16 @@ function LoginContent() {
       const newOtp = pastedData.split('');
       setOtp(newOtp);
       otpInputRefs.current[5]?.focus();
-      // Auto-submit after paste
-      setTimeout(() => handleVerifyOtp(), 100);
+      // Auto-submit after paste (only if not already verifying)
+      if (!isVerifying) {
+        setTimeout(() => handleVerifyOtp(), 100);
+      }
     }
   };
   
   /**
    * Handle resend OTP
+   * MSG91 OTP Widget integration (replaces Supabase OTP)
    */
   const handleResendOtp = async () => {
     if (resendTimer > 0) return;
@@ -357,21 +525,45 @@ function LoginContent() {
     
     try {
       const fullPhone = `${countryCode}${phoneNumber.replace(/\D/g, '')}`;
-      const { error: otpError } = await sendOtp(fullPhone);
       
-      if (otpError) {
-        setError(friendlyErrorMessage(otpError.message));
-      } else {
-        setResendTimer(30);
-        setSuccess('New OTP sent!');
-        setOtp(['', '', '', '', '', '']);
-        if (otpInputRefs.current[0]) {
-          otpInputRefs.current[0].focus();
+      // ===============================
+      // SUPABASE PHONE OTP (DISABLED)
+      // Reason: DLT issues in India
+      // Replaced by MSG91 OTP Widget
+      // DO NOT DELETE – rollback safety
+      // ===============================
+      // const { error: otpError } = await sendOtp(fullPhone);
+      // if (otpError) {
+      //   setError(friendlyErrorMessage(otpError.message));
+      // } else {
+      //   setResendTimer(30);
+      //   setSuccess('New OTP sent!');
+      //   setOtp(['', '', '', '', '', '']);
+      //   if (otpInputRefs.current[0]) {
+      //     otpInputRefs.current[0].focus();
+      //   }
+      // }
+
+      // MSG91 OTP Widget - Resend OTP
+      sendPhoneOtp(
+        fullPhone,
+        () => {
+          setResendTimer(30);
+          setSuccess('New OTP sent!');
+          setOtp(['', '', '', '', '', '']);
+          if (otpInputRefs.current[0]) {
+            otpInputRefs.current[0].focus();
+          }
+          setIsLoading(false);
+        },
+        (err: any) => {
+          setError('Could not resend OTP. Please try again.');
+          setIsLoading(false);
         }
-      }
-    } catch {
+      );
+    } catch (err) {
+      console.error('[Login] OTP resend error:', err);
       setError('Could not resend OTP. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -697,10 +889,10 @@ function LoginContent() {
                     <button
                       type="button"
                       onClick={handleVerifyOtp}
-                      disabled={isLoading || otp.some(d => d === '')}
+                      disabled={isVerifying || otp.some(d => d === '')}
                       className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isLoading ? (
+                      {isVerifying ? (
                         <>
                           <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           <span>Verifying...</span>

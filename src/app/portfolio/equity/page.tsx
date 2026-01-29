@@ -28,6 +28,7 @@ import DataConsolidationMessage from '@/components/DataConsolidationMessage';
 import { useToast } from '@/components/Toast';
 import { generateStocksPDF } from '@/lib/pdf/generateStocksPDF';
 import { Plus, Edit, Trash2, X, Search } from 'lucide-react';
+import { useMarketDataStatus } from '@/hooks/useMarketDataStatus';
 
 type SortField = 'name' | 'quantity' | 'avgPrice' | 'currentPrice' | 'investedValue' | 'currentValue' | 'gainLoss' | 'allocation';
 type SortDirection = 'asc' | 'desc';
@@ -55,6 +56,36 @@ export default function EquityHoldingsPage() {
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
+
+  const { data: marketDataStatus, loading: marketDataStatusLoading } = useMarketDataStatus();
+
+  function minutesSince(dateString?: string): number | null {
+    if (!dateString) return null;
+    const ts = new Date(dateString).getTime();
+    if (Number.isNaN(ts)) return null;
+    return (Date.now() - ts) / (1000 * 60);
+  }
+
+  const lastRun = marketDataStatus?.stock ?? null;
+  const minutesAgo = minutesSince(lastRun?.completedAt);
+  const disableForRecentRun =
+    !!lastRun && minutesAgo !== null && minutesAgo < 30;
+
+  const lastUpdatedTooltip =
+    lastRun
+      ? `Updated: ${lastRun.successCount}, Failed: ${lastRun.failedCount}`
+      : 'No update history yet';
+
+  const warningTooltip = 'Some symbols failed in last update';
+
+  const updateButtonTooltip =
+    disableForRecentRun
+      ? 'Prices were updated recently. Please wait before retrying.'
+      : lastRun
+      ? lastRun.failedCount > 0
+        ? `Last update had failures: ${lastRun.failedCount} failed`
+        : 'Manually refresh stock prices'
+      : 'No update history yet';
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<EquityHolding[]>([]);
@@ -807,13 +838,13 @@ export default function EquityHoldingsPage() {
               {/* Update Prices button */}
               <button
                 onClick={handlePriceUpdate}
-                disabled={priceUpdateLoading || priceUpdateDisabled}
+                disabled={priceUpdateLoading || priceUpdateDisabled || disableForRecentRun}
                 className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  priceUpdateLoading || priceUpdateDisabled
+                  priceUpdateLoading || priceUpdateDisabled || disableForRecentRun
                     ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
                     : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
                 }`}
-                title={priceUpdateDisabled ? 'Prices already updated today' : 'Update stock prices from Yahoo Finance'}
+                title={updateButtonTooltip}
               >
                 <RefreshIcon 
                   className={`w-4 h-4 ${priceUpdateLoading ? 'animate-spin' : ''}`} 
@@ -826,12 +857,30 @@ export default function EquityHoldingsPage() {
               </button>
             </div>
           </div>
+          
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             {holdings.length} holding{holdings.length !== 1 ? 's' : ''} • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
-            {mostRecentPriceDate && (
-              <span className="ml-2 text-[#475569] dark:text-[#CBD5E1] font-medium">
-                • Price as of {formatPriceDate(mostRecentPriceDate)}
+          </p>
+          <p className="mt-1 text-sm text-[#6B7280] dark:text-[#94A3B8]">
+            {marketDataStatusLoading ? (
+              'Loading market update status…'
+            ) : lastRun ? (
+              <span className="inline-flex items-center gap-2">
+                <span
+                  title={lastUpdatedTooltip}
+                  className="cursor-default"
+                >
+                  Last updated on{' '}
+                  {new Date(lastRun.completedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                </span>
+                {lastRun.failedCount > 0 && (
+                  <span title={warningTooltip} className="cursor-help">
+                    ⚠️
+                  </span>
+                )}
               </span>
+            ) : (
+              'No stock update recorded yet'
             )}
           </p>
         </div>

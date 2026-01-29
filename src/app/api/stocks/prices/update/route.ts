@@ -28,7 +28,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import { updateStockPrices, getPreviousTradingDay } from '@/lib/stock-prices';
+import { updateStockPrices } from '@/lib/stock-prices';
 
 interface UpdatePricesRequest {
   symbols?: string[];
@@ -49,11 +49,41 @@ interface UpdatePricesResponse {
 }
 
 export async function POST(request: NextRequest) {
+  let runId: string | null = null;
+  let supabase: ReturnType<typeof createAdminClient> | null = null;
+
   try {
     const startTime = Date.now();
-    const priceDate = getPreviousTradingDay();
-    
-    console.log(`[Price Update API] Starting Yahoo Finance EOD price update (stocks & ETFs) for date: ${priceDate}`);
+    console.log(
+      `[Price Update API] Starting Yahoo Finance stock & ETF price update (price_date derived from Yahoo timestamp → IST)`
+    );
+
+    // Create Supabase admin client (used for run tracking + optional DB reads)
+    supabase = createAdminClient();
+
+    // Market run tracking: insert run row immediately after admin client creation
+    try {
+      const { data: inserted, error: insertError } = await supabase
+        .from('market_data_runs')
+        .insert({
+          asset_type: 'stock',
+          run_type: 'price_update',
+          trigger_source: 'api',
+          started_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        console.warn('[Price Update API] market_data_runs insert failed:', insertError);
+      } else if (inserted?.id) {
+        runId = inserted.id;
+      } else {
+        console.warn('[Price Update API] market_data_runs insert returned no id');
+      }
+    } catch (e) {
+      console.warn('[Price Update API] market_data_runs insert threw:', e);
+    }
     
     // Parse request body (optional)
     let symbolsToUpdate: string[] = [];
@@ -66,8 +96,6 @@ export async function POST(request: NextRequest) {
     
     // If no symbols provided, get all unique stock and ETF symbols from holdings
     if (symbolsToUpdate.length === 0) {
-      const supabase = createAdminClient();
-      
       // Get all equity and ETF holdings with symbols
       // ETFs trade on exchanges with ticker symbols just like stocks
       const { data: holdings, error } = await supabase
@@ -108,7 +136,8 @@ export async function POST(request: NextRequest) {
     if (symbolsToUpdate.length === 0) {
       return NextResponse.json<UpdatePricesResponse>({
         success: true,
-        priceDate,
+        // No symbols, so no Yahoo-derived price date to report
+        priceDate: 'unknown',
         updated: 0,
         failed: 0,
         results: [],
@@ -117,6 +146,21 @@ export async function POST(request: NextRequest) {
     
     // Update prices in stock_prices table
     const results = await updateStockPrices(symbolsToUpdate);
+
+    // Derive a single "reported" priceDate for response/monitoring.
+    // Most updates should share the same Yahoo-derived IST date.
+    const successfulDates = results
+      .filter((r) => r.success && r.priceDate)
+      .map((r) => r.priceDate as string);
+
+    const dateCounts = new Map<string, number>();
+    for (const d of successfulDates) {
+      dateCounts.set(d, (dateCounts.get(d) || 0) + 1);
+    }
+    const priceDate =
+      successfulDates.length === 0
+        ? 'unknown'
+        : Array.from(dateCounts.entries()).sort((a, b) => b[1] - a[1])[0][0];
     
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;
@@ -185,7 +229,27 @@ export async function POST(request: NextRequest) {
     
     const duration = Date.now() - startTime;
     console.log(`[Price Update API] Complete in ${duration}ms: ${successCount} prices updated, ${holdingsUpdated} holdings updated`);
-    console.log(`[Price Update API] Price date: ${priceDate} (Yahoo EOD)`);
+    console.log(`[Price Update API] Price date: ${priceDate} (Yahoo-derived IST)`);
+
+    // Market run tracking: update run row just before returning response
+    if (runId && supabase) {
+      try {
+        const { error: updateError } = await supabase
+          .from('market_data_runs')
+          .update({
+            completed_at: new Date().toISOString(),
+            success_count: successCount,
+            failed_count: failureCount,
+          })
+          .eq('id', runId);
+
+        if (updateError) {
+          console.warn('[Price Update API] market_data_runs update failed:', updateError);
+        }
+      } catch (e) {
+        console.warn('[Price Update API] market_data_runs update threw:', e);
+      }
+    }
     
     return NextResponse.json<UpdatePricesResponse>({
       success: true,
@@ -202,10 +266,30 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('[Price Update API] Error:', error);
+
+    // Market run tracking: update run row on fatal error
+    if (runId && supabase) {
+      try {
+        const { error: updateError } = await supabase
+          .from('market_data_runs')
+          .update({
+            completed_at: new Date().toISOString(),
+            error: error instanceof Error ? error.message : 'Unknown error',
+          })
+          .eq('id', runId);
+
+        if (updateError) {
+          console.warn('[Price Update API] market_data_runs error update failed:', updateError);
+        }
+      } catch (e) {
+        console.warn('[Price Update API] market_data_runs error update threw:', e);
+      }
+    }
+    
     return NextResponse.json<UpdatePricesResponse>(
       {
         success: false,
-        priceDate: getPreviousTradingDay(),
+        priceDate: 'unknown',
         updated: 0,
         failed: 0,
         results: [],
@@ -224,13 +308,22 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminClient();
-    const priceDate = getPreviousTradingDay();
-    
-    // Get count of prices for today
+
+    // Report the latest Yahoo-derived IST price_date present in stock_prices
+    const { data: latestByDate } = await supabase
+      .from('stock_prices')
+      .select('price_date')
+      .order('price_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const priceDate = latestByDate?.price_date || 'unknown';
+
+    // Get count of prices for the latest date (if unknown, count will be 0)
     const { count } = await supabase
       .from('stock_prices')
       .select('*', { count: 'exact', head: true })
-      .eq('price_date', priceDate);
+      .eq('price_date', priceDate === 'unknown' ? '' : priceDate);
     
     // Get most recent update timestamp
     const { data: latest } = await supabase

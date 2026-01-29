@@ -30,6 +30,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { updateMFNavs } from '@/lib/mf-navs';
 import { getPreviousTradingDay } from '@/lib/stock-prices';
 import { getSchemeCodeByISIN, updateSchemeMaster } from '@/lib/mf-scheme-master';
+import { startRun, completeRun, failRun } from '@/lib/market-data-runs';
 
 interface UpdateNavsRequest {
   schemeCodes?: string[];
@@ -60,9 +61,19 @@ interface UpdateNavsResponse {
 }
 
 export async function POST(request: NextRequest) {
+  let runId: string | null = null;
+  
   try {
     const navDate = getPreviousTradingDay();
     console.log(`[MF NAV Update API] Target NAV date (IST): ${navDate}`);
+    
+    // Detect run type (MANUAL if user-triggered, CRON otherwise)
+    const userAgent = request.headers.get('user-agent') || '';
+    const isCron = userAgent.includes('supabase') || request.headers.get('x-supabase-cron') === 'true';
+    const runType: 'MANUAL' | 'CRON' = isCron ? 'CRON' : 'MANUAL';
+    
+    // Start market data run logging
+    runId = await startRun('MF', runType, 'api');
     
     // First, ensure scheme master is up to date (this populates ISIN ↔ scheme_code mappings)
     // Check if scheme master was updated recently (within last 7 days) to avoid unnecessary updates
@@ -215,6 +226,17 @@ export async function POST(request: NextRequest) {
       console.error(`[MF NAV Update API] ❌ Failed to update any NAVs out of ${schemeCodesToUpdate.length} requested`);
     }
     
+    // Complete market data run logging
+    if (runId) {
+      const skippedCount = 0; // MF NAV updates don't have skipped concept
+      await completeRun(runId, {
+        successCount,
+        skippedCount,
+        failedCount: failureCount,
+        targetDate: navDate,
+      });
+    }
+    
     return NextResponse.json<UpdateNavsResponse>({
       success: overallSuccess,
       navDate,
@@ -235,6 +257,12 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('[MF NAV Update API] Error:', error);
+    
+    // Fail market data run logging
+    if (runId) {
+      await failRun(runId, error instanceof Error ? error.message : 'Unknown error');
+    }
+    
     return NextResponse.json<UpdateNavsResponse>(
       {
         success: false,

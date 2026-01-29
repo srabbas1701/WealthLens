@@ -127,50 +127,18 @@ export function CategoryInfoTooltip({ content, className = '' }: CategoryInfoToo
           aria-expanded={isOpen}
         >
           <span
-            className={`inline-flex items-center justify-center text-[#6B7280] dark:text-[#94A3B8] cursor-help transition-all duration-150 ease-out ${
+            className={`inline-flex items-center justify-center w-5 h-5 rounded-full cursor-help transition-all duration-150 ease-out ${
               isOpen
                 ? 'opacity-100 scale-105'
-                : 'opacity-60 hover:opacity-100 hover:scale-105'
+                : 'opacity-90 hover:opacity-100 hover:scale-105'
             } ${className}`}
+            style={{
+              // Visible in both light and dark mode
+              backgroundColor: 'var(--info-icon-bg)',
+              color: 'var(--info-icon-fg)',
+            }}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="shrink-0"
-              style={{
-                shapeRendering: 'geometricPrecision',
-              }}
-            >
-              {/* Circle */}
-              <circle
-                cx="7"
-                cy="7"
-                r="6.5"
-                stroke="currentColor"
-                strokeWidth="1"
-                fill="none"
-                vectorEffect="non-scaling-stroke"
-              />
-              {/* Letter "i" - dot */}
-              <circle
-                cx="7"
-                cy="4.5"
-                r="0.8"
-                fill="currentColor"
-              />
-              {/* Letter "i" - stem */}
-              <rect
-                x="6.4"
-                y="5.8"
-                width="1.2"
-                height="3.5"
-                rx="0.6"
-                fill="currentColor"
-              />
-            </svg>
+            <span className="text-xs font-medium leading-none">ⓘ</span>
           </span>
         </button>
       </div>

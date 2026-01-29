@@ -104,6 +104,10 @@
   /* Popover */
   --popover: #FFFFFF;
   --popover-foreground: #0F172A;
+  
+  /* Info icon (ⓘ) - visible in light mode */
+  --info-icon-bg: #DBEAFE;
+  --info-icon-fg: #1D4ED8;
 }
 
 .dark {
@@ -141,6 +145,10 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  
+  /* Info icon (ⓘ) - visible in dark mode */
+  --info-icon-bg: rgba(59, 130, 246, 0.35);
+  --info-icon-fg: #93C5FD;
 }
 
 @layer base {

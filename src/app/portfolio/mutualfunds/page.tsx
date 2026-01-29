@@ -25,6 +25,7 @@ import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
 import { Plus, Edit, Trash2, X } from 'lucide-react';
 import { generateMutualFundsPDF } from '@/lib/pdf/generateHoldingsPDF';
+import { useMarketDataStatus } from '@/hooks/useMarketDataStatus';
 
 type SortField = 'name' | 'amc' | 'units' | 'currentValue' | 'investedValue' | 'xirr' | 'gainLoss' | 'allocation';
 type SortDirection = 'asc' | 'desc';
@@ -55,6 +56,36 @@ export default function MutualFundsPage() {
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
+
+  const { data: marketDataStatus, loading: marketDataStatusLoading } = useMarketDataStatus();
+
+  function minutesSince(dateString?: string): number | null {
+    if (!dateString) return null;
+    const ts = new Date(dateString).getTime();
+    if (Number.isNaN(ts)) return null;
+    return (Date.now() - ts) / (1000 * 60);
+  }
+
+  const lastRun = marketDataStatus?.mf ?? null;
+  const minutesAgo = minutesSince(lastRun?.completedAt);
+  const disableForRecentRun =
+    !!lastRun && minutesAgo !== null && minutesAgo < 30;
+
+  const lastUpdatedTooltip =
+    lastRun
+      ? `Updated: ${lastRun.successCount}, Failed: ${lastRun.failedCount}`
+      : 'No update history yet';
+
+  const warningTooltip = 'Some schemes failed in last update';
+
+  const updateButtonTooltip =
+    disableForRecentRun
+      ? 'NAVs were updated recently. Please wait before retrying.'
+      : lastRun
+      ? lastRun.failedCount > 0
+        ? `Last update had failures: ${lastRun.failedCount} failed`
+        : 'Manually refresh NAVs'
+      : 'No update history yet';
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<MFHolding[]>([]);
@@ -795,13 +826,13 @@ export default function MutualFundsPage() {
               {/* Update NAVs button */}
               <button
                 onClick={handleNavUpdate}
-                disabled={navUpdateLoading}
+                disabled={navUpdateLoading || disableForRecentRun}
                 className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                  navUpdateLoading
+                  navUpdateLoading || disableForRecentRun
                     ? 'bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed'
                     : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
                 }`}
-                title="Update NAVs from AMFI"
+                title={updateButtonTooltip}
               >
                 <RefreshIcon 
                   className={`w-4 h-4 ${navUpdateLoading ? 'animate-spin' : ''}`} 
@@ -812,12 +843,27 @@ export default function MutualFundsPage() {
               </button>
             </div>
           </div>
+          
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             {holdings.length} holdings • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
-            {mostRecentNavDate && (
-              <span className="ml-2 text-[#475569] font-medium">
-                • NAV as of {formatNavDate(mostRecentNavDate)}
+          </p>
+          <p className="mt-1 text-sm text-[#6B7280] dark:text-[#94A3B8]">
+            {marketDataStatusLoading ? (
+              'Loading market update status…'
+            ) : lastRun ? (
+              <span className="inline-flex items-center gap-2">
+                <span title={lastUpdatedTooltip} className="cursor-default">
+                  Last NAV updated on{' '}
+                  {new Date(lastRun.completedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                </span>
+                {lastRun.failedCount > 0 && (
+                  <span title={warningTooltip} className="cursor-help">
+                    ⚠️
+                  </span>
+                )}
               </span>
+            ) : (
+              'No MF update recorded yet'
             )}
           </p>
         </div>

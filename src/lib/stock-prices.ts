@@ -26,6 +26,16 @@
  * - Price alerts
  */
 
+/**
+ * CRITICAL INVARIANT:
+ * Yahoo chart API returns arrays of historical data.
+ * The ONLY valid EOD price is the LAST timestamp paired
+ * with the LAST close value.
+ *
+ * Never use index 0, find(), or filtered values.
+ * Any deviation WILL corrupt prices silently.
+ */
+
 import { createAdminClient } from '@/lib/supabase/server';
 
 // ============================================================================
@@ -50,6 +60,52 @@ export interface PriceUpdateResult {
 // ============================================================================
 // PRICE FETCHING (EXTERNAL API)
 // ============================================================================
+
+/**
+ * Convert a Date to YYYY-MM-DD in IST (Asia/Kolkata).
+ *
+ * We prefer Intl timeZone formatting (timezone-safe). IST has no DST, but Intl
+ * is still the most robust approach across environments.
+ */
+function formatYYYYMMDDInIST(date: Date): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+
+    const year = parts.find((p) => p.type === 'year')?.value;
+    const month = parts.find((p) => p.type === 'month')?.value;
+    const day = parts.find((p) => p.type === 'day')?.value;
+
+    if (!year || !month || !day) throw new Error('Missing date parts');
+    return `${year}-${month}-${day}`;
+  } catch {
+    // Fallback: IST is fixed UTC+5:30, so manual offset is deterministic.
+    const istOffsetMs = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(date.getTime() + istOffsetMs);
+    const yyyy = ist.getUTCFullYear();
+    const mm = String(ist.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(ist.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+}
+
+/**
+ * Yahoo returns timestamps in seconds (Unix epoch). Convert to IST YYYY-MM-DD.
+ */
+function yahooTimestampToISTPriceDate(timestampSeconds: number): string {
+  return formatYYYYMMDDInIST(new Date(timestampSeconds * 1000));
+}
+
+/**
+ * Convert UNIX seconds → IST → YYYY-MM-DD
+ */
+function istDateStringFromUnix(tsSeconds: number): string {
+  return formatYYYYMMDDInIST(new Date(tsSeconds * 1000));
+}
 
 /**
  * Get previous trading day date (in IST timezone)
@@ -145,7 +201,6 @@ function mapNseToYahooSymbol(nseSymbol: string): string {
 async function fetchStockPriceFromAPI(symbol: string): Promise<{ price: number; date: string; timestamp: number } | null> {
   try {
     const yahooSymbol = mapNseToYahooSymbol(symbol);
-    const priceDate = getPreviousTradingDay();
     
     // Yahoo Finance Quote API endpoint
     // Using v8/finance/chart endpoint which provides quote data
@@ -191,49 +246,76 @@ async function fetchStockPriceFromAPI(symbol: string): Promise<{ price: number; 
       throw new Error('Invalid Yahoo Finance response: missing meta data');
     }
     
-    // Try multiple fields for previous close price (Yahoo Finance API can vary)
-    // Priority: chartPreviousClose (EOD previous close) > regularMarketPreviousClose > previousClose > regularMarketPrice
-    // Note: chartPreviousClose is the correct field for previous trading day close price in Yahoo Finance v8 API
-    let price = meta.chartPreviousClose || meta.regularMarketPreviousClose || meta.previousClose || meta.regularMarketPrice;
+    // HARDENED: Always parse chart arrays to derive date (prevents stale data corruption)
+    // Read chart.result[0].timestamp and chart.result[0].indicators.quote[0].close
+    const timestamps = result.timestamp;
+    const quote = result.indicators?.quote?.[0];
+    const closes = quote?.close;
     
-    // If still no price, try getting from indicators/quote data
-    if (!price && result.indicators && result.indicators.quote && result.indicators.quote.length > 0) {
-      const quotes = result.indicators.quote[0];
-      if (quotes.close && Array.isArray(quotes.close) && quotes.close.length > 0) {
-        // Get the last available close price (filter out null/undefined values)
-        const closePrices = quotes.close.filter((p: number | null | undefined) => p !== null && p !== undefined && !isNaN(p) && p > 0);
-        if (closePrices.length > 0) {
-          price = closePrices[closePrices.length - 1];
-          console.log(`[Stock Price Service] Using last close price from indicators for ${symbol}: ${price}`);
-        }
+    // Validate both arrays exist
+    if (!Array.isArray(timestamps) || !Array.isArray(closes)) {
+      throw new Error(`[YahooInvariant] Missing timestamp/close arrays for ${symbol}. timestamps: ${Array.isArray(timestamps) ? 'exists' : 'missing'}, closes: ${Array.isArray(closes) ? 'exists' : 'missing'}`);
+    }
+    
+    // Validate both arrays have equal non-zero length
+    if (timestamps.length === 0 || closes.length === 0) {
+      throw new Error(`[YahooInvariant] Empty timestamp/close arrays for ${symbol}. timestamps.length=${timestamps.length}, closes.length=${closes.length}`);
+    }
+    
+    if (timestamps.length !== closes.length) {
+      throw new Error(`[YahooInvariant] Mismatched array lengths for ${symbol}. timestamps.length=${timestamps.length}, closes.length=${closes.length}`);
+    }
+    
+    // Find the LAST index where close[index] is not null AND timestamp exists
+    let lastValidIndex = -1;
+    for (let i = timestamps.length - 1; i >= 0; i--) {
+      const ts = timestamps[i];
+      const close = closes[i];
+      if (
+        ts !== null && ts !== undefined && typeof ts === 'number' && !isNaN(ts) && ts > 0 &&
+        close !== null && close !== undefined && typeof close === 'number' && !isNaN(close) && close > 0
+      ) {
+        lastValidIndex = i;
+        break;
       }
     }
     
-    const timestamp = meta.regularMarketTime || meta.chartPreviousCloseTime || Math.floor(Date.now() / 1000);
-    
-    if (!price || isNaN(price) || price <= 0) {
-      // Log the actual meta data for debugging (limited to avoid spam)
-      const metaPreview = {
-        chartPreviousClose: meta.chartPreviousClose,
-        regularMarketPreviousClose: meta.regularMarketPreviousClose,
-        previousClose: meta.previousClose,
-        regularMarketPrice: meta.regularMarketPrice,
-        currency: meta.currency,
-        symbol: meta.symbol,
-      };
-      console.error(`[Stock Price Service] Invalid price for ${symbol}. Meta preview:`, JSON.stringify(metaPreview));
-      throw new Error(`Invalid price from Yahoo Finance: price=${price}, tried: chartPreviousClose=${meta.chartPreviousClose}, regularMarketPreviousClose=${meta.regularMarketPreviousClose}, previousClose=${meta.previousClose}, regularMarketPrice=${meta.regularMarketPrice}`);
+    if (lastValidIndex === -1) {
+      throw new Error(`[YahooInvariant] No valid timestamp/close pair found for ${symbol}`);
     }
     
-    // Convert timestamp to date string
-    const priceDateFromTimestamp = new Date(timestamp * 1000).toISOString().split('T')[0];
+    const yahooTimestamp = timestamps[lastValidIndex];
+    const yahooClose = closes[lastValidIndex];
     
-    console.log(`[Stock Price Service] ✓ Yahoo EOD: ${symbol} = ₹${price.toFixed(2)} (${priceDateFromTimestamp})`);
+    // Derive yahooPriceDate from the timestamp
+    const yahooPriceDate = istDateStringFromUnix(yahooTimestamp);
     
+    // SANITY CHECK: Compute current IST date and check if Yahoo data is stale
+    const currentISTDate = formatYYYYMMDDInIST(new Date());
+    const yahooDateObj = new Date(yahooPriceDate + 'T00:00:00');
+    const currentDateObj = new Date(currentISTDate + 'T00:00:00');
+    const daysDiff = (currentDateObj.getTime() - yahooDateObj.getTime()) / (1000 * 60 * 60 * 24);
+    
+    if (daysDiff > 1) {
+      // Log warning and return null to skip upsert
+      console.warn(`[StockPrice][STALE_YAHOO] SYMBOL=${symbol} yahoo_date=${yahooPriceDate} close=${yahooClose}`);
+      return null;
+    }
+    
+    // DEBUG LOG for accepted symbol
+    console.log(`[StockPrice][ACCEPTED] SYMBOL=${symbol} yahoo_ts=${yahooTimestamp} yahoo_date_ist=${yahooPriceDate} close=${yahooClose}`);
+    
+    // Validate price
+    if (!yahooClose || isNaN(yahooClose) || yahooClose <= 0) {
+      throw new Error(`[YahooInvariant] Invalid close price for ${symbol} at index ${lastValidIndex}: ${yahooClose}`);
+    }
+    
+    // CRITICAL: price_date ALWAYS equals yahoo_date_ist
+    // closing_price ALWAYS equals the close for that timestamp
     return {
-      price: parseFloat(price.toFixed(2)),
-      date: priceDateFromTimestamp,
-      timestamp: timestamp,
+      price: parseFloat(yahooClose.toFixed(2)),
+      date: yahooPriceDate,
+      timestamp: yahooTimestamp,
     };
     
   } catch (error) {
@@ -250,7 +332,7 @@ async function fetchStockPriceFromAPI(symbol: string): Promise<{ price: number; 
  * Get stock price from database
  * 
  * @param symbol - NSE stock symbol
- * @param priceDate - Optional date (defaults to previous trading day)
+ * @param priceDate - Optional date (defaults to latest available price)
  * @returns Stock price or null if not found
  */
 export async function getStockPrice(
@@ -259,56 +341,59 @@ export async function getStockPrice(
 ): Promise<StockPrice | null> {
   try {
     const supabase = createAdminClient();
-    const targetDate = priceDate || getPreviousTradingDay();
-    
-    // Try to get price for the specific date
-    const { data, error } = await supabase
-      .from('stock_prices')
-      .select('symbol, closing_price, price_date, last_updated, price_source')
-      .eq('symbol', symbol.toUpperCase())
-      .eq('price_date', targetDate)
-      .single();
-    
-    if (error || !data) {
-      // Try to get the most recent price for this symbol (even if stale)
-      // This ensures we never default to avg_buy_price
-      // Use .maybeSingle() instead of .single() to handle cases where no rows exist
-      const { data: latestData, error: latestError } = await supabase
+
+    // If a specific date is requested, fetch that row.
+    if (priceDate) {
+      const { data, error } = await supabase
         .from('stock_prices')
         .select('symbol, closing_price, price_date, last_updated, price_source')
         .eq('symbol', symbol.toUpperCase())
-        .order('price_date', { ascending: false })
-        .limit(1)
+        .eq('price_date', priceDate)
         .maybeSingle();
-      
-      if (latestData && !latestError) {
-        // Only log if price is more than 3 days old (stale data warning)
-        const priceDate = new Date(latestData.price_date);
-        const daysOld = (Date.now() - priceDate.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysOld > 3) {
-          console.warn(`[Stock Price Service] Using stale price for ${symbol}: ₹${latestData.closing_price} (${latestData.price_date}, ${daysOld.toFixed(0)} days old)`);
-        }
+
+      if (data && !error) {
         return {
-          symbol: latestData.symbol,
-          price: latestData.closing_price,
-          priceDate: latestData.price_date,
-          lastUpdated: latestData.last_updated,
+          symbol: data.symbol,
+          price: data.closing_price,
+          priceDate: data.price_date,
+          lastUpdated: data.last_updated,
         };
       }
-      
-      if (latestError) {
-        console.warn(`[Stock Price Service] Error fetching latest price for ${symbol}:`, latestError);
-      }
-      
-      return null;
+      // Fall through to latest if not found.
     }
-    
-    return {
-      symbol: data.symbol,
-      price: data.closing_price,
-      priceDate: data.price_date,
-      lastUpdated: data.last_updated,
-    };
+
+    // Default behavior: return the latest available price for this symbol.
+    // This avoids any assumptions about "previous trading day" and trusts the DB/Yahoo-derived dates.
+    const { data: latestData, error: latestError } = await supabase
+      .from('stock_prices')
+      .select('symbol, closing_price, price_date, last_updated, price_source')
+      .eq('symbol', symbol.toUpperCase())
+      .order('price_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestData && !latestError) {
+      // Only log if price is more than 3 days old (stale data warning)
+      const latestPriceDate = new Date(latestData.price_date);
+      const daysOld = (Date.now() - latestPriceDate.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysOld > 3) {
+        console.warn(
+          `[Stock Price Service] Using stale price for ${symbol}: ₹${latestData.closing_price} (${latestData.price_date}, ${daysOld.toFixed(0)} days old)`
+        );
+      }
+      return {
+        symbol: latestData.symbol,
+        price: latestData.closing_price,
+        priceDate: latestData.price_date,
+        lastUpdated: latestData.last_updated,
+      };
+    }
+
+    if (latestError) {
+      console.warn(`[Stock Price Service] Error fetching latest price for ${symbol}:`, latestError);
+    }
+
+    return null;
   } catch (error) {
     console.error(`[Stock Price Service] Error getting price for ${symbol}:`, error);
     return null;
@@ -367,26 +452,14 @@ export async function storeStockPrice(
  */
 export async function updateStockPrices(symbols: string[]): Promise<PriceUpdateResult[]> {
   const results: PriceUpdateResult[] = [];
-  const priceDate = getPreviousTradingDay();
   
   console.log(`[Stock Price Service] Starting price update for ${symbols.length} symbols`);
-  console.log(`[Stock Price Service] Target date: ${priceDate}`);
-  
-  // Check which symbols need updates
-  const supabase = createAdminClient();
-  const { data: existingPrices } = await supabase
-    .from('stock_prices')
-    .select('symbol')
-    .eq('price_date', priceDate)
-    .in('symbol', symbols.map(s => s.toUpperCase()));
-  
-  const existingSymbols = new Set(
-    (existingPrices || []).map(p => p.symbol.toUpperCase())
-  );
-  
-  const symbolsToUpdate = symbols.filter(s => !existingSymbols.has(s.toUpperCase()));
-  
-  console.log(`[Stock Price Service] ${symbolsToUpdate.length} symbols need updates`);
+
+  // IMPORTANT PRODUCT RULE:
+  // Yahoo Finance is the single source of truth for stock price dates.
+  // We always fetch Yahoo, derive the IST price_date from the Yahoo timestamp,
+  // and upsert (symbol, price_date). This makes both cron runs deterministic.
+  const symbolsToUpdate = symbols;
   
   // Update prices (with rate limiting for free APIs)
   for (const symbol of symbolsToUpdate) {
@@ -396,6 +469,7 @@ export async function updateStockPrices(symbols: string[]): Promise<PriceUpdateR
       
       if (priceData) {
         // Store in database with YAHOO_EOD source
+        // Note: [StockPrice][ACCEPTED] log is already emitted in fetchStockPriceFromAPI
         const stored = await storeStockPrice(symbol, priceData.price, priceData.date, 'YAHOO_EOD');
         
         if (stored) {
@@ -437,7 +511,6 @@ export async function updateStockPrices(symbols: string[]): Promise<PriceUpdateR
   const failureCount = results.filter(r => !r.success).length;
   
   console.log(`[Stock Price Service] Update complete: ${successCount} succeeded, ${failureCount} failed`);
-  console.log(`[Stock Price Service] Price date used: ${priceDate} (Yahoo EOD)`);
   
   return results;
 }
@@ -459,67 +532,41 @@ export async function getStockPrices(
   
   try {
     const supabase = createAdminClient();
-    const targetDate = getPreviousTradingDay();
     const upperSymbols = symbols.map(s => s.toUpperCase());
     
-    // Batch query: Get prices for all symbols at once for the target date
-    const { data: priceData, error } = await supabase
+
+    // IMPORTANT PRODUCT RULE:
+    // Do NOT assume any "previous trading day" for stocks. Always use the latest stored
+    // Yahoo-derived IST price_date per symbol.
+    //
+    // Fetch all rows for the requested symbols ordered by (symbol ASC, price_date DESC),
+    // then take the first row per symbol.
+    const { data: rows, error } = await supabase
       .from('stock_prices')
       .select('symbol, closing_price, price_date, last_updated, price_source')
       .in('symbol', upperSymbols)
-      .eq('price_date', targetDate);
-    
-    // Create a map of found prices
-    const foundPrices = new Map<string, StockPrice>();
-    if (priceData && !error) {
-      for (const row of priceData) {
-        foundPrices.set(row.symbol.toUpperCase(), {
-          symbol: row.symbol,
-          price: row.closing_price,
-          priceDate: row.price_date,
-          lastUpdated: row.last_updated,
-        });
-      }
-    }
-    
-    // For symbols not found for target date, get latest prices in batch
-    const missingSymbols = upperSymbols.filter(s => !foundPrices.has(s));
-    if (missingSymbols.length > 0) {
-      // Get latest price for each missing symbol using a more efficient query
-      // We'll use a subquery approach: get the latest price_date per symbol, then join
-      const { data: latestPrices, error: latestError } = await supabase
-        .from('stock_prices')
-        .select('symbol, closing_price, price_date, last_updated, price_source')
-        .in('symbol', missingSymbols)
-        .order('price_date', { ascending: false });
-      
-      if (latestPrices && !latestError) {
-        // Group by symbol and take the first (most recent) for each
-        const latestBySymbol = new Map<string, StockPrice>();
-        for (const row of latestPrices) {
-          const symbol = row.symbol.toUpperCase();
-          if (!latestBySymbol.has(symbol)) {
-            latestBySymbol.set(symbol, {
-              symbol: row.symbol,
-              price: row.closing_price,
-              priceDate: row.price_date,
-              lastUpdated: row.last_updated,
-            });
-          }
-        }
-        
-        // Add latest prices to found prices
-        for (const [symbol, price] of latestBySymbol) {
-          foundPrices.set(symbol, price);
+      .order('symbol', { ascending: true })
+      .order('price_date', { ascending: false });
+
+    const latestBySymbol = new Map<string, StockPrice>();
+    if (rows && !error) {
+      for (const row of rows) {
+        const sym = row.symbol.toUpperCase();
+        if (!latestBySymbol.has(sym)) {
+          latestBySymbol.set(sym, {
+            symbol: row.symbol,
+            price: row.closing_price,
+            priceDate: row.price_date,
+            lastUpdated: row.last_updated,
+          });
         }
       }
     }
-    
-    // Build result map (include null for symbols not found)
+
     for (const symbol of upperSymbols) {
-      prices.set(symbol, foundPrices.get(symbol) || null);
+      prices.set(symbol, latestBySymbol.get(symbol) || null);
     }
-    
+
     return prices;
   } catch (error) {
     console.error(`[Stock Price Service] Error getting batch prices:`, error);

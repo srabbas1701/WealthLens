@@ -621,72 +621,112 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   /**
    * Send OTP to mobile number
+   * 
+   * ===============================
+   * SUPABASE PHONE OTP (DISABLED)
+   * Reason: DLT issues in India
+   * Replaced by MSG91 OTP Widget
+   * DO NOT DELETE – rollback safety
+   * ===============================
+   * 
+   * Phone OTP is now handled by MSG91 Widget in the login page.
+   * This function is kept for backward compatibility but should not be used.
    */
   const sendOtp = async (phone: string) => {
-    if (!supabase) {
-      return { error: new Error('Supabase client not available') };
-    }
+    // ===============================
+    // SUPABASE PHONE OTP (DISABLED)
+    // Reason: DLT issues in India
+    // Replaced by MSG91 OTP Widget
+    // DO NOT DELETE – rollback safety
+    // ===============================
+    // if (!supabase) {
+    //   return { error: new Error('Supabase client not available') };
+    // }
+    // 
+    // try {
+    //   const { error } = await supabase.auth.signInWithOtp({
+    //     phone,
+    //     options: {
+    //       channel: 'sms',
+    //     },
+    //   });
+    //   
+    //   return { error: error ? new Error(error.message) : null };
+    // } catch (error) {
+    //   return { error: error as Error };
+    // }
     
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone,
-        options: {
-          channel: 'sms',
-        },
-      });
-      
-      return { error: error ? new Error(error.message) : null };
-    } catch (error) {
-      return { error: error as Error };
-    }
+    // Phone OTP is now handled by MSG91 Widget in the login page
+    return { error: new Error('Phone OTP is now handled by MSG91 Widget. Use MSG91 widget in login page.') };
   };
   
   /**
    * Verify OTP for mobile number
+   * 
+   * ===============================
+   * SUPABASE PHONE OTP (DISABLED)
+   * Reason: DLT issues in India
+   * Replaced by MSG91 OTP Widget
+   * DO NOT DELETE – rollback safety
+   * ===============================
+   * 
+   * Phone OTP verification is now handled by MSG91 Widget in the login page.
+   * This function is kept for backward compatibility but should not be used.
+   * 
+   * Original behavior:
    * On success, Supabase creates session and onAuthStateChange fires SIGNED_IN
    * PRODUCTION FIX: Explicitly wait for session to be established
    */
   const verifyOtp = async (phone: string, token: string) => {
-    if (!supabase) {
-      return { error: new Error('Supabase client not available') };
-    }
+    // ===============================
+    // SUPABASE PHONE OTP (DISABLED)
+    // Reason: DLT issues in India
+    // Replaced by MSG91 OTP Widget
+    // DO NOT DELETE – rollback safety
+    // ===============================
+    // if (!supabase) {
+    //   return { error: new Error('Supabase client not available') };
+    // }
+    // 
+    // try {
+    //   const { data, error } = await supabase.auth.verifyOtp({
+    //     phone,
+    //     token,
+    //     type: 'sms',
+    //   });
+    //   
+    //   if (error) {
+    //     return { error: new Error(error.message) };
+    //   }
+    //   
+    //   // PRODUCTION FIX: Ensure session is established before returning
+    //   // Wait for session to be available (with timeout)
+    //   if (data?.session) {
+    //     // Session is immediately available - great!
+    //     return { error: null };
+    //   } else {
+    //     // Wait a bit for session to be established (can happen on mobile/slow networks)
+    //     // The onAuthStateChange will handle setting the state, but we want to ensure
+    //     // the session is in place for immediate redirect
+    //     await new Promise(resolve => setTimeout(resolve, 500));
+    //     
+    //     // Verify session exists
+    //     const { data: { session: verifiedSession } } = await supabase.auth.getSession();
+    //     if (!verifiedSession) {
+    //       return { error: new Error('Session not established. Please try again.') };
+    //     }
+    //   }
+    //   
+    //   // If successful, onAuthStateChange will fire SIGNED_IN event
+    //   // which will trigger fetchUserData and set authStatus to 'authenticated'
+    //   
+    //   return { error: null };
+    // } catch (error) {
+    //   return { error: error as Error };
+    // }
     
-    try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        phone,
-        token,
-        type: 'sms',
-      });
-      
-      if (error) {
-        return { error: new Error(error.message) };
-      }
-      
-      // PRODUCTION FIX: Ensure session is established before returning
-      // Wait for session to be available (with timeout)
-      if (data?.session) {
-        // Session is immediately available - great!
-        return { error: null };
-      } else {
-        // Wait a bit for session to be established (can happen on mobile/slow networks)
-        // The onAuthStateChange will handle setting the state, but we want to ensure
-        // the session is in place for immediate redirect
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Verify session exists
-        const { data: { session: verifiedSession } } = await supabase.auth.getSession();
-        if (!verifiedSession) {
-          return { error: new Error('Session not established. Please try again.') };
-        }
-      }
-      
-      // If successful, onAuthStateChange will fire SIGNED_IN event
-      // which will trigger fetchUserData and set authStatus to 'authenticated'
-      
-      return { error: null };
-    } catch (error) {
-      return { error: error as Error };
-    }
+    // Phone OTP verification is now handled by MSG91 Widget in the login page
+    return { error: new Error('Phone OTP verification is now handled by MSG91 Widget. Use MSG91 widget in login page.') };
   };
   
   /**

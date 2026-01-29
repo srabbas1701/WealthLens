@@ -1295,7 +1295,7 @@ function DashboardContent() {
                   />
                   
                   <div className="flex items-center gap-2 mb-6 pr-10">
-                    <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]">
+                    <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap">
                       {bucketName}
                     </p>
                     <CategoryInfoTooltip content={tooltip} />
