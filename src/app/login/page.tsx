@@ -399,44 +399,39 @@ function LoginContent() {
             }),
           });
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            console.error("Backend login failed:", errorData);
-            throw new Error(errorData.error || "Backend login failed");
-          }
-
           const data = await response.json();
 
-          // Step 2: Validate response and get credentials
-          if (!data.success || !data.credentials) {
-            console.error("Invalid response:", data);
-            throw new Error(data.error || "Invalid response: missing credentials");
-          }
-
-          console.log("Session received from backend");
-          console.log("Establishing Supabase session...");
-
-          // Step 3: Sign in with email+password (Supabase standard method)
-          // Note: Email is internal only, never shown to user
-          const supabase = createClient();
-          const { data: sessionData, error: sessionError } = await supabase.auth.signInWithPassword({
-            email: data.credentials.email,
-            password: data.credentials.password,
-          });
-
-          if (sessionError) {
-            console.error("Session error:", sessionError);
-            setError("Failed to create session. Please try again.");
+          if (!response.ok) {
+            console.error("Backend login failed:", data);
+            setError(data.error || "Backend login failed");
             setIsVerifying(false);
             return;
           }
 
-          // ✅ Session established! Redirect to dashboard
-          console.log("✅ Session created successfully");
-          console.log("Redirecting to /dashboard");
+          // After MSG91 verifies OTP and backend responds
+          if (data.success && data.credentials) {
+            console.log("Establishing Supabase session...");
 
-          // Step 4: Redirect to dashboard on success
-          router.push('/dashboard');
+            // Sign in with email+password (Supabase standard method)
+            const supabase = createClient();
+            const { error: sessionError } = await supabase.auth.signInWithPassword({
+              email: data.credentials.email,
+              password: data.credentials.password,
+            });
+
+            if (sessionError) {
+              console.error("Session error:", sessionError);
+              setError("Failed to create session. Please try again.");
+              setIsVerifying(false);
+              return;
+            }
+
+            console.log("✅ Session created successfully");
+            router.push("/dashboard");
+          } else {
+            setError(data.error || "Login failed");
+            setIsVerifying(false);
+          }
         } catch (error) {
           console.error("Error during login flow:", error);
           setError("Login failed. Please try again.");

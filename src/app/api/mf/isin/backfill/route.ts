@@ -19,7 +19,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { backfillMFISINs } from '@/lib/mf-isin-backfill';
-import { startMarketDataRun, completeMarketDataRun, failMarketDataRun } from '@/lib/market-data-runs';
 
 interface BackfillRequest {
   force?: boolean;
@@ -36,39 +35,13 @@ interface BackfillResponse {
 }
 
 export async function POST(request: NextRequest) {
-  let runId: string | null = null;
-  
   try {
     const body: BackfillRequest = await request.json().catch(() => ({}));
     const force = body.force || false;
     
     console.log(`[MF ISIN Backfill API] Starting nightly backfill${force ? ' (force mode)' : ''}...`);
     
-    // Detect run type and trigger source
-    const userAgent = request.headers.get('user-agent') || '';
-    const isCron = userAgent.includes('supabase') || request.headers.get('x-supabase-cron') === 'true';
-    const runType = isCron ? 'cron' : 'manual';
-    const triggerSource = isCron ? 'supabase_cron' : 'ui_button';
-    
-    // Start market data run logging
-    runId = await startMarketDataRun({
-      assetType: 'isin_backfill',
-      runType,
-      triggerSource,
-      targetDate: null, // ISIN backfill doesn't have a target date
-    });
-    
     const result = await backfillMFISINs();
-    
-    // Complete market data run logging
-    if (runId) {
-      await completeMarketDataRun(runId, {
-        successCount: result.resolved,
-        skippedCount: 0, // ISIN backfill doesn't have skipped concept
-        failedCount: result.unresolved,
-        notes: 'Nightly ISIN resolution attempt',
-      });
-    }
     
     const message = `Backfill complete: ${result.resolved} resolved out of ${result.scanned} scanned assets`;
     
@@ -82,11 +55,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[MF ISIN Backfill API] Error:', error);
-    
-    // Fail market data run logging
-    if (runId) {
-      await failMarketDataRun(runId, error instanceof Error ? error.message : 'Unknown error');
-    }
     
     return NextResponse.json<BackfillResponse>(
       {

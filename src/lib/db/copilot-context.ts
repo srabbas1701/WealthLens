@@ -55,10 +55,15 @@ export async function getCopilotContext(
       .select('*')
       .eq('user_id', userId)
       .eq('is_primary', true)
-      .single();
+      .maybeSingle();
 
-    if (portfolioError || !portfolio) {
+    if (portfolioError) {
       console.error('Failed to fetch portfolio:', portfolioError);
+      return null;
+    }
+
+    // PGRST116 / 0 rows is expected when user has no portfolio - don't log as error
+    if (!portfolio) {
       return null;
     }
 

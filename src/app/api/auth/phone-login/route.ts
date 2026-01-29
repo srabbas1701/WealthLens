@@ -8,9 +8,11 @@
  * 2. Frontend sends verified phone number to this endpoint
  * 3. Backend normalizes phone to E.164 format
  * 4. Backend finds existing user OR creates new user
- * 5. Backend creates Supabase session using admin.createSession
+ * 5. Backend sets temp password on user (updateUserById)
  * 6. Backend syncs user profile to public.users table
- * 7. Backend returns session to frontend
+ * 7. Backend returns credentials { email, password } to frontend
+ * 8. Frontend calls signInWithPassword({ email, password }) - Supabase creates session
+ *    NOTE: signInWithPassword ONLY supports email, NOT phone. Internal email is never shown to user.
  * 
  * IMPORTANT:
  * - MSG91 handles OTP verification (already done before this endpoint is called)
@@ -85,54 +87,83 @@ export async function POST(req: NextRequest) {
     // 3. Initialize Supabase admin client
     const supabaseAdmin = createAdminClient();
 
-    // 4. Find existing user by phone using admin.listUsers
-    // IMPORTANT: This endpoint supports BOTH login (existing user) and signup (new user)
-    const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-    
-    if (listError) {
-      console.error('❌ Error listing users:', listError);
-      return NextResponse.json(
-        { error: 'Failed to check existing users', details: listError.message },
-        { status: 500 }
-      );
+    // Helper: Normalize phone for comparison (digits only)
+    const normalizeForMatch = (p: string) => p.replace(/\D/g, '');
+    const searchPhoneDigits = normalizeForMatch(phone);
+
+    // 4. CRITICAL: PRIORITIZE public.users over auth.users for account linking
+    // When user originally signed up with EMAIL, their profile (and portfolios) are under that user.
+    // public.users.phone_number may be set during onboarding even if auth.users.phone is null.
+    // This ensures phone login uses the SAME user who has portfolios (not a duplicate auth identity).
+    let user: { id: string; phone?: string } | null = null;
+
+    // Search public.users for phone_number match
+    // When multiple users have same phone (e.g. email user + phone-only duplicate), prefer one with portfolio
+    const { data: profilesWithPhone } = await supabaseAdmin
+      .from('users')
+      .select('id, phone_number')
+      .not('phone_number', 'is', null);
+
+    const matchingProfiles = (profilesWithPhone || []).filter((p) => {
+      if (!p.phone_number) return false;
+      return normalizeForMatch(p.phone_number) === searchPhoneDigits;
+    });
+
+    if (matchingProfiles.length > 0) {
+      // Prefer user who has a portfolio (existing user with data)
+      const { data: portfoliosByUser } = await supabaseAdmin
+        .from('portfolios')
+        .select('user_id')
+        .eq('is_primary', true)
+        .in('user_id', matchingProfiles.map((p) => p.id));
+
+      const userIdsWithPortfolio = new Set((portfoliosByUser || []).map((p) => p.user_id));
+      const chosenProfile =
+        matchingProfiles.find((p) => userIdsWithPortfolio.has(p.id)) || matchingProfiles[0];
+
+      if (userIdsWithPortfolio.has(chosenProfile.id)) {
+        console.log('✅ Found user with portfolio (account linking):', chosenProfile.id);
+      } else {
+        console.log('✅ Found user in public.users (profile has phone):', chosenProfile.id);
+      }
+
+      const { data: authUserData } = await supabaseAdmin.auth.admin.getUserById(chosenProfile.id);
+      if (authUserData?.user) {
+        user = authUserData.user;
+        console.log('✅ Using profile-linked auth user:', user.id);
+      }
     }
 
-    console.log('🔍 Searching for phone:', phone);
-    console.log('📋 Total users in DB:', usersData?.users?.length || 0);
-
-    // Find user by phone with FLEXIBLE comparison (handles both +919810155042 and 919810155042)
-    // TODO: Migrate all phone numbers in database to E.164 format (+919810155042)
-    // Run this SQL: UPDATE auth.users SET phone = CONCAT('+', phone) WHERE phone NOT LIKE '+%' AND phone IS NOT NULL;
-    let user = usersData?.users?.find((u) => {
-      if (!u.phone) return false;
-      
-      // Normalize both phones: remove all non-digit characters for comparison
-      const normalizeForMatch = (p: string) => p.replace(/\D/g, ''); // Remove everything except digits
-      
-      const userPhoneDigits = normalizeForMatch(u.phone);
-      const searchPhoneDigits = normalizeForMatch(phone);
-      
-      // Match if the digit sequences are identical
-      const match = userPhoneDigits === searchPhoneDigits;
-      
-      if (match) {
-        console.log('✅ Found matching user:', {
-          userId: u.id,
-          storedPhone: u.phone,
-          searchPhone: phone,
-          digitsMatch: userPhoneDigits,
-        });
-      }
-      
-      return match;
-    });
-    
+    // 5. Fallback: Search auth.users if no profile match (e.g., phone-only signup)
     if (!user) {
-      console.log('❌ No user found. Phones in DB:', usersData?.users
-        ?.filter(u => u.phone)
-        ?.map(u => u.phone)
-        ?.slice(0, 5)
-      );
+      const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (listError) {
+        console.error('❌ Error listing users:', listError);
+        return NextResponse.json(
+          { error: 'Failed to check existing users', details: listError.message },
+          { status: 500 }
+        );
+      }
+
+      console.log('🔍 Searching auth.users for phone:', phone);
+      console.log('📋 Total users in auth:', usersData?.users?.length || 0);
+
+      const authUser = usersData?.users?.find((u) => {
+        if (!u.phone) return false;
+        return normalizeForMatch(u.phone) === searchPhoneDigits;
+      });
+
+      if (authUser) {
+        user = authUser;
+        console.log('✅ Found matching user in auth.users:', { userId: user.id, storedPhone: user.phone });
+      } else {
+        console.log('❌ No user found. Phones in auth:', usersData?.users
+          ?.filter(u => u.phone)
+          ?.map(u => u.phone)
+          ?.slice(0, 5)
+        );
+      }
     }
 
     // 5. Handle user: use existing OR create new
@@ -295,13 +326,13 @@ export async function POST(req: NextRequest) {
 
     // 6. Create internal email and temp password
     // Email is NEVER shown to user - purely for Supabase auth
-    const internalEmail = `${user.phone?.replace(/\D/g, '')}@lensonwealth.app`;
+    const internalEmail = `${(user.phone || phone).replace(/\D/g, '')}@lensonwealth.app`;
     const tempPassword = `${user.id.substring(0, 8)}-${Date.now()}`;
 
     // Update user with email and password
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
       user.id,
-      { 
+      {
         email: internalEmail,
         email_confirm: true,
         password: tempPassword,
@@ -324,7 +355,7 @@ export async function POST(req: NextRequest) {
       success: true,
       user: {
         id: user.id,
-        phone: user.phone,
+        phone: phone,
       },
       credentials: {
         email: internalEmail,
