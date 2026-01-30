@@ -64,6 +64,7 @@ import PPFAddModal from '@/components/PPFAddModal';
 import NPSAddModal from '@/components/NPSAddModal';
 import EPFAddModal from '@/components/EPFAddModal';
 import GoldAddModal from '@/components/GoldAddModal';
+import AddLiabilityModal from '@/components/AddLiabilityModal';
 import VerificationBanner from '@/components/VerificationBanner';
 import InsightsLimitBanner from '@/components/InsightsLimitBanner';
 import OnboardingHint from '@/components/OnboardingHint';
@@ -78,6 +79,9 @@ import type { DailySummaryResponse, WeeklySummaryResponse, Status, RiskAlignment
 import { calculateXIRRFromHoldings, formatXIRR } from '@/lib/xirr-calculator';
 import { fetchPortfolioHealthScore } from '@/services/portfolioAnalytics';
 import type { PortfolioHealthScore } from '@/lib/portfolio-intelligence/health-score';
+import { setCachedPortfolioData, clearPortfolioCache } from '@/lib/portfolio-cache';
+import { getLiabilities, getLiabilityTotals } from '@/lib/liabilities-store';
+import { generateNetWorthTimeline } from '@/lib/net-worth-timeline';
 
 // ============================================================================
 // TYPES
@@ -134,14 +138,16 @@ interface PortfolioData {
 type GroupByOption = 'none' | 'assetType' | 'sector';
 
 // Dashboard cache - persists across route navigations for instant load when returning
+// Health score is cached for the session - calculated once, reused until cache expires or user uploads
 const DASHBOARD_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 let dashboardCache: {
   userId: string | null;
   portfolioData: PortfolioData | null;
   aiSummary: DailySummaryResponse | null;
   weeklySummary: WeeklySummaryResponse | null;
+  portfolioHealthScore: PortfolioHealthScore | null;
   timestamp: number;
-} = { userId: null, portfolioData: null, aiSummary: null, weeklySummary: null, timestamp: 0 };
+} = { userId: null, portfolioData: null, aiSummary: null, weeklySummary: null, portfolioHealthScore: null, timestamp: 0 };
 
 function getCachedDashboardData(userId: string) {
   if (dashboardCache.userId !== userId) return null;
@@ -151,6 +157,7 @@ function getCachedDashboardData(userId: string) {
     portfolioData: dashboardCache.portfolioData,
     aiSummary: dashboardCache.aiSummary,
     weeklySummary: dashboardCache.weeklySummary,
+    portfolioHealthScore: dashboardCache.portfolioHealthScore,
   };
 }
 
@@ -160,19 +167,22 @@ function mergeDashboardCache(
     portfolioData: PortfolioData;
     aiSummary: DailySummaryResponse | null;
     weeklySummary: WeeklySummaryResponse | null;
+    portfolioHealthScore: PortfolioHealthScore | null;
   }>
 ) {
   if (dashboardCache.userId !== userId) {
-    dashboardCache = { userId, portfolioData: null, aiSummary: null, weeklySummary: null, timestamp: Date.now() };
+    dashboardCache = { userId, portfolioData: null, aiSummary: null, weeklySummary: null, portfolioHealthScore: null, timestamp: Date.now() };
   }
   if (updates.portfolioData) dashboardCache.portfolioData = updates.portfolioData;
   if (updates.aiSummary !== undefined) dashboardCache.aiSummary = updates.aiSummary;
   if (updates.weeklySummary !== undefined) dashboardCache.weeklySummary = updates.weeklySummary;
+  if (updates.portfolioHealthScore !== undefined) dashboardCache.portfolioHealthScore = updates.portfolioHealthScore;
   dashboardCache.timestamp = Date.now();
 }
 
 function clearDashboardCache() {
-  dashboardCache = { userId: null, portfolioData: null, aiSummary: null, weeklySummary: null, timestamp: 0 };
+  dashboardCache = { userId: null, portfolioData: null, aiSummary: null, weeklySummary: null, portfolioHealthScore: null, timestamp: 0 };
+  clearPortfolioCache(); // Also clear shared cache for Summary page
 }
 
 // ============================================================================
@@ -308,6 +318,9 @@ function DashboardContent() {
   
   // Gold Add modal state
   const [isGoldModalOpen, setIsGoldModalOpen] = useState(false);
+  
+  // Add Liability modal state
+  const [isAddLiabilityModalOpen, setIsAddLiabilityModalOpen] = useState(false);
   
   // User dropdown state
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -537,6 +550,7 @@ function DashboardContent() {
         if (result.success && result.data) {
           setPortfolioData(result.data);
           mergeDashboardCache(userId, { portfolioData: result.data });
+          setCachedPortfolioData(userId, result.data); // Shared cache for Summary page
           console.log('[Dashboard] Portfolio data loaded successfully');
         } else {
           console.warn('[Dashboard] Portfolio data fetch returned success=false:', result);
@@ -762,6 +776,10 @@ function DashboardContent() {
       setPortfolioData(cached.portfolioData);
       setAiSummary(cached.aiSummary);
       setWeeklySummary(cached.weeklySummary);
+      setCachedPortfolioData(user.id, cached.portfolioData); // Keep shared cache warm for Summary page
+      if (cached.portfolioHealthScore) {
+        setPortfolioHealthScore(cached.portfolioHealthScore);
+      }
       setPortfolioLoading(false);
       setSummaryLoading(false);
       setWeeklyLoading(false);
@@ -976,7 +994,7 @@ function DashboardContent() {
   }, [portfolioData.holdings, portfolioData.summary.createdAt, portfolioData.summary.lastUpdated]);
 
   // Fetch Portfolio Health Score from API (same source as health score page)
-  // OPTIMIZATION: Added loading guard and timeout to prevent duplicate fetches
+  // OPTIMIZATION: Use cached health score for session - calculated once, reused until cache expires
   useEffect(() => {
     if (!user?.id || !isDataConsistent) {
       setPortfolioHealthScore(null);
@@ -984,6 +1002,13 @@ function DashboardContent() {
     }
 
     const fetchHealthScore = async () => {
+      // OPTIMIZATION: Use cached health score - same score throughout session
+      const cached = getCachedDashboardData(user.id);
+      if (cached?.portfolioHealthScore) {
+        setPortfolioHealthScore(cached.portfolioHealthScore);
+        return;
+      }
+      
       // Guard: Prevent duplicate simultaneous fetches
       if (fetchingHealthScoreRef.current) {
         console.log('[Dashboard] Already loading health score, skipping...');
@@ -1008,6 +1033,7 @@ function DashboardContent() {
         
         if (response.success && response.data) {
           setPortfolioHealthScore(response.data);
+          mergeDashboardCache(user.id, { portfolioHealthScore: response.data });
           console.log('[Dashboard] Health score loaded successfully');
         } else {
           setPortfolioHealthScore(null);
@@ -1135,7 +1161,14 @@ function DashboardContent() {
                   className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-[#1E293B] text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
                 >
                   <PlusIcon className="w-5 h-5" />
-                  Add Manually
+                  Add Investments
+                </button>
+                <button
+                  onClick={() => setIsAddLiabilityModalOpen(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-[#1E293B] text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  Add Liability
                 </button>
                 <button
                   onClick={handlePriceUpdate}
@@ -1201,18 +1234,50 @@ function DashboardContent() {
                 <DataConsolidationMessage className="mb-4" />
               ) : (
                 <>
-                  <h2 className="text-6xl font-semibold text-[#0A2540] dark:text-[#F8FAFC] number-emphasis mb-4">{formatCurrency(portfolio.metrics.netWorth)}</h2>
-                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-4">
-                    Net Worth = Assets (excluding Insurance) − Liabilities
-                  </p>
-                  {portfolio.metrics.netWorthChange !== 0 && (
-                    <div className="flex items-center gap-2.5">
-                      <TrendingUpIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E]" />
-                      <span className="text-lg text-[#16A34A] dark:text-[#22C55E] font-semibold number-emphasis">+₹{(portfolio.metrics.netWorth * portfolio.metrics.netWorthChange / 100).toLocaleString('en-IN', {maximumFractionDigits: 0})}</span>
-                      <span className="text-lg text-[#16A34A] dark:text-[#22C55E] font-semibold">(+{portfolio.metrics.netWorthChange}%)</span>
-                      <span className="text-sm text-[#6B7280] dark:text-[#94A3B8] ml-1">Last 12 months</span>
-                    </div>
-                  )}
+                  {(() => {
+                    // -----------------------------------------------------------------------
+                    // NET WORTH FORMULA (NON-NEGOTIABLE):
+                    // Net Worth = Assets (excluding Insurance) − Liabilities
+                    // -----------------------------------------------------------------------
+                    // totalAssetsExInsurance: From /api/portfolio/data metrics.netWorth
+                    //   (sum of holdings excluding Insurance; Liabilities are client-side)
+                    const totalAssetsExInsurance = Number(portfolio.metrics.netWorth) || 0;
+
+                    // totalLiabilities: Sum of outstanding_amount of all active liabilities
+                    //   Source: liabilities-store (localStorage); all stored liabilities are active
+                    const liabilities = user?.id ? getLiabilities(user.id) : [];
+                    const liabilityTotals = getLiabilityTotals(liabilities);
+                    const totalLiabilities = Number(liabilityTotals.totalOutstanding) || 0;
+
+                    // netWorth = totalAssetsExInsurance − totalLiabilities
+                    // No liabilities → subtract 0. No assets → net worth can be negative.
+                    const netWorth = totalAssetsExInsurance - totalLiabilities;
+                    const displayNetWorth = Number.isFinite(netWorth) ? netWorth : 0;
+
+                    // netWorthChange: % change in assets (from API); used for "Last 12 months" display
+                    // TODO: Historical net worth tracking would allow % change of true net worth
+                    const netWorthChange = Number(portfolio.metrics.netWorthChange) || 0;
+                    const changeAmount = Number.isFinite(totalAssetsExInsurance * netWorthChange / 100)
+                      ? totalAssetsExInsurance * netWorthChange / 100
+                      : 0;
+
+                    return (
+                      <>
+                        <h2 className="text-6xl font-semibold text-[#0A2540] dark:text-[#F8FAFC] number-emphasis mb-4">{formatCurrency(displayNetWorth)}</h2>
+                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-4">
+                          Net Worth = Assets (excluding Insurance) − Liabilities
+                        </p>
+                        {netWorthChange !== 0 && (
+                          <div className="flex items-center gap-2.5">
+                            <TrendingUpIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E]" />
+                            <span className="text-lg text-[#16A34A] dark:text-[#22C55E] font-semibold number-emphasis">+₹{changeAmount.toLocaleString('en-IN', {maximumFractionDigits: 0})}</span>
+                            <span className="text-lg text-[#16A34A] dark:text-[#22C55E] font-semibold">(+{netWorthChange}%)</span>
+                            <span className="text-sm text-[#6B7280] dark:text-[#94A3B8] ml-1">Last 12 months</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </div>
@@ -1374,6 +1439,9 @@ function DashboardContent() {
               const percentage = allocationItem.percentage;
               const color = allocationItem.color; // Use color from API allocation (matches pie chart)
 
+              // Cash tile: asset-only (liquid cash/bank value). Liabilities live in Non-Investment Overview.
+              const isCashBucket = bucket === 'Cash';
+
               return (
                 <Link
                   key={bucket}
@@ -1390,7 +1458,7 @@ function DashboardContent() {
                   
                   <div className="flex items-center gap-2 mb-6 pr-10">
                     <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap">
-                      {bucketName}
+                      {isCashBucket ? 'Cash' : bucketName}
                     </p>
                     <CategoryInfoTooltip content={tooltip} />
                   </div>
@@ -1550,7 +1618,7 @@ function DashboardContent() {
                             ? 'text-[#0F172A] dark:text-[#F8FAFC] font-semibold' 
                             : 'text-[#0F172A] dark:text-[#F8FAFC]'
                         }`}>
-                          {item.name}
+                          {item.name === 'Cash & Liquidity' ? 'Cash' : item.name}
                         </span>
                       </div>
                       <span className={`text-lg font-semibold number-emphasis transition-all duration-300 ${
@@ -1568,6 +1636,99 @@ function DashboardContent() {
           )}
         </section>
         )}
+
+        {/* ============================================================================ */}
+        {/* NON-INVESTMENT OVERVIEW — Liabilities + Insurance (separate from asset allocation) */}
+        {/* ============================================================================ */}
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Non-Investment Overview</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Card 1: Liabilities — informational, uses existing liability totals */}
+            {(() => {
+              const liabilityTotalsOverview = user?.id ? getLiabilityTotals(getLiabilities(user.id)) : { totalOutstanding: 0, totalEmi: 0 };
+              return (
+                <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+                  <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Liabilities</h3>
+                  <div className="space-y-2 mb-4">
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      Total Outstanding: <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">{formatCurrency(liabilityTotalsOverview.totalOutstanding)}</span>
+                    </p>
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      Monthly EMI: <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">{formatCurrency(liabilityTotalsOverview.totalEmi)}</span>
+                    </p>
+                  </div>
+                  <Link
+                    href="/liabilities"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                  >
+                    Manage Liabilities
+                  </Link>
+                </div>
+              );
+            })()}
+
+            {/* Card 2: Insurance — disabled placeholder for future */}
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 opacity-75">
+              <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Insurance</h3>
+              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-4">
+                Insurance module coming soon
+              </p>
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#9CA3AF] dark:text-[#64748B] border-2 border-[#E5E7EB] dark:border-[#334155] rounded-lg cursor-not-allowed"
+              >
+                Add Insurance
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ============================================================================ */}
+        {/* NET WORTH OUTLOOK — Concise summary (table removed; full timeline on /liabilities) */}
+        {/* ============================================================================ */}
+        {isDataConsistent && (() => {
+          const liabilities = user?.id ? getLiabilities(user.id) : [];
+          const liabilityTotals = getLiabilityTotals(liabilities);
+          const assetsTotal = portfolio.metrics.netWorth + liabilityTotals.totalOutstanding;
+          const timeline = generateNetWorthTimeline({
+            assetsTotal,
+            liabilities,
+            months: 12,
+          });
+          const netWorthDelta = timeline.length >= 2
+            ? timeline[timeline.length - 1].net_worth - timeline[0].net_worth
+            : 0;
+          // For future use on /liabilities: show outlook only when net worth changes month-to-month
+          const hasMeaningfulChange = timeline.some(
+            (point, i) => i > 0 && point.net_worth !== timeline[i - 1].net_worth
+          );
+          void hasMeaningfulChange; // Reserved for /liabilities page
+
+          return (
+            <section className="mb-6">
+              <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+                <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  Net Worth Outlook (Next 12 Months)
+                </h3>
+                <p className="text-sm text-[#0F172A] dark:text-[#F8FAFC] mb-1">
+                  {netWorthDelta === 0
+                    ? 'Your net worth is expected to remain stable over the next 12 months if you make no new investments or loan repayments.'
+                    : `Your net worth is projected to improve by ₹${Math.abs(netWorthDelta).toLocaleString('en-IN', { maximumFractionDigits: 0 })} over the next 12 months due to ongoing loan repayments.`}
+                </p>
+                <p className="text-sm text-muted-foreground mb-3">
+                  This outlook assumes no new investments or loans.
+                </p>
+                <Link
+                  href="/liabilities"
+                  className="text-sm text-[#2563EB] dark:text-[#3B82F6] hover:underline"
+                >
+                  View details →
+                </Link>
+              </div>
+            </section>
+          );
+        })()}
 
         {/* ============================================================================ */}
         {/* ZONE 5: PERFORMANCE SNAPSHOT (Below the Fold) */}
@@ -1782,6 +1943,14 @@ function DashboardContent() {
         userId={user?.id || ''}
         onSuccess={handleUploadSuccess}
         existingHolding={null}
+      />
+
+      {/* Add Liability Modal */}
+      <AddLiabilityModal
+        isOpen={isAddLiabilityModalOpen}
+        onClose={() => setIsAddLiabilityModalOpen(false)}
+        userId={user?.id || ''}
+        onSuccess={() => router.push('/liabilities')}
       />
     </ErrorBoundary>
   );

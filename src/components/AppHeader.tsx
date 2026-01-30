@@ -74,7 +74,8 @@ export function AppHeader({
   // Determine if we're on an app route (dashboard or portfolio pages)
   // These routes should show currency selector when authenticated
   const isAppRoute = pathname?.startsWith('/dashboard') 
-    || pathname?.startsWith('/portfolio');
+    || pathname?.startsWith('/portfolio')
+    || pathname?.startsWith('/liabilities');
   
   // CRITICAL: Use useAuthSession() on landing/demo routes (no portfolio queries)
   // Use useAuthAppData() ONLY on app routes (triggers portfolio queries)

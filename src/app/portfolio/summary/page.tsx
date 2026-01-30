@@ -24,6 +24,7 @@ import {
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
+import { getCachedPortfolioData } from '@/lib/portfolio-cache';
 
 interface AssetSummary {
   assetType: string;
@@ -55,6 +56,7 @@ export default function PortfolioSummaryPage() {
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
+  const lastFetchedRef = useRef<string | null>(null); // Prevent re-fetch when effect re-runs (userId:bucket)
   
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<PortfolioSummaryData | null>(null);
@@ -76,12 +78,82 @@ export default function PortfolioSummaryPage() {
     ? `${bucketLabels[bucketFilter] || bucketFilter} Portfolio Summary`
     : 'Portfolio Summary';
 
+  // Transform portfolio data into summary format (shared logic for fetch and cache)
+  const transformToSummaryData = useCallback((portfolioData: any) => {
+    let filteredHoldings = portfolioData.holdings;
+    if (bucketFilter) {
+      filteredHoldings = portfolioData.holdings.filter((h: any) => {
+        const bucketMap: Record<string, string> = {
+          'Growth': 'Growth',
+          'IncomeAllocation': 'IncomeAllocation',
+          'Commodity': 'Commodity',
+          'Cash': 'Cash',
+        };
+        return h.topLevelBucket === bucketMap[bucketFilter] || h.topLevelBucket === bucketFilter;
+      });
+    }
+    const allAssetTypes = new Set(filteredHoldings.map((h: any) => h.assetType).filter(Boolean));
+    const assetSummaries: AssetSummary[] = Array.from(allAssetTypes).map((assetType: string) => {
+      const assetHoldings = filteredHoldings.filter((h: any) => h.assetType === assetType);
+      const totalInvested = assetHoldings.reduce((sum: number, h: any) => sum + (h.investedValue || 0), 0);
+      const totalCurrent = assetHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || 0), 0);
+      const gainLoss = totalCurrent - totalInvested;
+      const allocationItem = portfolioData.allocation.find((a: any) => a.name === assetType);
+      const totalValue = totalCurrent > 0 ? totalCurrent : (allocationItem?.value || 0);
+      return {
+        assetType,
+        totalValue,
+        investedValue: totalInvested,
+        gainLoss,
+        gainLossPercent: totalInvested > 0 ? (gainLoss / totalInvested) * 100 : 0,
+        holdingsCount: assetHoldings.length,
+        topHoldings: assetHoldings
+          .sort((a: any, b: any) => (b.investedValue || 0) - (a.investedValue || 0))
+          .slice(0, 5)
+          .map((h: any) => ({
+            name: h.name,
+            value: h.investedValue || 0,
+            percentage: totalValue > 0 ? ((h.investedValue || 0) / totalValue) * 100 : 0,
+          })),
+      };
+    }).sort((a, b) => b.totalValue - a.totalValue);
+    const totalInvested = assetSummaries.reduce((sum, a) => sum + a.investedValue, 0);
+    const totalGainLoss = assetSummaries.reduce((sum, a) => sum + a.gainLoss, 0);
+    const totalCurrentFromHoldings = filteredHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || 0), 0);
+    const totalValue = bucketFilter ? totalCurrentFromHoldings : portfolioData.metrics.netWorth;
+    return {
+      totalValue,
+      totalInvested,
+      totalGainLoss,
+      totalGainLossPercent: totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0,
+      totalHoldings: filteredHoldings.length,
+      assetSummaries,
+      lastUpdated: new Date().toISOString(),
+    };
+  }, [bucketFilter]);
+
   // Fetch portfolio summary data
   const fetchData = useCallback(async (userId: string) => {
-    // Prevent duplicate simultaneous fetches
+    const cacheKey = `${userId}:${bucketFilter || 'all'}`;
+    if (lastFetchedRef.current === cacheKey) {
+      console.log('[Summary Page] Already fetched for this user/bucket, skipping');
+      return;
+    }
     if (fetchingRef.current) {
       console.log('[Summary Page] Skipping duplicate fetch');
       return;
+    }
+    
+    // OPTIMIZATION: Use cached portfolio data when available (instant load from dashboard)
+    if (bucketFilter !== 'RealAsset') {
+      const cached = getCachedPortfolioData(userId);
+      if (cached?.holdings) {
+        console.log('[Summary Page] Using cached portfolio data for instant load');
+        lastFetchedRef.current = cacheKey;
+        setData(transformToSummaryData(cached));
+        setLoading(false);
+        return;
+      }
     }
     
     fetchingRef.current = true;
@@ -147,6 +219,7 @@ export default function PortfolioSummaryPage() {
               }),
           };
           
+          lastFetchedRef.current = cacheKey;
           setData({
             totalValue: netWorth,
             totalInvested,
@@ -241,6 +314,7 @@ export default function PortfolioSummaryPage() {
           // For filtered view, use filtered totals; for full view, use portfolio totals
           const totalValue = bucketFilter ? totalCurrentFromHoldings : portfolioData.metrics.netWorth;
 
+          lastFetchedRef.current = cacheKey;
           setData({
             totalValue,
             totalInvested,
@@ -254,11 +328,17 @@ export default function PortfolioSummaryPage() {
       }
     } catch (error) {
       console.error('Failed to fetch portfolio summary:', error);
+      lastFetchedRef.current = null; // Allow retry on failure
     } finally {
       setLoading(false);
       fetchingRef.current = false;
     }
-  }, [bucketFilter]);
+  }, [bucketFilter, transformToSummaryData]);
+
+  // Reset lastFetchedRef when user logs out (allows fresh fetch on next login)
+  useEffect(() => {
+    if (!user?.id) lastFetchedRef.current = null;
+  }, [user?.id]);
 
   // GUARD: Redirect if not authenticated
   // RULE: Never redirect while authStatus === 'loading'

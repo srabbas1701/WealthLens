@@ -608,13 +608,17 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      // Add to total
-      totalValue += valueToUse;
-      
-      // Add to allocation map by top_level_bucket (not assetType)
       // Get bucket from holdings (denormalized) or fallback to asset
       const bucket = (h as any).top_level_bucket || (h.assets as any)?.top_level_bucket;
+
+      // Net Worth = Assets (excluding Insurance) − Liabilities
+      // Insurance must NOT be included in totalValue. Liabilities are client-side (localStorage).
+      const isInsuranceOrLiability = bucket === 'Insurance' || bucket === 'Liability';
+      if (!isInsuranceOrLiability) {
+        totalValue += valueToUse;
+      }
       
+      // Add to allocation map by top_level_bucket (not assetType)
       if (bucket) {
         // IMPORTANT: Use computed current value (valueToUse) for ALL asset types
         // This ensures allocation percentages are based on current values, not invested values

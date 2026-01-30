@@ -81,8 +81,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate metric name
-    const validMetricNames = ['CLS', 'FID', 'FCP', 'LCP', 'TTFB'];
+    // Validate metric name (INP replaced FID in web-vitals v5 / Core Web Vitals 2024)
+    const validMetricNames = ['CLS', 'FID', 'INP', 'FCP', 'LCP', 'TTFB'];
     if (!validMetricNames.includes(name)) {
       return NextResponse.json(
         { success: false, error: `Invalid metric name. Must be one of: ${validMetricNames.join(', ')}` },
