@@ -99,8 +99,12 @@ export async function POST(request: NextRequest) {
     if (allHoldings) {
       const duplicateAccount = allHoldings.find((h: any) => {
         if ((h as any).asset?.asset_type !== 'ppf') return false;
-        const notes = h.notes ? JSON.parse(h.notes) : {};
-        return notes.accountNumber === accountNumber;
+        try {
+          const notes = h.notes ? JSON.parse(h.notes) : {};
+          return notes.accountNumber === accountNumber;
+        } catch {
+          return false;
+        }
       });
 
       if (duplicateAccount) {
@@ -130,6 +134,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Create a unique asset for this PPF account
+    // Note: asset_class must be 'FixedIncome' (migration 006 changed from 'debt')
     const assetName = `PPF Account - ${accountHolderName}`;
     const { data: asset, error: assetError } = await supabase
       .from('assets')
@@ -137,7 +142,7 @@ export async function POST(request: NextRequest) {
         name: assetName,
         symbol: `PPF_${accountNumber}`,
         asset_type: 'ppf',
-        asset_class: 'debt',
+        asset_class: 'FixedIncome',
         risk_bucket: 'low',
         sector: 'Government',
         is_active: true,
@@ -146,9 +151,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (assetError || !asset) {
+      const errorDetail = assetError?.message || (assetError as any)?.details || 'Unknown database error';
       console.error('[PPF API] Asset creation error:', assetError);
       return NextResponse.json(
-        { success: false, error: 'Failed to create PPF asset' },
+        { success: false, error: `Failed to create PPF asset: ${errorDetail}` },
         { status: 500 }
       );
     }
@@ -170,9 +176,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
+      const errorDetail = insertError.message || (insertError as any)?.details || 'Unknown database error';
       console.error('[PPF API] Insert error:', insertError);
       return NextResponse.json(
-        { success: false, error: insertError.message },
+        { success: false, error: `Failed to save PPF holding: ${errorDetail}` },
         { status: 500 }
       );
     }
@@ -186,9 +193,10 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
+    const errorDetail = error?.message || String(error);
     console.error('[PPF API] Error creating PPF account:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to create PPF account' },
+      { success: false, error: `Failed to create PPF account: ${errorDetail}` },
       { status: 500 }
     );
   }
@@ -235,7 +243,12 @@ export async function PUT(request: NextRequest) {
     }
 
     // Check if account number is being changed and if new number already exists
-    const existingNotes = existingHolding.notes ? JSON.parse(existingHolding.notes) : {};
+    let existingNotes: Record<string, unknown> = {};
+    try {
+      existingNotes = existingHolding.notes ? JSON.parse(existingHolding.notes) : {};
+    } catch {
+      // Malformed notes - treat as empty
+    }
     if (existingNotes.accountNumber !== accountNumber) {
       // Get user's portfolio
       const { data: portfolio } = await supabase
@@ -255,8 +268,12 @@ export async function PUT(request: NextRequest) {
         if (allHoldings) {
           const duplicateAccount = allHoldings.find((h: any) => {
             if ((h as any).asset?.asset_type !== 'ppf') return false;
-            const notes = h.notes ? JSON.parse(h.notes) : {};
-            return notes.accountNumber === accountNumber;
+            try {
+              const notes = h.notes ? JSON.parse(h.notes) : {};
+              return notes.accountNumber === accountNumber;
+            } catch {
+              return false;
+            }
           });
 
           if (duplicateAccount) {
@@ -310,9 +327,10 @@ export async function PUT(request: NextRequest) {
       .eq('id', holdingId);
 
     if (updateError) {
+      const errorDetail = updateError.message || (updateError as any)?.details || 'Unknown database error';
       console.error('[PPF API] Update error:', updateError);
       return NextResponse.json(
-        { success: false, error: updateError.message },
+        { success: false, error: `Failed to update PPF account: ${errorDetail}` },
         { status: 500 }
       );
     }
@@ -326,9 +344,10 @@ export async function PUT(request: NextRequest) {
     });
 
   } catch (error: any) {
+    const errorDetail = error?.message || String(error);
     console.error('[PPF API] Error updating PPF account:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to update PPF account' },
+      { success: false, error: `Failed to update PPF account: ${errorDetail}` },
       { status: 500 }
     );
   }
@@ -407,9 +426,10 @@ export async function DELETE(request: NextRequest) {
       .eq('id', holdingId);
 
     if (deleteError) {
+      const errorDetail = deleteError.message || (deleteError as any)?.details || 'Unknown database error';
       console.error('[PPF API] Delete error:', deleteError);
       return NextResponse.json(
-        { success: false, error: deleteError.message },
+        { success: false, error: `Failed to delete PPF account: ${errorDetail}` },
         { status: 500 }
       );
     }
@@ -422,9 +442,10 @@ export async function DELETE(request: NextRequest) {
     });
 
   } catch (error: any) {
+    const errorDetail = error?.message || String(error);
     console.error('[PPF API] Error deleting PPF account:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to delete PPF account' },
+      { success: false, error: `Failed to delete PPF account: ${errorDetail}` },
       { status: 500 }
     );
   }

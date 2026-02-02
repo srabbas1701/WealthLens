@@ -82,6 +82,8 @@ function LoginContent() {
   
   // OTP input refs for auto-focus
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  // Guard: MSG91 widget may call error callback after success (e.g. on unmount) - ignore spurious errors
+  const verificationSucceededRef = useRef(false);
   
   // UI state
   const [isLoading, setIsLoading] = useState(false);
@@ -427,6 +429,7 @@ function LoginContent() {
             }
 
             console.log("✅ Session created successfully");
+            verificationSucceededRef.current = true;
             router.push("/dashboard");
           } else {
             setError(data.error || "Login failed");
@@ -439,6 +442,8 @@ function LoginContent() {
         }
       },
       (err: any) => {
+        // MSG91 may call error callback after success (e.g. on unmount) - ignore spurious errors
+        if (verificationSucceededRef.current) return;
         console.error("OTP verify failed:", err);
         setError("Invalid OTP. Please try again.");
         setIsVerifying(false);
@@ -448,9 +453,10 @@ function LoginContent() {
 
   /**
    * Handle OTP verification (wrapper for button click)
+   * @param otpValueOverride - When provided (e.g. from auto-submit), use this instead of state to avoid stale closure
    */
-  const handleVerifyOtp = async () => {
-    const otpValue = otp.join('');
+  const handleVerifyOtp = async (otpValueOverride?: string) => {
+    const otpValue = otpValueOverride ?? otp.join('');
     if (otpValue.length !== 6) {
       setError('Please enter the complete 6-digit OTP');
       return;
@@ -476,9 +482,10 @@ function LoginContent() {
     }
     
     // Auto-submit when all 6 digits are entered (only if not already verifying)
+    // Pass newOtp.join('') to avoid stale closure - state may not have updated yet
     if (value && index === 5 && newOtp.every(d => d !== '') && !isVerifying) {
-      // Small delay to show the last digit
-      setTimeout(() => handleVerifyOtp(), 100);
+      const completeOtp = newOtp.join('');
+      setTimeout(() => handleVerifyOtp(completeOtp), 100);
     }
   };
   
@@ -497,14 +504,12 @@ function LoginContent() {
   const handleOtpPaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    if (pastedData.length === 6) {
+    if (pastedData.length === 6 && !isVerifying) {
       const newOtp = pastedData.split('');
       setOtp(newOtp);
       otpInputRefs.current[5]?.focus();
-      // Auto-submit after paste (only if not already verifying)
-      if (!isVerifying) {
-        setTimeout(() => handleVerifyOtp(), 100);
-      }
+      // Pass pastedData to avoid stale closure
+      setTimeout(() => handleVerifyOtp(pastedData), 100);
     }
   };
   
@@ -883,8 +888,8 @@ function LoginContent() {
                     {/* Verify Button */}
                     <button
                       type="button"
-                      onClick={handleVerifyOtp}
-                      disabled={isVerifying || otp.some(d => d === '')}
+                      onClick={() => handleVerifyOtp()}
+                      disabled={isVerifying}
                       className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isVerifying ? (

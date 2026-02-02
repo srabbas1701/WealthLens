@@ -221,7 +221,7 @@ export function AppHeader({
                   Sign In
                 </Link>
                 <Link
-                  href="/login"
+                  href="/signup"
                   className="px-4 py-1.5 rounded-lg bg-[#2563EB] dark:bg-[#EFF6FF] text-white dark:text-[#1E3A8A] text-xs font-medium hover:bg-[#1E40AF] dark:hover:bg-[#DBEAFE] transition-colors"
                 >
                   Get Started
@@ -440,7 +440,7 @@ export function AppHeader({
                 Sign In
               </Link>
               <Link
-                href="/login"
+                href="/signup"
                 className="px-5 py-2 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
               >
                 Get Started

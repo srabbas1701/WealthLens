@@ -1641,7 +1641,8 @@ function DashboardContent() {
         {/* NON-INVESTMENT OVERVIEW — Liabilities + Insurance (separate from asset allocation) */}
         {/* ============================================================================ */}
         <section className="mb-8">
-          <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Non-Investment Overview</h2>
+          <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Liabilities & Protection</h2>
+          <p className="text-sm text-muted-foreground mb-4">Loans, EMIs, and insurance coverage that impact your financial safety.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Card 1: Liabilities — informational, uses existing liability totals */}
             {(() => {

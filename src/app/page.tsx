@@ -564,7 +564,7 @@ export default function HomePage() {
             <h3 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Works With Your Platforms</h3>
           </div>
           
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4 mb-8 sm:mb-12 max-w-6xl mx-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 mb-8 sm:mb-12 max-w-6xl mx-auto">
             {[
               { name: 'Zerodha', logo: '/logos/zerodha.png' },
               { name: 'Groww', logo: '/logos/groww.png' },
@@ -581,13 +581,13 @@ export default function HomePage() {
             ].map((platform) => (
               <div 
                 key={platform.name} 
-                className="p-1 sm:p-1.5 bg-transparent rounded-lg border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300 flex items-center justify-center min-h-[30px] sm:min-h-[40px] touch-target"
+                className="p-0.5 sm:p-1 bg-transparent rounded-md border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300 flex items-center justify-center min-h-[15px] sm:min-h-[20px] touch-target"
               >
                 <Image
                   src={platform.logo}
                   alt={platform.name}
-                  width={90}
-                  height={30}
+                  width={45}
+                  height={15}
                   className="object-contain max-w-full max-h-full w-auto h-auto opacity-80 hover:opacity-100 transition-opacity"
                 />
               </div>

@@ -59,7 +59,7 @@ async function createOrGetNPSAsset(pranNumber: string, supabase: any) {
       name: `NPS - ${pranNumber}`,
       asset_type: 'nps',
       risk_bucket: 'medium',
-      asset_class: 'debt',
+      asset_class: 'FixedIncome',
       is_active: true,
     })
     .select('id')

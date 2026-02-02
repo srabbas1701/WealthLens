@@ -139,6 +139,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Create a unique asset for this EPF account
+    // Note: asset_class must be 'FixedIncome' (migration 006 changed from 'debt')
     const assetName = `EPF - ${employerName}${memberId ? ` (${memberId})` : ''}`;
     const { data: asset, error: assetError } = await supabase
       .from('assets')
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
         name: assetName,
         symbol: `EPF_${uan}${memberId ? `_${memberId}` : ''}`,
         asset_type: 'epf',
-        asset_class: 'debt',
+        asset_class: 'FixedIncome',
         risk_bucket: 'low',
         sector: 'Government',
         is_active: true,
@@ -155,9 +156,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (assetError || !asset) {
+      const errorDetail = assetError?.message || (assetError as any)?.details || 'Unknown database error';
       console.error('[EPF API] Asset creation error:', assetError);
       return NextResponse.json(
-        { success: false, error: 'Failed to create EPF asset' },
+        { success: false, error: `Failed to create EPF asset: ${errorDetail}` },
         { status: 500 }
       );
     }
@@ -179,9 +181,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
+      const errorDetail = insertError.message || (insertError as any)?.details || 'Unknown database error';
       console.error('[EPF API] Insert error:', insertError);
       return NextResponse.json(
-        { success: false, error: insertError.message },
+        { success: false, error: `Failed to save EPF holding: ${errorDetail}` },
         { status: 500 }
       );
     }
@@ -195,9 +198,10 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
+    const errorDetail = error?.message || String(error);
     console.error('[EPF API] Error creating EPF account:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to create EPF account' },
+      { success: false, error: `Failed to create EPF account: ${errorDetail}` },
       { status: 500 }
     );
   }

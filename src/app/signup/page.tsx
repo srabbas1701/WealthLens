@@ -34,6 +34,7 @@ import {
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader } from '@/components/AppHeader';
+import { createClient } from '@/lib/supabase/client';
 
 // Authentication method types
 type AuthMethod = 'mobile' | 'email';
@@ -51,7 +52,7 @@ const COUNTRY_CODES = [
 
 export default function SignupPage() {
   const router = useRouter();
-  const { sendOtp, verifyOtp, sendMagicLink, user, authStatus } = useAuth();
+  const { sendMagicLink, user, authStatus } = useAuth();
   
   // Auth method selection
   const [authMethod, setAuthMethod] = useState<AuthMethod>('mobile');
@@ -69,11 +70,42 @@ export default function SignupPage() {
   
   // OTP input refs for auto-focus
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  // Guard: MSG91 widget may call error callback after success (e.g. on unmount) - ignore spurious errors
+  const verificationSucceededRef = useRef(false);
   
   // UI state
   const [isLoading, setIsLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  
+  // Load MSG91 widget script and initialize ONCE (same as login page)
+  useEffect(() => {
+    // @ts-ignore
+    if (typeof window !== 'undefined' && window.__msg91Initialized) return;
+
+    const script = document.createElement('script');
+    script.id = 'msg91-widget';
+    script.src = 'https://verify.msg91.com/otp-provider.js';
+    script.async = true;
+
+    script.onload = () => {
+      // @ts-ignore
+      window.initSendOTP({
+        widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
+        tokenAuth: process.env.NEXT_PUBLIC_MSG91_WIDGET_TOKEN,
+        exposeMethods: true,
+        success: () => {},
+        failure: () => {},
+      });
+
+      // @ts-ignore
+      window.__msg91Initialized = true;
+      console.log('MSG91 widget initialized');
+    };
+
+    document.body.appendChild(script);
+  }, []);
   
   // GUARD: Redirect if already authenticated
   // RULE: Never redirect while authStatus === 'loading'
@@ -129,7 +161,25 @@ export default function SignupPage() {
   }, [otpStep]);
   
   /**
+   * Guarded MSG91 sendOtp wrapper (same as login page)
+   */
+  const sendPhoneOtp = (
+    phone: string,
+    onSuccess: () => void,
+    onError: (err: unknown) => void
+  ) => {
+    // @ts-ignore
+    if (typeof window === 'undefined' || !window.sendOtp) {
+      onError(new Error('MSG91 widget not initialized yet'));
+      return;
+    }
+    // @ts-ignore
+    window.sendOtp(phone, () => onSuccess(), (err: unknown) => onError(err));
+  };
+  
+  /**
    * Handle email magic link submission
+   * DUPLICATE CHECK: Verify email doesn't exist before sending magic link
    */
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,6 +188,21 @@ export default function SignupPage() {
     setIsLoading(true);
     
     try {
+      // 1. Duplicate check - both auth.users and public.users
+      const checkRes = await fetch('/api/auth/check-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'email', value: email.trim() }),
+      });
+      const checkData = await checkRes.json();
+      
+      if (checkData.exists) {
+        setError('An account with this email already exists. Please sign in instead.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // 2. Send magic link
       const { error: magicLinkError } = await sendMagicLink(email);
       
       if (magicLinkError) {
@@ -155,13 +220,14 @@ export default function SignupPage() {
   
   /**
    * Handle mobile OTP send
+   * DUPLICATE CHECK: Verify phone doesn't exist before sending OTP
+   * MSG91: Uses MSG91 widget (same as login page)
    */
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
     
-    // Validate phone number
     const cleanPhone = phoneNumber.replace(/\D/g, '');
     if (cleanPhone.length < 10) {
       setError('Please enter a valid 10-digit mobile number');
@@ -172,66 +238,128 @@ export default function SignupPage() {
     
     try {
       const fullPhone = `${countryCode}${cleanPhone}`;
-      const { error: otpError } = await sendOtp(fullPhone);
       
-      if (otpError) {
-        setError(friendlyErrorMessage(otpError.message));
-      } else {
-        setOtpStep('otp');
-        setResendTimer(30); // 30 second cooldown for resend
-        setSuccess('OTP sent! Check your phone for the 6-digit code.');
+      // 1. Duplicate check - both auth.users and public.users
+      const checkRes = await fetch('/api/auth/check-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'phone', value: fullPhone }),
+      });
+      const checkData = await checkRes.json();
+      
+      if (checkData.exists) {
+        setError('An account with this phone number already exists. Please sign in instead.');
+        setIsLoading(false);
+        return;
       }
+      
+      // 2. MSG91 widget must be initialized
+      // @ts-ignore
+      if (typeof window === 'undefined' || !window.__msg91Initialized) {
+        setError('OTP service is initializing. Please wait a moment and try again.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // 3. Send OTP via MSG91 widget
+      sendPhoneOtp(
+        fullPhone,
+        () => {
+          setOtpStep('otp');
+          setResendTimer(30);
+          setSuccess('OTP sent! Check your phone for the 6-digit code.');
+          setIsLoading(false);
+        },
+        () => {
+          setError('Could not send OTP. Please try again.');
+          setIsLoading(false);
+        }
+      );
     } catch {
       setError('Could not send OTP. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
   
   /**
    * Handle OTP verification
-   * PRODUCTION FIX: Wait for authentication before redirecting
+   * MSG91: Uses MSG91 widget + phone-login API (same as login page)
+   * phone-login supports BOTH signup (creates user) and login (finds existing)
+   * @param otpValueOverride - When provided (e.g. from auto-submit), use this instead of state to avoid stale closure
    */
-  const handleVerifyOtp = async () => {
-    setError(null);
-    setSuccess(null);
+  const handleVerifyOtp = async (otpValueOverride?: string) => {
+    if (isVerifying) return;
     
-    const otpValue = otp.join('');
+    const otpValue = otpValueOverride ?? otp.join('');
     if (otpValue.length !== 6) {
       setError('Please enter the complete 6-digit OTP');
       return;
     }
     
-    setIsLoading(true);
+    setError(null);
+    setIsVerifying(true);
     
-    try {
-      const fullPhone = `${countryCode}${phoneNumber.replace(/\D/g, '')}`;
-      const { error: verifyError } = await verifyOtp(fullPhone, otpValue);
-      
-      if (verifyError) {
-        setError(friendlyErrorMessage(verifyError.message));
-        // Clear OTP on error so user can retry
-        setOtp(['', '', '', '', '', '']);
-        if (otpInputRefs.current[0]) {
-          otpInputRefs.current[0].focus();
-        }
-        setIsLoading(false);
-      } else {
-        // PRODUCTION FIX: Show success message
-        // The redirect useEffect will handle navigation once authStatus becomes 'authenticated'
-        setSuccess('Account created! Redirecting...');
-        
-        // Clear loading after a short delay to allow auth state to update
-        // The redirect will happen via the useEffect that watches authStatus
-        setTimeout(() => {
-          setIsLoading(false);
-        }, 500);
-      }
-    } catch (err) {
-      console.error('[Signup] OTP verification error:', err);
-      setError('Could not verify OTP. Please try again.');
-      setIsLoading(false);
+    // @ts-ignore
+    if (typeof window === 'undefined' || !window.verifyOtp) {
+      setError('OTP service not ready. Please refresh and try again.');
+      setIsVerifying(false);
+      return;
     }
+    
+    const fullPhone = `${countryCode}${phoneNumber.replace(/\D/g, '')}`;
+    
+    // @ts-ignore
+    window.verifyOtp(
+      otpValue,
+      async (data: unknown) => {
+        try {
+          const response = await fetch('/api/auth/phone-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: fullPhone }),
+          });
+          const resData = await response.json();
+
+          if (!response.ok) {
+            setError(resData.error || 'Signup failed. Please try again.');
+            setIsVerifying(false);
+            return;
+          }
+
+          if (resData.success && resData.credentials) {
+            const supabase = createClient();
+            const { error: sessionError } = await supabase.auth.signInWithPassword({
+              email: resData.credentials.email,
+              password: resData.credentials.password,
+            });
+
+            if (sessionError) {
+              setError('Failed to create session. Please try again.');
+              setIsVerifying(false);
+              return;
+            }
+
+            setSuccess('Account created! Redirecting...');
+            verificationSucceededRef.current = true;
+            router.replace('/onboarding');
+          } else {
+            setError(resData.error || 'Signup failed.');
+            setIsVerifying(false);
+          }
+        } catch (err) {
+          console.error('[Signup] OTP verification error:', err);
+          setError('Signup failed. Please try again.');
+          setIsVerifying(false);
+        }
+      },
+      (err: unknown) => {
+        // MSG91 may call error callback after success (e.g. on unmount) - ignore spurious errors
+        if (verificationSucceededRef.current) return;
+        console.error('OTP verify failed:', err);
+        setError('Invalid OTP. Please try again.');
+        setIsVerifying(false);
+      }
+    );
   };
   
   /**
@@ -250,10 +378,11 @@ export default function SignupPage() {
       otpInputRefs.current[index + 1]?.focus();
     }
     
-    // Auto-submit when all 6 digits are entered
-    if (value && index === 5 && newOtp.every(d => d !== '')) {
-      // Small delay to show the last digit
-      setTimeout(() => handleVerifyOtp(), 100);
+    // Auto-submit when all 6 digits are entered (only if not already verifying)
+    // Pass newOtp.join('') to avoid stale closure - state may not have updated yet
+    if (value && index === 5 && newOtp.every(d => d !== '') && !isVerifying) {
+      const completeOtp = newOtp.join('');
+      setTimeout(() => handleVerifyOtp(completeOtp), 100);
     }
   };
   
@@ -272,17 +401,17 @@ export default function SignupPage() {
   const handleOtpPaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    if (pastedData.length === 6) {
+    if (pastedData.length === 6 && !isVerifying) {
       const newOtp = pastedData.split('');
       setOtp(newOtp);
       otpInputRefs.current[5]?.focus();
-      // Auto-submit after paste
-      setTimeout(() => handleVerifyOtp(), 100);
+      // Pass pastedData to avoid stale closure
+      setTimeout(() => handleVerifyOtp(pastedData), 100);
     }
   };
   
   /**
-   * Handle resend OTP
+   * Handle resend OTP (MSG91 widget)
    */
   const handleResendOtp = async () => {
     if (resendTimer > 0) return;
@@ -290,35 +419,48 @@ export default function SignupPage() {
     setError(null);
     setIsLoading(true);
     
-    try {
-      const fullPhone = `${countryCode}${phoneNumber.replace(/\D/g, '')}`;
-      const { error: otpError } = await sendOtp(fullPhone);
-      
-      if (otpError) {
-        setError(friendlyErrorMessage(otpError.message));
-      } else {
+    const fullPhone = `${countryCode}${phoneNumber.replace(/\D/g, '')}`;
+    
+    sendPhoneOtp(
+      fullPhone,
+      () => {
         setResendTimer(30);
         setSuccess('New OTP sent!');
         setOtp(['', '', '', '', '', '']);
         if (otpInputRefs.current[0]) {
           otpInputRefs.current[0].focus();
         }
+        setIsLoading(false);
+      },
+      () => {
+        setError('Could not resend OTP. Please try again.');
+        setIsLoading(false);
       }
-    } catch {
-      setError('Could not resend OTP. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+    );
   };
   
   /**
    * Handle resend magic link
+   * Duplicate check on resend (edge case: someone registered same email meanwhile)
    */
   const handleResendMagicLink = async () => {
     setError(null);
     setIsLoading(true);
     
     try {
+      const checkRes = await fetch('/api/auth/check-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'email', value: email.trim() }),
+      });
+      const checkData = await checkRes.json();
+      
+      if (checkData.exists) {
+        setError('An account with this email already exists. Please sign in instead.');
+        setIsLoading(false);
+        return;
+      }
+      
       const { error: magicLinkError } = await sendMagicLink(email);
       
       if (magicLinkError) {
@@ -460,7 +602,17 @@ export default function SignupPage() {
               <div className="mb-6 p-4 bg-[#FEF2F2] border border-[#FEE2E2] rounded-lg">
                 <div className="flex items-start gap-3">
                   <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-[#991B1B]">{error}</p>
+                  <div>
+                    <p className="text-sm text-[#991B1B]">{error}</p>
+                    {error.includes('already exists') && (
+                      <Link
+                        href="/login"
+                        className="inline-block mt-2 text-sm font-medium text-[#2563EB] hover:text-[#1E40AF] underline"
+                      >
+                        Go to Sign in →
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -575,11 +727,11 @@ export default function SignupPage() {
                     {/* Verify Button */}
                     <button
                       type="button"
-                      onClick={handleVerifyOtp}
-                      disabled={isLoading || otp.some(d => d === '')}
+                      onClick={() => handleVerifyOtp()}
+                      disabled={isVerifying}
                       className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-[#2563EB] text-white font-medium hover:bg-[#1E40AF] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isLoading ? (
+                      {isVerifying ? (
                         <>
                           <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           <span>Verifying...</span>
@@ -601,7 +753,7 @@ export default function SignupPage() {
                           <button
                             type="button"
                             onClick={handleResendOtp}
-                            disabled={isLoading}
+                            disabled={isLoading || isVerifying}
                             className="text-[#2563EB] font-medium hover:text-[#1E40AF] disabled:opacity-50"
                           >
                             Resend OTP

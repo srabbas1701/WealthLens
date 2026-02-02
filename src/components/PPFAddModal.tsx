@@ -241,7 +241,12 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
         body: JSON.stringify(payload),
       });
 
-      const result = await response.json();
+      let result: { success?: boolean; error?: string };
+      try {
+        result = await response.json();
+      } catch {
+        result = { success: false, error: `Server returned ${response.status}. Please try again.` };
+      }
 
       if (result.success) {
         setStep('success');
@@ -254,8 +259,9 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
         setStep('error');
       }
     } catch (err) {
-      console.error('Save error:', err);
-      setError('Something went wrong. Please try again.');
+      const errMsg = err instanceof Error ? err.message : 'Network or unexpected error';
+      console.error('[PPF Modal] Save error:', err);
+      setError(errMsg);
       setStep('error');
     } finally {
       setSaving(false);
@@ -691,9 +697,11 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
         return (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <AlertTriangleIcon className="w-16 h-16 text-[#DC2626] dark:text-[#EF4444]" />
-            <div className="text-center">
-              <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-lg">Something went wrong</p>
-              <p className="text-[#6B7280] dark:text-[#94A3B8] text-sm mt-2">{error}</p>
+            <div className="text-center max-w-md">
+              <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-lg">
+                {error?.startsWith('Failed to') ? 'Save Failed' : 'Something went wrong'}
+              </p>
+              <p className="text-[#6B7280] dark:text-[#94A3B8] text-sm mt-2 break-words">{error}</p>
             </div>
           </div>
         );

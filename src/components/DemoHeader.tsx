@@ -110,7 +110,7 @@ export function DemoHeader({
             Sign In
           </Link>
           <Link
-            href="/login"
+            href="/signup"
             className="px-5 py-2 rounded-lg bg-[#2563EB] text-white text-sm font-medium hover:bg-[#1E40AF] transition-colors"
           >
             Get Started

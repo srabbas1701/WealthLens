@@ -58,7 +58,7 @@ async function createOrGetFDAsset(bank: string, supabase: any) {
       name: bank,
       asset_type: 'fd',
       risk_bucket: 'low',
-      asset_class: 'debt',
+      asset_class: 'FixedIncome',
       is_active: true,
     })
     .select('id')
