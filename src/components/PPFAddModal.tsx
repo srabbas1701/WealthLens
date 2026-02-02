@@ -132,57 +132,152 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
   };
 
   const validateBasic = () => {
-    if (!accountNumber || accountNumber.length < 6) {
-      setError('Please enter a valid PPF account number');
+    // PPF Account Number validation - alphanumeric, 6-20 characters
+    if (!accountNumber || accountNumber.trim().length === 0) {
+      setError('Please enter PPF account number');
       return false;
     }
-    if (!accountHolderName || accountHolderName.trim().length < 2) {
+    if (accountNumber.trim().length < 6 || accountNumber.trim().length > 20) {
+      setError('PPF account number must be 6-20 characters');
+      return false;
+    }
+    if (!/^[A-Za-z0-9]+$/.test(accountNumber.trim())) {
+      setError('PPF account number can only contain letters and numbers (no spaces or special characters)');
+      return false;
+    }
+
+    // Account Holder Name validation - only letters, spaces, hyphens, apostrophes
+    if (!accountHolderName || accountHolderName.trim().length === 0) {
       setError('Please enter account holder name');
       return false;
     }
+    if (accountHolderName.trim().length < 2) {
+      setError('Account holder name must be at least 2 characters');
+      return false;
+    }
+    if (!/^[A-Za-z\s'-]+$/.test(accountHolderName.trim())) {
+      setError('Account holder name can only contain letters, spaces, hyphens, and apostrophes');
+      return false;
+    }
+    if (/\d/.test(accountHolderName)) {
+      setError('Account holder name cannot contain numbers');
+      return false;
+    }
+
+    // Opening Date validation - cannot be in the future
     if (!openingDate) {
       setError('Please select account opening date');
       return false;
     }
+    const opening = new Date(openingDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (opening > today) {
+      setError('Opening date cannot be in the future');
+      return false;
+    }
+
+    // PPF was introduced in 1968 in India
+    const ppfIntroductionYear = new Date('1968-01-01');
+    if (opening < ppfIntroductionYear) {
+      setError('Opening date cannot be before 1968 (PPF introduction year)');
+      return false;
+    }
+
+    // Maturity Date validation
     if (!maturityDate) {
       setError('Please select maturity date');
       return false;
     }
-    if (!bankOrPostOffice || bankOrPostOffice.trim().length < 2) {
-      setError('Please enter bank or post office name');
-      return false;
-    }
-    
-    // Validate maturity date is after opening date
-    const opening = new Date(openingDate);
     const maturity = new Date(maturityDate);
     if (maturity <= opening) {
       setError('Maturity date must be after opening date');
       return false;
     }
-    
+
+    // Bank / Post Office validation
+    if (!bankOrPostOffice || bankOrPostOffice.trim().length === 0) {
+      setError('Please enter bank or post office name');
+      return false;
+    }
+    if (bankOrPostOffice.trim().length < 3) {
+      setError('Bank or post office name must be at least 3 characters');
+      return false;
+    }
+    if (!/^[A-Za-z0-9\s,.-]+$/.test(bankOrPostOffice.trim())) {
+      setError('Bank or post office name contains invalid characters');
+      return false;
+    }
+
+    // Branch validation (optional, but if provided should be valid)
+    if (branch && branch.trim().length > 0) {
+      if (branch.trim().length < 2) {
+        setError('Branch name must be at least 2 characters');
+        return false;
+      }
+      if (!/^[A-Za-z0-9\s,.-]+$/.test(branch.trim())) {
+        setError('Branch name contains invalid characters');
+        return false;
+      }
+    }
+
     setError(null);
     return true;
   };
 
   const validateFinancial = () => {
+    // Current Balance validation
     if (currentBalance < 0) {
       setError('Current balance cannot be negative');
       return false;
     }
+    if (currentBalance === 0) {
+      setError('Current balance must be greater than zero');
+      return false;
+    }
+
+    // Total Contributions validation
     if (totalContributions < 0) {
       setError('Total contributions cannot be negative');
       return false;
     }
-    if (currentBalance < totalContributions) {
-      setError('Current balance cannot be less than total contributions');
+    if (totalContributions === 0) {
+      setError('Total contributions must be greater than zero');
       return false;
     }
+
+    // Critical validation: Balance must be >= Contributions
+    // Because Balance = Contributions + Interest Earned
+    if (totalContributions > currentBalance) {
+      setError('Total contributions cannot be greater than current balance. Balance includes your contributions plus interest earned.');
+      return false;
+    }
+
+    // Interest Rate validation
     if (interestRate < 0 || interestRate > 20) {
       setError('Please enter a valid interest rate (0-20%)');
       return false;
     }
-    
+    if (interestRate === 0) {
+      setError('Interest rate must be greater than zero');
+      return false;
+    }
+
+    // PPF minimum contribution validation (₹500 per year)
+    const accountAge = openingDate ?
+      Math.floor((new Date().getTime() - new Date(openingDate).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 0;
+
+    if (accountAge > 0 && totalContributions < (accountAge * 500)) {
+      setError(`For a ${accountAge}-year-old account, minimum expected contribution is ₹${(accountAge * 500).toLocaleString('en-IN')} (₹500/year minimum)`);
+      return false;
+    }
+
+    // PPF maximum contribution validation (₹1.5 lakh per year)
+    if (accountAge > 0 && totalContributions > (accountAge * 150000)) {
+      setError(`For a ${accountAge}-year-old account, maximum possible contribution is ₹${(accountAge * 150000).toLocaleString('en-IN')} (₹1.5L/year maximum)`);
+      return false;
+    }
+
     // Validate extension details if status is extended
     if (status === 'extended') {
       if (!hasExtension) {
@@ -195,12 +290,26 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
       }
       const extStart = new Date(extensionStartDate);
       const extEnd = new Date(extensionEndDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (extStart > today) {
+        setError('Extension start date cannot be in the future');
+        return false;
+      }
       if (extEnd <= extStart) {
         setError('Extension end date must be after start date');
         return false;
       }
+
+      // Extension should be after maturity
+      const maturity = new Date(maturityDate);
+      if (extStart < maturity) {
+        setError('Extension start date must be on or after maturity date');
+        return false;
+      }
     }
-    
+
     setError(null);
     return true;
   };
@@ -294,12 +403,17 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               <input
                 type="text"
                 value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value)}
+                onChange={(e) => {
+                  // Only allow alphanumeric characters
+                  const value = e.target.value.replace(/[^A-Za-z0-9]/g, '');
+                  setAccountNumber(value);
+                }}
+                maxLength={20}
                 placeholder="Enter your PPF account number"
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
               />
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                Your unique PPF account number from your bank or post office
+                6-20 characters, letters and numbers only
               </p>
             </div>
 
@@ -310,10 +424,18 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               <input
                 type="text"
                 value={accountHolderName}
-                onChange={(e) => setAccountHolderName(e.target.value)}
+                onChange={(e) => {
+                  // Only allow letters, spaces, hyphens, and apostrophes
+                  const value = e.target.value.replace(/[^A-Za-z\s'-]/g, '');
+                  setAccountHolderName(value);
+                }}
+                maxLength={100}
                 placeholder="John Doe"
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
               />
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                Letters, spaces, hyphens, and apostrophes only
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -325,8 +447,13 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                   type="date"
                   value={openingDate}
                   onChange={(e) => setOpeningDate(e.target.value)}
+                  min="1968-01-01"
+                  max={new Date().toISOString().split('T')[0]}
                   className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
                 />
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                  Cannot be in the future
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
@@ -351,10 +478,18 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               <input
                 type="text"
                 value={bankOrPostOffice}
-                onChange={(e) => setBankOrPostOffice(e.target.value)}
+                onChange={(e) => {
+                  // Allow letters, numbers, spaces, commas, periods, and hyphens
+                  const value = e.target.value.replace(/[^A-Za-z0-9\s,.-]/g, '');
+                  setBankOrPostOffice(value);
+                }}
+                maxLength={100}
                 placeholder="e.g., State Bank of India, India Post"
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
               />
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                Minimum 3 characters
+              </p>
             </div>
 
             <div>
@@ -364,7 +499,12 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               <input
                 type="text"
                 value={branch}
-                onChange={(e) => setBranch(e.target.value)}
+                onChange={(e) => {
+                  // Allow letters, numbers, spaces, commas, periods, and hyphens
+                  const value = e.target.value.replace(/[^A-Za-z0-9\s,.-]/g, '');
+                  setBranch(value);
+                }}
+                maxLength={100}
                 placeholder="e.g., Mumbai Main Branch"
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
               />
@@ -421,14 +561,17 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               <input
                 type="number"
                 step="0.01"
-                min="0"
-                value={currentBalance}
-                onChange={(e) => setCurrentBalance(parseFloat(e.target.value) || 0)}
+                min="0.01"
+                value={currentBalance || ''}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value);
+                  setCurrentBalance(value > 0 ? value : 0);
+                }}
                 placeholder="0.00"
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
               />
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                Total amount currently in your PPF account (₹)
+                Total amount currently in your PPF account (₹) - Must be greater than zero
               </p>
             </div>
 
@@ -439,14 +582,17 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               <input
                 type="number"
                 step="0.01"
-                min="0"
-                value={totalContributions}
-                onChange={(e) => setTotalContributions(parseFloat(e.target.value) || 0)}
+                min="0.01"
+                value={totalContributions || ''}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value);
+                  setTotalContributions(value > 0 ? value : 0);
+                }}
                 placeholder="0.00"
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
               />
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                Total amount you have contributed over time (₹)
+                Total you've contributed (₹) - Cannot exceed current balance (Min: ₹500/year, Max: ₹1.5L/year)
               </p>
             </div>
 
@@ -469,15 +615,24 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               <input
                 type="number"
                 step="0.1"
-                min="0"
+                min="0.1"
                 max="20"
-                value={interestRate}
-                onChange={(e) => setInterestRate(parseFloat(e.target.value) || 0)}
+                value={interestRate || ''}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value);
+                  if (value >= 0.1 && value <= 20) {
+                    setInterestRate(value);
+                  } else if (value > 20) {
+                    setInterestRate(20);
+                  } else {
+                    setInterestRate(0);
+                  }
+                }}
                 placeholder="7.1"
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
               />
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                Government-set PPF interest rate (currently 7.1% for FY 2024-25)
+                Government-set PPF rate (currently 7.1% for FY 2024-25) - Must be between 0.1% and 20%
               </p>
             </div>
 
