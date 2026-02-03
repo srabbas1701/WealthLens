@@ -55,9 +55,22 @@ interface ManualInvestmentRequest {
     // Bond fields
     bondIssuer?: string;
     bondAmount?: number;
+    bondType?: string;
+    bondRating?: string;
     bondCouponRate?: number;
-    bondCouponFrequency?: string;
+    bondYieldToMaturity?: number;
+    bondInterestPayoutFrequency?: string;
+    bondPrincipalPayout?: string;
+    bondTaxStatus?: string;
+    bondCollateralSecurity?: string;
+    bondTenureYears?: number;
+    bondTenureMonths?: number;
+    bondOrderId?: string;
+    bondOrderDate?: string;
+    bondSettlementDate?: string;
     bondMaturityDate?: string;
+    bondFaceValuePerUnit?: number;
+    bondUnits?: number;
     // Gold fields
     goldType?: 'sgb' | 'physical' | 'etf';
     goldAmount?: number;
@@ -477,9 +490,22 @@ export async function POST(req: NextRequest) {
         investedValue = form_data.bondAmount || 0;
         metadata = {
           issuer: form_data.bondIssuer,
+          bond_type: form_data.bondType,
+          rating: form_data.bondRating,
           coupon_rate: form_data.bondCouponRate,
-          coupon_frequency: form_data.bondCouponFrequency,
+          yield_to_maturity: form_data.bondYieldToMaturity,
+          interest_payout_frequency: form_data.bondInterestPayoutFrequency,
+          principal_payout: form_data.bondPrincipalPayout,
+          tax_status: form_data.bondTaxStatus,
+          collateral_security: form_data.bondCollateralSecurity,
+          tenure_years: form_data.bondTenureYears,
+          tenure_months: form_data.bondTenureMonths,
+          order_id: form_data.bondOrderId,
+          order_date: form_data.bondOrderDate,
+          settlement_date: form_data.bondSettlementDate,
           maturity_date: form_data.bondMaturityDate,
+          face_value_per_unit: form_data.bondFaceValuePerUnit,
+          units: form_data.bondUnits,
         };
         break;
 

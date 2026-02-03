@@ -34,10 +34,22 @@ interface BondHolding {
   id: string;
   name: string;
   issuer: string | null;
-  type: string; // Government, Corporate, etc.
+  type: string; // Corporate Bond, Government Bond, T-Bills, NBFC, SDLs, PSU
+  rating: string | null; // AAA, AA+, etc.
   couponRate: number | null;
-  couponFrequency: string | null;
+  yieldToMaturity: number | null;
+  interestPayoutFrequency: string | null;
+  principalPayout: string | null;
+  taxStatus: string | null;
+  collateralSecurity: string | null;
+  tenureYears: number | null;
+  tenureMonths: number | null;
+  orderId: string | null;
+  orderDate: string | null;
+  settlementDate: string | null;
   maturityDate: string | null;
+  faceValuePerUnit: number | null;
+  units: number | null;
   faceValue: number;
   investedValue: number;
   currentValue: number;
@@ -190,37 +202,65 @@ export default function BondsHoldingsPage() {
                 }
               }
               
+              // Extract all bond metadata fields
               const issuer = bondMetadata.issuer || bondMetadata.bondIssuer || null;
+              const bondType = bondMetadata.bond_type || bondMetadata.bondType || null;
+              const rating = bondMetadata.rating || bondMetadata.bondRating || null;
               const couponRate = bondMetadata.coupon_rate || bondMetadata.couponRate || bondMetadata.bondCouponRate || null;
-              const couponFrequency = bondMetadata.coupon_frequency || bondMetadata.couponFrequency || bondMetadata.bondCouponFrequency || null;
+              const yieldToMaturity = bondMetadata.yield_to_maturity || bondMetadata.yieldToMaturity || bondMetadata.bondYieldToMaturity || null;
+              const interestPayoutFrequency = bondMetadata.interest_payout_frequency || bondMetadata.interestPayoutFrequency || bondMetadata.bondInterestPayoutFrequency || null;
+              const principalPayout = bondMetadata.principal_payout || bondMetadata.principalPayout || bondMetadata.bondPrincipalPayout || null;
+              const taxStatus = bondMetadata.tax_status || bondMetadata.taxStatus || bondMetadata.bondTaxStatus || null;
+              const collateralSecurity = bondMetadata.collateral_security || bondMetadata.collateralSecurity || bondMetadata.bondCollateralSecurity || null;
+              const tenureYears = bondMetadata.tenure_years || bondMetadata.tenureYears || bondMetadata.bondTenureYears || null;
+              const tenureMonths = bondMetadata.tenure_months || bondMetadata.tenureMonths || bondMetadata.bondTenureMonths || null;
+              const orderId = bondMetadata.order_id || bondMetadata.orderId || bondMetadata.bondOrderId || null;
+              const orderDate = bondMetadata.order_date || bondMetadata.orderDate || bondMetadata.bondOrderDate || null;
+              const settlementDate = bondMetadata.settlement_date || bondMetadata.settlementDate || bondMetadata.bondSettlementDate || null;
               const maturityDateStr = bondMetadata.maturity_date || bondMetadata.maturityDate || bondMetadata.bondMaturityDate || null;
-              
-              // Face value: typically equals invested value for bonds, or use quantity if available
-              const faceValue = h.quantity > 0 && h.quantity !== 1 
-                ? h.investedValue / h.quantity 
-                : h.investedValue;
-              
+              const faceValuePerUnit = bondMetadata.face_value_per_unit || bondMetadata.faceValuePerUnit || bondMetadata.bondFaceValuePerUnit || null;
+              const units = bondMetadata.units || bondMetadata.bondUnits || h.quantity || null;
+
+              // Calculate face value
+              const faceValue = faceValuePerUnit && units
+                ? faceValuePerUnit * units
+                : (h.quantity > 0 && h.quantity !== 1
+                  ? h.investedValue / h.quantity
+                  : h.investedValue);
+
               // Current value: use stored value, fallback to invested value (no market estimates)
               const currentValue = h.currentValue > 0 ? h.currentValue : h.investedValue;
-              
+
               // Calculate yield if we have coupon rate
-              const yieldValue = calculateYield(couponRate, couponFrequency, faceValue, currentValue);
-              
+              const yieldValue = calculateYield(couponRate, interestPayoutFrequency, faceValue, currentValue);
+
               // Determine status and days to maturity
               const status = getBondStatus(maturityDateStr);
               const daysToMaturity = getDaysToMaturity(maturityDateStr);
-              
+
               // Check if we have complete data
-              const hasCompleteData = !!(couponRate && maturityDateStr && issuer);
-              
+              const hasCompleteData = !!(issuer && bondType && couponRate && maturityDateStr);
+
               return {
                 id: h.id,
                 name: h.name,
                 issuer,
-                type: getBondType(issuer, h.name),
+                type: bondType || getBondType(issuer, h.name),
+                rating,
                 couponRate,
-                couponFrequency,
+                yieldToMaturity,
+                interestPayoutFrequency,
+                principalPayout,
+                taxStatus,
+                collateralSecurity,
+                tenureYears,
+                tenureMonths,
+                orderId,
+                orderDate,
+                settlementDate,
                 maturityDate: maturityDateStr,
+                faceValuePerUnit,
+                units,
                 faceValue,
                 investedValue: h.investedValue,
                 currentValue,
@@ -697,16 +737,16 @@ export default function BondsHoldingsPage() {
               <table className="w-full">
                 <thead className="bg-[#F9FAFB] dark:bg-[#334155] border-b border-[#E5E7EB] dark:border-[#334155]">
                   <tr>
-                    <th 
+                    <th
                       className="px-6 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('name')}
                     >
                       <div className="flex items-center gap-2">
-                        <span>Bond Name</span>
+                        <span>Issuer Name</span>
                         <SortIcon field="name" />
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('type')}
                     >
@@ -715,7 +755,10 @@ export default function BondsHoldingsPage() {
                         <SortIcon field="type" />
                       </div>
                     </th>
-                    <th 
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider">
+                      Rating
+                    </th>
+                    <th
                       className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('coupon')}
                     >
@@ -724,7 +767,7 @@ export default function BondsHoldingsPage() {
                         <SortIcon field="coupon" />
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('maturityDate')}
                     >
@@ -733,43 +776,37 @@ export default function BondsHoldingsPage() {
                         <SortIcon field="maturityDate" />
                       </div>
                     </th>
-                    <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
-                      onClick={() => handleSort('faceValue')}
-                    >
-                      <div className="flex items-center justify-end gap-2">
-                        <span>Face Value</span>
-                        <SortIcon field="faceValue" />
-                      </div>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider">
+                      Days Left
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('investedValue')}
                     >
                       <div className="flex items-center justify-end gap-2">
-                        <span>Invested Value</span>
+                        <span>Invested</span>
                         <SortIcon field="investedValue" />
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('currentValue')}
                     >
                       <div className="flex items-center justify-end gap-2">
-                        <span>Current Value</span>
+                        <span>Current</span>
                         <SortIcon field="currentValue" />
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('yield')}
                     >
                       <div className="flex items-center justify-end gap-2">
-                        <span>Yield</span>
+                        <span>Yield %</span>
                         <SortIcon field="yield" />
                       </div>
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('status')}
                     >
@@ -798,47 +835,94 @@ export default function BondsHoldingsPage() {
                       <tr key={holding.id} className="hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
                         <td className="px-6 py-3.5">
                           <div>
-                            <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.name}</p>
-                            {holding.issuer && (
-                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">{holding.issuer}</p>
+                            <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                              {holding.issuer || holding.name}
+                            </p>
+                            {holding.orderId && (
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
+                                Order: {holding.orderId}
+                              </p>
                             )}
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
-                            holding.type === 'Government' 
+                            holding.type?.includes('Government') || holding.type?.includes('G-Sec')
                               ? 'bg-[#E0F2FE] dark:bg-[#1E3A8A] text-[#0369A1] dark:text-[#93C5FD]'
-                              : holding.type === 'PSU'
+                              : holding.type?.includes('PSU')
                               ? 'bg-[#F0FDF4] dark:bg-[#14532D] text-[#166534] dark:text-[#86EFAC]'
+                              : holding.type?.includes('Corporate')
+                              ? 'bg-[#FEF3C7] dark:bg-[#78350F] text-[#92400E] dark:text-[#FDE68A]'
                               : 'bg-[#F3F4F6] dark:bg-[#334155] text-[#4B5563] dark:text-[#CBD5E1]'
                           }`}>
-                            {holding.type}
+                            {holding.type || '—'}
                           </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-center">
+                          {holding.rating ? (
+                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${
+                              holding.rating.startsWith('AAA') || holding.rating === 'Sovereign'
+                                ? 'bg-[#D1FAE5] dark:bg-[#14532D] text-[#065F46] dark:text-[#86EFAC]'
+                                : holding.rating.startsWith('AA')
+                                ? 'bg-[#DBEAFE] dark:bg-[#1E3A8A] text-[#1E40AF] dark:text-[#93C5FD]'
+                                : holding.rating.startsWith('A')
+                                ? 'bg-[#FEF3C7] dark:bg-[#78350F] text-[#92400E] dark:text-[#FDE68A]'
+                                : 'bg-[#F3F4F6] dark:bg-[#334155] text-[#4B5563] dark:text-[#CBD5E1]'
+                            }`}>
+                              {holding.rating}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-[#9CA3AF]">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           {holding.couponRate !== null ? `${holding.couponRate.toFixed(2)}%` : '—'}
+                          {holding.interestPayoutFrequency && (
+                            <div className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
+                              {holding.interestPayoutFrequency}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
-                          <div>
-                            <p>{formatDate(holding.maturityDate)}</p>
-                            {holding.daysToMaturity !== null && holding.status === 'Active' && (
+                          {formatDate(holding.maturityDate)}
+                        </td>
+                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
+                          {holding.daysToMaturity !== null && holding.status === 'Active' ? (
+                            <div>
+                              <p className="font-medium">{holding.daysToMaturity}</p>
                               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
                                 {formatDays(holding.daysToMaturity)}
                               </p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
-                          {formatCurrency(holding.faceValue)}
+                            </div>
+                          ) : (
+                            <span className="text-[#9CA3AF]">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
                           {formatCurrency(holding.investedValue)}
+                          {holding.units && (
+                            <div className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
+                              {holding.units} units
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                           {formatCurrency(holding.currentValue)}
                         </td>
                         <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
-                          {holding.yield !== null ? `${holding.yield.toFixed(2)}%` : '—'}
+                          {holding.yieldToMaturity !== null ? (
+                            <div>
+                              <p className="font-medium">{holding.yieldToMaturity.toFixed(2)}%</p>
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">YTM</p>
+                            </div>
+                          ) : holding.yield !== null ? (
+                            <div>
+                              <p>{holding.yield.toFixed(2)}%</p>
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">Current</p>
+                            </div>
+                          ) : (
+                            <span className="text-[#9CA3AF]">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3.5">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${

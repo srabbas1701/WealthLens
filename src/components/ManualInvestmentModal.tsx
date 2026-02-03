@@ -59,9 +59,22 @@ interface FormData {
   maturity_date?: string;
   // Bond fields (optional)
   issuer?: string;
+  bond_type?: string; // Corporate Bond, Government Bond, T-Bills, NBFC, SDLs, PSU
+  rating?: string; // AAA, AA+, etc.
   coupon_rate?: number;
-  coupon_frequency?: string;
+  yield_to_maturity?: number;
+  interest_payout_frequency?: string; // Monthly, Quarterly, Half-Yearly, Annual, At Maturity
+  principal_payout?: string; // At Maturity, Quarterly, etc.
+  tax_status?: string; // Tax Free, Taxable, Tax Saving
+  collateral_security?: string; // Secured, Unsecured
+  tenure_years?: number;
+  tenure_months?: number;
+  order_id?: string;
+  order_date?: string;
+  settlement_date?: string;
   bond_maturity_date?: string;
+  face_value_per_unit?: number;
+  units?: number;
   // Gold fields (optional)
   gold_type?: 'sgb' | 'physical' | 'etf';
   purchase_date?: string;
@@ -251,9 +264,22 @@ export default function ManualInvestmentModal({
       } else if (formData.assetType === 'bond') {
         apiFormData.bondIssuer = formData.name || formData.issuer || 'Bond';
         apiFormData.bondAmount = formData.invested_value;
+        apiFormData.bondType = formData.bond_type;
+        apiFormData.bondRating = formData.rating;
         apiFormData.bondCouponRate = formData.coupon_rate;
-        apiFormData.bondCouponFrequency = formData.coupon_frequency || 'annual';
+        apiFormData.bondYieldToMaturity = formData.yield_to_maturity;
+        apiFormData.bondInterestPayoutFrequency = formData.interest_payout_frequency;
+        apiFormData.bondPrincipalPayout = formData.principal_payout;
+        apiFormData.bondTaxStatus = formData.tax_status;
+        apiFormData.bondCollateralSecurity = formData.collateral_security;
+        apiFormData.bondTenureYears = formData.tenure_years;
+        apiFormData.bondTenureMonths = formData.tenure_months;
+        apiFormData.bondOrderId = formData.order_id;
+        apiFormData.bondOrderDate = formData.order_date;
+        apiFormData.bondSettlementDate = formData.settlement_date;
         apiFormData.bondMaturityDate = formData.bond_maturity_date;
+        apiFormData.bondFaceValuePerUnit = formData.face_value_per_unit;
+        apiFormData.bondUnits = formData.units;
       } else if (formData.assetType === 'gold') {
         apiFormData.goldType = formData.gold_type || 'physical';
         apiFormData.goldAmount = formData.invested_value;
@@ -453,7 +479,8 @@ export default function ManualInvestmentModal({
               )}
 
               {formData.assetType === 'bond' && (
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                  {/* Essential Fields */}
                   <div>
                     <label className="block text-sm font-medium text-[#0F172A] mb-2">
                       Issuer Name <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
@@ -463,13 +490,57 @@ export default function ManualInvestmentModal({
                       value={formData.issuer || formData.name || ''}
                       onChange={(e) => setFormData({ ...formData, issuer: e.target.value, name: e.target.value })}
                       placeholder="e.g., NTPC, Government of India"
-                      className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] text-[#0F172A] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#0F172A] mb-2">
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Bond Type <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <select
+                        value={formData.bond_type || ''}
+                        onChange={(e) => setFormData({ ...formData, bond_type: e.target.value || undefined })}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      >
+                        <option value="">Select type</option>
+                        <option value="Corporate Bond">Corporate Bond</option>
+                        <option value="Government Bond">Government Bond (G-Sec)</option>
+                        <option value="Treasury Bill">Treasury Bill (T-Bill)</option>
+                        <option value="NBFC Bond">NBFC Bond</option>
+                        <option value="SDL">State Development Loan (SDL)</option>
+                        <option value="PSU Bond">PSU Bond</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Rating <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <select
+                        value={formData.rating || ''}
+                        onChange={(e) => setFormData({ ...formData, rating: e.target.value || undefined })}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      >
+                        <option value="">Select rating</option>
+                        <option value="AAA">AAA</option>
+                        <option value="AA+">AA+</option>
+                        <option value="AA">AA</option>
+                        <option value="AA-">AA-</option>
+                        <option value="A+">A+</option>
+                        <option value="A">A</option>
+                        <option value="A-">A-</option>
+                        <option value="BBB+">BBB+</option>
+                        <option value="BBB">BBB</option>
+                        <option value="BBB-">BBB-</option>
+                        <option value="Sovereign">Sovereign</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
                         Coupon Rate (%) <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
                       </label>
                       <input
@@ -478,18 +549,185 @@ export default function ManualInvestmentModal({
                         value={formData.coupon_rate || ''}
                         onChange={(e) => setFormData({ ...formData, coupon_rate: parseFloat(e.target.value) || undefined })}
                         placeholder="7.5"
-                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] text-[#0F172A] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#0F172A] mb-2">
-                        Maturity Date <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Yield to Maturity (%) <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.yield_to_maturity || ''}
+                        onChange={(e) => setFormData({ ...formData, yield_to_maturity: parseFloat(e.target.value) || undefined })}
+                        placeholder="8.2"
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Interest Payout <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <select
+                        value={formData.interest_payout_frequency || ''}
+                        onChange={(e) => setFormData({ ...formData, interest_payout_frequency: e.target.value || undefined })}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      >
+                        <option value="">Select frequency</option>
+                        <option value="Monthly">Monthly</option>
+                        <option value="Quarterly">Quarterly</option>
+                        <option value="Half-Yearly">Half-Yearly</option>
+                        <option value="Annual">Annual</option>
+                        <option value="At Maturity">At Maturity (Zero Coupon)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Principal Payout <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <select
+                        value={formData.principal_payout || 'At Maturity'}
+                        onChange={(e) => setFormData({ ...formData, principal_payout: e.target.value || undefined })}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      >
+                        <option value="At Maturity">At Maturity</option>
+                        <option value="Quarterly">Quarterly</option>
+                        <option value="Annual">Annual</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Tax Status <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <select
+                        value={formData.tax_status || ''}
+                        onChange={(e) => setFormData({ ...formData, tax_status: e.target.value || undefined })}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      >
+                        <option value="">Select status</option>
+                        <option value="Taxable">Taxable</option>
+                        <option value="Tax Free">Tax Free</option>
+                        <option value="Tax Saving">Tax Saving (54EC)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Collateral Security <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <select
+                        value={formData.collateral_security || ''}
+                        onChange={(e) => setFormData({ ...formData, collateral_security: e.target.value || undefined })}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      >
+                        <option value="">Select type</option>
+                        <option value="Secured">Secured</option>
+                        <option value="Unsecured">Unsecured</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Tenure <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="number"
+                          value={formData.tenure_years || ''}
+                          onChange={(e) => setFormData({ ...formData, tenure_years: parseInt(e.target.value) || undefined })}
+                          placeholder="Years"
+                          className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                        />
+                        <input
+                          type="number"
+                          value={formData.tenure_months || ''}
+                          onChange={(e) => setFormData({ ...formData, tenure_months: parseInt(e.target.value) || undefined })}
+                          placeholder="Months"
+                          className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Units <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.units || ''}
+                        onChange={(e) => setFormData({ ...formData, units: parseInt(e.target.value) || undefined })}
+                        placeholder="100"
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                      Face Value per Unit <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.face_value_per_unit || ''}
+                      onChange={(e) => setFormData({ ...formData, face_value_per_unit: parseFloat(e.target.value) || undefined })}
+                      placeholder="1000"
+                      className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                      Maturity Date <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.bond_maturity_date || ''}
+                      onChange={(e) => setFormData({ ...formData, bond_maturity_date: e.target.value || undefined })}
+                      className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                      Order ID <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.order_id || ''}
+                      onChange={(e) => setFormData({ ...formData, order_id: e.target.value || undefined })}
+                      placeholder="e.g., ORD123456"
+                      className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Order Date <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
                       </label>
                       <input
                         type="date"
-                        value={formData.bond_maturity_date || ''}
-                        onChange={(e) => setFormData({ ...formData, bond_maturity_date: e.target.value || undefined })}
-                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] text-[#0F172A] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                        value={formData.order_date || ''}
+                        onChange={(e) => setFormData({ ...formData, order_date: e.target.value || undefined })}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Settlement Date <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.settlement_date || ''}
+                        onChange={(e) => setFormData({ ...formData, settlement_date: e.target.value || undefined })}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
                       />
                     </div>
                   </div>
