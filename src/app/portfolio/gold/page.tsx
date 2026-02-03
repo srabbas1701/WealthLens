@@ -59,6 +59,7 @@ interface GoldHolding {
   etfName?: string;
   isin?: string;
   exchange?: string;
+  currentNav?: number; // Current NAV per unit for ETFs
   // Digital Gold fields
   platform?: string;
   provider?: string;
@@ -144,6 +145,11 @@ export default function GoldHoldingsPage() {
               const portfolioValue = portfolioData.metrics?.netWorth || portfolioData.metrics?.totalValue || 0;
               const allocationPct = portfolioValue > 0 ? (currentValue / portfolioValue) * 100 : 0;
 
+              // Calculate current NAV for ETFs
+              const currentNav = notes.gold_type === 'etf' && h.quantity > 0
+                ? currentValue / h.quantity
+                : undefined;
+
               return {
                 id: h.id,
                 asset_id: h.asset_id,
@@ -173,6 +179,7 @@ export default function GoldHoldingsPage() {
                 etfName: notes.etf_name,
                 isin: notes.isin,
                 exchange: notes.exchange,
+                currentNav,
                 // Digital Gold fields
                 platform: notes.platform,
                 provider: notes.provider,
@@ -654,6 +661,11 @@ export default function GoldHoldingsPage() {
                             {holding.purity && holding.goldType !== 'etf' && (
                               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                                 {holding.purity}
+                              </p>
+                            )}
+                            {holding.currentNav && holding.goldType === 'etf' && (
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                                NAV: ₹{holding.currentNav.toFixed(2)}
                               </p>
                             )}
                           </td>

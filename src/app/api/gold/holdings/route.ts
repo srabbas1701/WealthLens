@@ -119,12 +119,12 @@ function createAssetName(goldType: string, metadata: any): string {
 
 /**
  * Calculate current value based on gold type using IBJA rates
- * 
+ *
  * Uses centralized gold pricing service for proper valuation:
  * - SGB: 24K IBJA rate
  * - Physical: Purity-specific IBJA rate, net weight only
  * - Digital: 24K IBJA rate
- * - ETF: NAV from exchange (not IBJA)
+ * - ETF: NAV from mf_navs table (not IBJA)
  */
 async function calculateCurrentValue(
   goldType: string,
@@ -132,11 +132,43 @@ async function calculateCurrentValue(
   unitType: string,
   metadata: any
 ): Promise<number> {
-  // Gold ETF: Skip IBJA calculation (uses NAV from exchange)
+  // Gold ETF: Get NAV from mf_navs table
   if (goldType === 'etf') {
-    // ETF valuation is handled via stock prices API
-    // For now, use invested amount as placeholder
-    return metadata.invested_amount || 0;
+    try {
+      const { createAdminClient } = await import('@/lib/supabase/server');
+      const adminClient = createAdminClient();
+
+      // First, get scheme_code from ISIN
+      if (metadata.isin) {
+        const { data: schemeData } = await adminClient
+          .from('mf_scheme_master')
+          .select('scheme_code')
+          .eq('isin_growth', metadata.isin)
+          .maybeSingle();
+
+        if (schemeData) {
+          // Get latest NAV
+          const { data: navData } = await adminClient
+            .from('mf_navs')
+            .select('nav')
+            .eq('scheme_code', schemeData.scheme_code)
+            .order('nav_date', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (navData) {
+            const nav = parseFloat(navData.nav);
+            return quantity * nav;
+          }
+        }
+      }
+
+      console.warn('[Gold Holdings API] No NAV found for ETF, using invested amount');
+      return metadata.invested_amount || 0;
+    } catch (error) {
+      console.error('[Gold Holdings API] Error fetching ETF NAV:', error);
+      return metadata.invested_amount || 0;
+    }
   }
   
   // Fetch latest IBJA rates
