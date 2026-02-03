@@ -358,14 +358,14 @@ export default function ManualInvestmentModal({
         onClick={step === 'select' || step === 'error' ? handleClose : undefined}
       />
 
-      <div className="relative w-full max-w-2xl max-h-[90vh] mx-4 bg-white rounded-xl border border-[#E5E7EB] shadow-lg overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-2xl max-h-[90vh] mx-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
           <div>
-            <h2 className="text-lg font-semibold text-[#0F172A]">
+            <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
               {editingHoldingId ? 'Edit Holding' : 'Add Holding'}
             </h2>
-            <p className="text-sm text-[#6B7280] mt-0.5">
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
               {step === 'select' && 'Select the type of investment'}
               {step === 'form' && 'Enter holding details'}
               {step === 'review' && 'Review before saving'}
@@ -373,9 +373,9 @@ export default function ManualInvestmentModal({
           </div>
           <button
             onClick={handleClose}
-            className="p-2 rounded-lg hover:bg-[#F6F8FB] transition-colors"
+            className="p-2 rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
           >
-            <XIcon className="w-5 h-5 text-[#6B7280]" />
+            <XIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
           </button>
         </div>
 
@@ -385,7 +385,7 @@ export default function ManualInvestmentModal({
           {step === 'select' && (
             <div className="space-y-6">
               <div>
-                <p className="text-sm text-[#6B7280] mb-4">
+                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-4">
                   What type of investment are you adding?
                 </p>
                 <div className="grid grid-cols-2 gap-3">
@@ -402,10 +402,10 @@ export default function ManualInvestmentModal({
                     <button
                       key={option.id}
                       onClick={() => handleAssetTypeSelect(option.id)}
-                      className="p-4 rounded-lg border-2 border-[#E5E7EB] hover:border-[#2563EB] transition-all text-left"
+                      className="p-4 rounded-lg border-2 border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#0F172A] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all text-left"
                     >
-                      <p className="font-medium text-[#0F172A] text-sm">{option.label}</p>
-                      <p className="text-xs text-[#6B7280] mt-1">{option.description}</p>
+                      <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC] text-sm">{option.label}</p>
+                      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">{option.description}</p>
                     </button>
                   ))}
                 </div>
@@ -418,7 +418,7 @@ export default function ManualInvestmentModal({
             <div className="space-y-6">
               {/* Required: Invested Value */}
               <div>
-                <label className="block text-sm font-medium text-[#0F172A] mb-2">
+                <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
                   Invested Amount <span className="text-[#DC2626]">*</span>
                 </label>
                 <input
@@ -426,9 +426,9 @@ export default function ManualInvestmentModal({
                   value={formData.invested_value || ''}
                   onChange={(e) => setFormData({ ...formData, invested_value: parseFloat(e.target.value) || null })}
                   placeholder="Enter amount"
-                  className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] text-[#0F172A] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                  className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
                 />
-                <p className="text-xs text-[#6B7280] mt-1">
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                   This is the amount you invested in this holding
                 </p>
               </div>
@@ -437,7 +437,7 @@ export default function ManualInvestmentModal({
               {formData.assetType === 'fd' && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-[#0F172A] mb-2">
+                    <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
                       Bank or Institution <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
                     </label>
                     <input
@@ -445,13 +445,13 @@ export default function ManualInvestmentModal({
                       value={formData.institution || formData.name || ''}
                       onChange={(e) => setFormData({ ...formData, institution: e.target.value, name: e.target.value })}
                       placeholder="e.g., HDFC Bank"
-                      className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] text-[#0F172A] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-[#0F172A] mb-2">
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
                         Interest Rate (%) <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
                       </label>
                       <input
@@ -460,11 +460,11 @@ export default function ManualInvestmentModal({
                         value={formData.interest_rate || ''}
                         onChange={(e) => setFormData({ ...formData, interest_rate: parseFloat(e.target.value) || undefined })}
                         placeholder="6.5"
-                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] text-[#0F172A] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#0F172A] mb-2">
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
                         Maturity Date <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
                       </label>
                       <input
@@ -482,7 +482,7 @@ export default function ManualInvestmentModal({
                 <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
                   {/* Essential Fields */}
                   <div>
-                    <label className="block text-sm font-medium text-[#0F172A] mb-2">
+                    <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
                       Issuer Name <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
                     </label>
                     <input
@@ -737,7 +737,7 @@ export default function ManualInvestmentModal({
               {formData.assetType === 'gold' && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-[#0F172A] mb-2">
+                    <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
                       Type <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
                     </label>
                     <div className="grid grid-cols-3 gap-3">
@@ -762,7 +762,7 @@ export default function ManualInvestmentModal({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-[#0F172A] mb-2">
+                    <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
                       Purchase Date <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
                     </label>
                     <input
@@ -777,7 +777,7 @@ export default function ManualInvestmentModal({
 
               {formData.assetType === 'cash' && (
                 <div>
-                  <label className="block text-sm font-medium text-[#0F172A] mb-2">
+                  <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
                     Account Type <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
                   </label>
                   <input
@@ -785,16 +785,16 @@ export default function ManualInvestmentModal({
                     value={formData.account_type || formData.name || ''}
                     onChange={(e) => setFormData({ ...formData, account_type: e.target.value, name: e.target.value })}
                     placeholder="e.g., Savings Account, Current Account"
-                    className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] text-[#0F172A] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                    className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
                   />
                 </div>
               )}
 
               {/* Error Message */}
               {error && (
-                <div className="p-4 bg-[#FEF2F2] border border-[#FEE2E2] rounded-lg flex items-start gap-3">
-                  <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-[#991B1B]">{error}</p>
+                <div className="p-4 bg-[#FEF2F2] dark:bg-[#7F1D1D] border border-[#FEE2E2] dark:border-[#991B1B] rounded-lg flex items-start gap-3">
+                  <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] dark:text-[#FCA5A5] flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-[#991B1B] dark:text-[#FCA5A5]">{error}</p>
                 </div>
               )}
             </div>
@@ -803,21 +803,21 @@ export default function ManualInvestmentModal({
           {/* Step 3: Review */}
           {step === 'review' && (
             <div className="space-y-6">
-              <div className="p-4 bg-[#F6F8FB] border border-[#E5E7EB] rounded-lg">
-                <p className="text-sm text-[#6B7280]">
+              <div className="p-4 bg-[#F6F8FB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg">
+                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
                   Review your holding details. You can go back to make changes.
                 </p>
               </div>
 
-              <div className="border border-[#E5E7EB] rounded-lg p-6 space-y-4">
+              <div className="border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-[#6B7280] uppercase mb-1">Holding</p>
-                    <p className="font-medium text-[#0F172A]">{getAssetName()}</p>
+                    <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] uppercase mb-1">Holding</p>
+                    <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{getAssetName()}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-[#6B7280] uppercase mb-1">Invested Amount</p>
-                    <p className="font-medium text-[#0F172A]">
+                    <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] uppercase mb-1">Invested Amount</p>
+                    <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                       {formatCurrency(formData.invested_value || 0)}
                     </p>
                   </div>
@@ -825,70 +825,70 @@ export default function ManualInvestmentModal({
 
                 {/* Asset-specific details */}
                 {formData.assetType === 'fd' && (
-                  <div className="pt-4 border-t border-[#E5E7EB] space-y-2 text-sm">
+                  <div className="pt-4 border-t border-[#E5E7EB] dark:border-[#334155] space-y-2 text-sm">
                     {formData.institution && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Institution</span>
-                        <span className="text-[#0F172A]">{formData.institution}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Institution</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.institution}</span>
                       </div>
                     )}
                     {formData.interest_rate && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Interest Rate</span>
-                        <span className="text-[#0F172A]">{formData.interest_rate}% p.a.</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Interest Rate</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.interest_rate}% p.a.</span>
                       </div>
                     )}
                     {formData.maturity_date && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Maturity Date</span>
-                        <span className="text-[#0F172A]">{formData.maturity_date}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Maturity Date</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.maturity_date}</span>
                       </div>
                     )}
                   </div>
                 )}
 
                 {formData.assetType === 'bond' && (
-                  <div className="pt-4 border-t border-[#E5E7EB] space-y-2 text-sm">
+                  <div className="pt-4 border-t border-[#E5E7EB] dark:border-[#334155] space-y-2 text-sm">
                     {formData.issuer && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Issuer</span>
-                        <span className="text-[#0F172A]">{formData.issuer}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Issuer</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.issuer}</span>
                       </div>
                     )}
                     {formData.coupon_rate && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Coupon Rate</span>
-                        <span className="text-[#0F172A]">{formData.coupon_rate}%</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Coupon Rate</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.coupon_rate}%</span>
                       </div>
                     )}
                     {formData.bond_maturity_date && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Maturity Date</span>
-                        <span className="text-[#0F172A]">{formData.bond_maturity_date}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Maturity Date</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.bond_maturity_date}</span>
                       </div>
                     )}
                   </div>
                 )}
 
                 {formData.assetType === 'gold' && (
-                  <div className="pt-4 border-t border-[#E5E7EB] space-y-2 text-sm">
+                  <div className="pt-4 border-t border-[#E5E7EB] dark:border-[#334155] space-y-2 text-sm">
                     {formData.gold_type && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Type</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Type</span>
                         <span className="text-[#0F172A] capitalize">{formData.gold_type}</span>
                       </div>
                     )}
                     {formData.purchase_date && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Purchase Date</span>
-                        <span className="text-[#0F172A]">{formData.purchase_date}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Purchase Date</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.purchase_date}</span>
                       </div>
                     )}
                   </div>
                 )}
 
                 {formData.assetType === 'cash' && formData.account_type && (
-                  <div className="pt-4 border-t border-[#E5E7EB] space-y-2 text-sm">
+                  <div className="pt-4 border-t border-[#E5E7EB] dark:border-[#334155] space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-[#6B7280]">Account Type</span>
                       <span className="text-[#0F172A]">{formData.account_type}</span>
@@ -897,63 +897,63 @@ export default function ManualInvestmentModal({
                 )}
 
                 {formData.assetType === 'epf' && (
-                  <div className="pt-4 border-t border-[#E5E7EB] space-y-2 text-sm">
+                  <div className="pt-4 border-t border-[#E5E7EB] dark:border-[#334155] space-y-2 text-sm">
                     {formData.epf_account_number && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Account Number</span>
-                        <span className="text-[#0F172A]">{formData.epf_account_number}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Account Number</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.epf_account_number}</span>
                       </div>
                     )}
                     {formData.name && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Account Name</span>
-                        <span className="text-[#0F172A]">{formData.name}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Account Name</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.name}</span>
                       </div>
                     )}
                   </div>
                 )}
 
                 {formData.assetType === 'ppf' && (
-                  <div className="pt-4 border-t border-[#E5E7EB] space-y-2 text-sm">
+                  <div className="pt-4 border-t border-[#E5E7EB] dark:border-[#334155] space-y-2 text-sm">
                     {formData.ppf_account_number && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Account Number</span>
-                        <span className="text-[#0F172A]">{formData.ppf_account_number}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Account Number</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.ppf_account_number}</span>
                       </div>
                     )}
                     {formData.ppf_maturity_date && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Maturity Date</span>
-                        <span className="text-[#0F172A]">{formData.ppf_maturity_date}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Maturity Date</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.ppf_maturity_date}</span>
                       </div>
                     )}
                     {formData.name && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Account Name</span>
-                        <span className="text-[#0F172A]">{formData.name}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Account Name</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.name}</span>
                       </div>
                     )}
                   </div>
                 )}
 
                 {formData.assetType === 'nps' && (
-                  <div className="pt-4 border-t border-[#E5E7EB] space-y-2 text-sm">
+                  <div className="pt-4 border-t border-[#E5E7EB] dark:border-[#334155] space-y-2 text-sm">
                     {formData.nps_pran && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">PRAN</span>
-                        <span className="text-[#0F172A]">{formData.nps_pran}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">PRAN</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.nps_pran}</span>
                       </div>
                     )}
                     {formData.nps_tier && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Tier</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Tier</span>
                         <span className="text-[#0F172A] capitalize">{formData.nps_tier}</span>
                       </div>
                     )}
                     {formData.name && (
                       <div className="flex justify-between">
-                        <span className="text-[#6B7280]">Account Name</span>
-                        <span className="text-[#0F172A]">{formData.name}</span>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Account Name</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.name}</span>
                       </div>
                     )}
                   </div>
@@ -965,8 +965,8 @@ export default function ManualInvestmentModal({
           {/* Saving Step */}
           {step === 'saving' && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
-              <div className="w-12 h-12 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin" />
-              <p className="text-[#6B7280] font-medium">Saving holding...</p>
+              <div className="w-12 h-12 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
+              <p className="text-[#6B7280] dark:text-[#94A3B8] font-medium">Saving holding...</p>
             </div>
           )}
 
@@ -975,8 +975,8 @@ export default function ManualInvestmentModal({
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <CheckCircleIcon className="w-16 h-16 text-[#16A34A]" />
               <div className="text-center">
-                <p className="font-semibold text-[#0F172A] text-lg">Holding saved</p>
-                <p className="text-[#6B7280] text-sm mt-2">
+                <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-lg">Holding saved</p>
+                <p className="text-[#6B7280] dark:text-[#94A3B8] text-sm mt-2">
                   {editingHoldingId ? 'Your holding has been updated.' : 'Your portfolio has been updated.'}
                 </p>
               </div>
@@ -988,19 +988,19 @@ export default function ManualInvestmentModal({
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <AlertTriangleIcon className="w-16 h-16 text-[#DC2626]" />
               <div className="text-center">
-                <p className="font-semibold text-[#0F172A] text-lg">Something went wrong</p>
-                <p className="text-[#6B7280] text-sm mt-2">{error}</p>
+                <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-lg">Something went wrong</p>
+                <p className="text-[#6B7280] dark:text-[#94A3B8] text-sm mt-2">{error}</p>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer / Actions */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[#E5E7EB] bg-[#F6F8FB]">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#0F172A]">
           {step === 'select' && (
             <button
               onClick={handleClose}
-              className="px-4 py-2 text-[#6B7280] font-medium rounded-lg hover:bg-white transition-colors"
+              className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#334155] transition-colors"
             >
               Cancel
             </button>
@@ -1010,7 +1010,7 @@ export default function ManualInvestmentModal({
             <>
               <button
                 onClick={() => setStep('select')}
-                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] font-medium rounded-lg hover:bg-white transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#334155] transition-colors"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
@@ -1018,7 +1018,7 @@ export default function ManualInvestmentModal({
               <button
                 onClick={handleFormSubmit}
                 disabled={!formData.invested_value || formData.invested_value <= 0}
-                className="px-6 py-2 bg-[#2563EB] text-white font-medium rounded-lg hover:bg-[#1E40AF] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Review
               </button>
@@ -1029,7 +1029,7 @@ export default function ManualInvestmentModal({
             <>
               <button
                 onClick={() => setStep('form')}
-                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] font-medium rounded-lg hover:bg-white transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#334155] transition-colors"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
@@ -1037,7 +1037,7 @@ export default function ManualInvestmentModal({
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-6 py-2 bg-[#2563EB] text-white font-medium rounded-lg hover:bg-[#1E40AF] transition-colors disabled:opacity-50"
+                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50"
               >
                 {editingHoldingId ? 'Update' : 'Save'} Holding
               </button>
