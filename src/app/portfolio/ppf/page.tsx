@@ -15,7 +15,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
+import {
   ArrowLeftIcon,
   InfoIcon,
   ChevronDownIcon,
@@ -33,6 +33,7 @@ import DataConsolidationMessage from '@/components/DataConsolidationMessage';
 import PPFAddModal from '@/components/PPFAddModal';
 import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
 import SimpleToast from '@/components/SimpleToast';
+import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 
 interface PPFHolding {
   id: string;

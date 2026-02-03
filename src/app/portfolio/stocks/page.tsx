@@ -25,6 +25,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { generateStocksPDF } from '@/lib/pdf/generateStocksPDF';
 import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { Plus, Edit, Trash2, X, Search } from 'lucide-react';
+import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 
 // Types
 interface Stock {
@@ -88,22 +89,27 @@ export default function StocksHoldingsPage() {
   const [isSearching, setIsSearching] = useState(false);
 
   // Fetch stocks data
-  const fetchData = useCallback(async (userId: string) => {
+  const fetchData = useCallback(async (userId: string, silentRefresh = false) => {
     if (fetchingRef.current) {
       console.log('[Stocks Page] Skipping duplicate fetch');
       return;
     }
-    
+
     fetchingRef.current = true;
-    setLoading(true);
+    if (!silentRefresh) {
+      setLoading(true);
+    }
     try {
       const params = new URLSearchParams({ user_id: userId });
       const response = await fetch(`/api/portfolio/data?${params}`);
-      
+
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {
           const portfolioData = result.data;
+
+          // Cache the portfolio data for other pages
+          setCachedPortfolioData(userId, portfolioData);
           const equityHoldings = portfolioData.holdings
             .filter((h: any) => h.assetType === 'Equity' || h.assetType === 'Stocks')
             .map((h: any) => {
@@ -213,7 +219,70 @@ export default function StocksHoldingsPage() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchData(user.id);
+      // Try cache first for instant load
+      const cached = getCachedPortfolioData<any>(user.id);
+
+      if (cached) {
+        // Process cached data immediately (no loading screen)
+        try {
+          const portfolioData = cached;
+          const equityHoldings = portfolioData.holdings
+            .filter((h: any) => h.assetType === 'Equity' || h.assetType === 'Stocks')
+            .map((h: any) => {
+              const currentValue = h.currentValue || h.investedValue;
+              const currentPrice = h.quantity > 0 ? currentValue / h.quantity : 0;
+              const pl = currentValue - h.investedValue;
+              const plPercentage = h.investedValue > 0
+                ? (pl / h.investedValue) * 100
+                : 0;
+
+              return {
+                id: h.id,
+                symbol: h.symbol || '',
+                name: h.name,
+                quantity: h.quantity,
+                avgBuyPrice: h.averagePrice,
+                investedValue: h.investedValue,
+                currentPrice,
+                currentValue,
+                pl,
+                plPercentage,
+                allocation: h.allocationPct || 0,
+                sector: h.sector || null,
+                priceDate: h.priceDate || null,
+              };
+            });
+
+          const allHoldings = portfolioData.holdings.map((h: any) => ({
+            id: h.id,
+            name: h.name,
+            assetType: h.assetType,
+            investedValue: h.investedValue,
+            currentValue: h.currentValue || h.investedValue,
+          }));
+
+          const assetTotals = getAssetTotals(allHoldings, 'Equity');
+
+          setStocks(equityHoldings);
+          setTotalValue(assetTotals.totalCurrent);
+          setTotalInvested(assetTotals.totalInvested);
+          setPortfolioPercentage(portfolioData.metrics.netWorth > 0
+            ? (assetTotals.totalCurrent / portfolioData.metrics.netWorth) * 100
+            : 0);
+          setLoading(false);
+
+          // Refresh in background if stale
+          if (isCacheStale(user.id)) {
+            fetchData(user.id, true);
+          }
+        } catch (error) {
+          console.error('Failed to process cached data:', error);
+          fetchData(user.id);
+        }
+      } else {
+        // No cache, fetch fresh
+        fetchData(user.id);
+      }
     }
   }, [user?.id, fetchData]);
 

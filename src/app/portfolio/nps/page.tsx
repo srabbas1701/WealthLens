@@ -22,10 +22,10 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
-import { 
-  PlusIcon, 
-  EditIcon, 
-  TrashIcon, 
+import {
+  PlusIcon,
+  EditIcon,
+  TrashIcon,
   RefreshIcon,
   InfoIcon,
   CheckCircleIcon,
@@ -33,6 +33,7 @@ import {
   ChevronUpIcon,
   ArrowLeftIcon,
 } from '@/components/icons';
+import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 import NPSAddModal from '@/components/NPSAddModal';
 import { generateNPSPDF } from '@/lib/pdf/generateHoldingsPDF';
 

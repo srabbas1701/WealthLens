@@ -12,7 +12,7 @@ import { calculatePortfolioXIRR } from '@/lib/xirr-calculator';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React from 'react';
-import { 
+import {
   ArrowLeftIcon,
   FileIcon,
   CheckCircleIcon,
@@ -26,6 +26,7 @@ import { useToast } from '@/components/Toast';
 import { Plus, Edit, Trash2, X } from 'lucide-react';
 import { generateMutualFundsPDF } from '@/lib/pdf/generateHoldingsPDF';
 import { useMarketDataStatus } from '@/hooks/useMarketDataStatus';
+import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 
 type SortField = 'name' | 'amc' | 'units' | 'currentValue' | 'investedValue' | 'xirr' | 'gainLoss' | 'allocation';
 type SortDirection = 'asc' | 'desc';
@@ -143,6 +144,10 @@ export default function MutualFundsPage() {
         const result = await response.json();
         if (result.success && result.data) {
           const portfolioData = result.data;
+
+          // Cache the portfolio data for other pages
+          setCachedPortfolioData(userId, portfolioData);
+
           const mfHoldings = portfolioData.holdings
             .filter((h: any) => h.assetType === 'Mutual Funds')
             .map((h: any, idx: number) => {
@@ -233,7 +238,86 @@ export default function MutualFundsPage() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchData(user.id);
+      // Try cache first for instant load
+      const cached = getCachedPortfolioData<any>(user.id);
+
+      if (cached) {
+        // Process cached data immediately (no loading screen)
+        try {
+          const portfolioData = cached;
+          const mfHoldings = portfolioData.holdings
+            .filter((h: any) => h.assetType === 'Mutual Funds')
+            .map((h: any) => {
+              let metadata: any = {};
+              try {
+                if (h.notes) {
+                  metadata = typeof h.notes === 'string' ? JSON.parse(h.notes) : h.notes;
+                }
+              } catch (e) {
+                console.warn('[MF Page] Failed to parse notes:', e);
+              }
+
+              const amc = metadata.amc || 'Other';
+              const category = metadata.category || 'Large Cap';
+              const plan = metadata.plan || 'Direct - Growth';
+              const folio = metadata.folio || '';
+              const purchaseDate = h.purchaseDate || metadata.purchase_date || null;
+
+              const units = h.quantity || 0;
+              const avgBuyNav = h.averagePrice || 0;
+              const investedValue = h.investedValue || 0;
+              const currentValue = h.currentValue || h.investedValue;
+              const latestNav = units > 0 ? currentValue / units : 0;
+
+              const xirr = purchaseDate
+                ? calculatePortfolioXIRR(investedValue, currentValue, purchaseDate)
+                : null;
+
+              return {
+                id: h.id,
+                name: h.name,
+                amc,
+                category,
+                plan,
+                folio,
+                units,
+                avgBuyNav,
+                latestNav,
+                currentValue,
+                investedValue: h.investedValue,
+                xirr,
+                gainLoss: currentValue - h.investedValue,
+                gainLossPercent: h.investedValue > 0
+                  ? ((currentValue - h.investedValue) / h.investedValue) * 100
+                  : 0,
+                allocationPct: h.allocationPct,
+                navDate: h.navDate || null,
+                purchaseDate: purchaseDate || null,
+              };
+            });
+
+          const total = mfHoldings.reduce((sum: number, h: MFHolding) => sum + h.currentValue, 0);
+          const invested = mfHoldings.reduce((sum: number, h: MFHolding) => sum + h.investedValue, 0);
+          const portfolioPct = (total / portfolioData.metrics.netWorth) * 100;
+
+          setHoldings(mfHoldings);
+          setTotalValue(total);
+          setTotalInvested(invested);
+          setPortfolioPercentage(portfolioPct);
+          setLoading(false);
+
+          // Refresh in background if stale
+          if (isCacheStale(user.id)) {
+            fetchData(user.id, false);
+          }
+        } catch (error) {
+          console.error('Failed to process cached data:', error);
+          fetchData(user.id);
+        }
+      } else {
+        // No cache, fetch fresh
+        fetchData(user.id);
+      }
     }
   }, [user?.id, fetchData]);
 

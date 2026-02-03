@@ -15,7 +15,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
+import {
   ArrowLeftIcon,
   InfoIcon,
   PlusIcon,
@@ -27,6 +27,7 @@ import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
 import EPFAddModal from '@/components/EPFAddModal';
+import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 
 interface EPFHolding {
   id: string;

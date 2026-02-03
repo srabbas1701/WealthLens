@@ -12,7 +12,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { 
+import {
   ArrowLeftIcon,
   FileIcon,
   CheckCircleIcon,
@@ -29,6 +29,7 @@ import { useToast } from '@/components/Toast';
 import { generateStocksPDF } from '@/lib/pdf/generateStocksPDF';
 import { Plus, Edit, Trash2, X, Search } from 'lucide-react';
 import { useMarketDataStatus } from '@/hooks/useMarketDataStatus';
+import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 
 type SortField = 'name' | 'quantity' | 'avgPrice' | 'currentPrice' | 'investedValue' | 'currentValue' | 'gainLoss' | 'allocation';
 type SortDirection = 'asc' | 'desc';

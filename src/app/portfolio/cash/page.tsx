@@ -11,7 +11,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { 
+import {
   ArrowLeftIcon,
   FileIcon,
   CheckCircleIcon,
@@ -21,6 +21,7 @@ import {
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
+import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 
 type SortField = 'name' | 'accountType' | 'balance' | 'interestRate' | 'lastUpdated';
 type SortDirection = 'asc' | 'desc';

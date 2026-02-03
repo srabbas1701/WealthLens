@@ -11,7 +11,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { 
+import {
   ArrowLeftIcon,
   FileIcon,
   CheckCircleIcon,
@@ -26,6 +26,7 @@ import { useToast } from '@/components/Toast';
 import { Plus, Edit, Trash2, X } from 'lucide-react';
 import { generateETFSPDF } from '@/lib/pdf/generateHoldingsPDF';
 import { useMarketDataStatus } from '@/hooks/useMarketDataStatus';
+import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 
 type SortField = 'name' | 'category' | 'units' | 'avgPrice' | 'currentNAV' | 'investedValue' | 'currentValue' | 'gainLoss' | 'allocation';
 type SortDirection = 'asc' | 'desc';
@@ -124,23 +125,28 @@ export default function ETFHoldingsPage() {
     averagePrice: ''
   });
 
-  const fetchData = useCallback(async (userId: string) => {
+  const fetchData = useCallback(async (userId: string, silentRefresh = false) => {
     // Prevent duplicate simultaneous fetches
     if (fetchingRef.current) {
       console.log('[ETF Page] Skipping duplicate fetch');
       return;
     }
-    
+
     fetchingRef.current = true;
-    setLoading(true);
+    if (!silentRefresh) {
+      setLoading(true);
+    }
     try {
       const params = new URLSearchParams({ user_id: userId });
       const response = await fetch(`/api/portfolio/data?${params}`);
-      
+
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {
           const portfolioData = result.data;
+
+          // Cache the portfolio data for other pages
+          setCachedPortfolioData(userId, portfolioData);
           const etfHoldings = portfolioData.holdings
             .filter((h: any) => h.assetType === 'ETFs' || h.assetType === 'ETF')
             .map((h: any) => {
@@ -200,7 +206,65 @@ export default function ETFHoldingsPage() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchData(user.id);
+      // Try cache first for instant load
+      const cached = getCachedPortfolioData<any>(user.id);
+
+      if (cached) {
+        // Process cached data immediately (no loading screen)
+        try {
+          const portfolioData = cached;
+          const etfHoldings = portfolioData.holdings
+            .filter((h: any) => h.assetType === 'ETFs' || h.assetType === 'ETF')
+            .map((h: any) => {
+              const currentValue = h.currentValue || h.investedValue;
+              const units = h.quantity || 0;
+              const currentNAV = units > 0 ? currentValue / units : 0;
+              const gainLoss = currentValue - h.investedValue;
+              const gainLossPercent = h.investedValue > 0
+                ? (gainLoss / h.investedValue) * 100
+                : 0;
+
+              return {
+                id: h.id,
+                name: h.name,
+                symbol: h.symbol,
+                category: getCategoryLabel(h.assetClass),
+                units,
+                averagePrice: h.averagePrice,
+                currentNAV,
+                investedValue: h.investedValue,
+                currentValue,
+                gainLoss,
+                gainLossPercent,
+                allocationPct: h.allocationPct,
+                priceDate: (h as any)._priceDate || null,
+              };
+            });
+
+          const total = etfHoldings.reduce((sum: number, h: ETFHolding) => sum + h.currentValue, 0);
+          const invested = etfHoldings.reduce((sum: number, h: ETFHolding) => sum + h.investedValue, 0);
+          const portfolioPct = portfolioData.metrics.netWorth > 0
+            ? (total / portfolioData.metrics.netWorth) * 100
+            : 0;
+
+          setHoldings(etfHoldings);
+          setTotalValue(total);
+          setTotalInvested(invested);
+          setPortfolioPercentage(portfolioPct);
+          setLoading(false);
+
+          // Refresh in background if stale
+          if (isCacheStale(user.id)) {
+            fetchData(user.id, true);
+          }
+        } catch (error) {
+          console.error('Failed to process cached data:', error);
+          fetchData(user.id);
+        }
+      } else {
+        // No cache, fetch fresh
+        fetchData(user.id);
+      }
     }
   }, [user?.id, fetchData]);
 
