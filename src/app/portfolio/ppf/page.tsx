@@ -31,6 +31,8 @@ import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
 import PPFAddModal from '@/components/PPFAddModal';
+import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
+import SimpleToast from '@/components/SimpleToast';
 
 interface PPFHolding {
   id: string;
@@ -67,6 +69,10 @@ export default function PPFHoldingsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingHolding, setEditingHolding] = useState<PPFHolding | null>(null);
   const [deletingHoldingId, setDeletingHoldingId] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [holdingToDelete, setHoldingToDelete] = useState<PPFHolding | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
   // Calculate summary metrics
   const summary = useMemo(() => {
@@ -190,18 +196,21 @@ export default function PPFHoldingsPage() {
     setShowAddModal(true);
   };
 
-  const handleDelete = async (holdingId: string) => {
-    if (!user?.id) return;
-    
-    if (!confirm('Are you sure you want to delete this PPF account? This action cannot be undone.')) {
-      return;
-    }
+  const handleDeleteClick = (holding: PPFHolding) => {
+    setHoldingToDelete(holding);
+    setShowDeleteModal(true);
+  };
 
-    setDeletingHoldingId(holdingId);
+  const handleDeleteConfirm = async () => {
+    if (!user?.id || !holdingToDelete) return;
+
+    setIsDeleting(true);
+    setDeletingHoldingId(holdingToDelete.id);
+
     try {
       const params = new URLSearchParams({
         user_id: user.id,
-        holding_id: holdingId,
+        holding_id: holdingToDelete.id,
       });
 
       const response = await fetch(`/api/ppf/holdings?${params}`, {
@@ -211,17 +220,35 @@ export default function PPFHoldingsPage() {
       const result = await response.json();
 
       if (result.success) {
+        setToast({
+          message: 'PPF account deleted successfully',
+          type: 'success',
+        });
+        setShowDeleteModal(false);
+        setHoldingToDelete(null);
         // Refresh data
         fetchData(user.id);
       } else {
-        alert(`Failed to delete PPF account: ${result.error}`);
+        setToast({
+          message: result.error || 'Failed to delete PPF account',
+          type: 'error',
+        });
       }
     } catch (error) {
       console.error('Delete error:', error);
-      alert('Failed to delete PPF account. Please try again.');
+      setToast({
+        message: 'Failed to delete PPF account. Please try again.',
+        type: 'error',
+      });
     } finally {
+      setIsDeleting(false);
       setDeletingHoldingId(null);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    setHoldingToDelete(null);
   };
 
   // Mask account number for display
@@ -427,7 +454,7 @@ export default function PPFHoldingsPage() {
                             <EditIcon className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDelete(holding.id)}
+                            onClick={() => handleDeleteClick(holding)}
                             disabled={deletingHoldingId === holding.id}
                             className="p-2 text-[#DC2626] dark:text-[#EF4444] hover:bg-[#FEF2F2] dark:hover:bg-[#7F1D1D] rounded-lg transition-colors disabled:opacity-50"
                             title="Delete PPF Account"
@@ -569,6 +596,26 @@ export default function PPFHoldingsPage() {
         onSuccess={handleAddSuccess}
         existingHolding={editingHolding}
       />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete PPF Account"
+        message="Are you sure you want to delete this PPF account?"
+        itemName={holdingToDelete ? `${holdingToDelete.accountHolderName} (${maskAccountNumber(holdingToDelete.accountNumber)})` : undefined}
+        isDeleting={isDeleting}
+      />
+
+      {/* Toast Notifications */}
+      {toast && (
+        <SimpleToast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
