@@ -28,6 +28,7 @@ import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
 import { generateFixedDepositsPDF } from '@/lib/pdf/generateHoldingsPDF';
 import { INDIAN_BANKS } from '@/constants/banks';
+import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 
 type SortField = 'bank' | 'principal' | 'rate' | 'startDate' | 'maturityDate' | 'currentValue' | 'daysLeft';
 type SortDirection = 'asc' | 'desc';
@@ -112,16 +113,21 @@ export default function FixedDepositsPage() {
   // Nomination modal
   const [showNomination, setShowNomination] = useState<FDHolding | null>(null);
 
-  const fetchData = useCallback(async (userId: string) => {
-    setLoading(true);
+  const fetchData = useCallback(async (userId: string, skipLoadingScreen = false) => {
+    if (!skipLoadingScreen) {
+      setLoading(true);
+    }
     try {
       const params = new URLSearchParams({ user_id: userId });
       const response = await fetch(`/api/portfolio/data?${params}`);
-      
+
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {
           const portfolioData = result.data;
+
+          // Cache for other pages
+          setCachedPortfolioData(userId, portfolioData);
           const fdHoldings = portfolioData.holdings
             .filter((h: any) => h.assetType === 'Fixed Deposit' || h.assetType === 'Fixed Deposits')
             .map((h: any) => {
@@ -205,7 +211,92 @@ export default function FixedDepositsPage() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchData(user.id);
+      // Try cache first for instant load
+      const cached = getCachedPortfolioData<any>(user.id);
+
+      if (cached) {
+        // Process cached data immediately (no loading screen)
+        try {
+          const portfolioData = cached;
+          const fdHoldings = portfolioData.holdings
+            .filter((h: any) => h.assetType === 'Fixed Deposit' || h.assetType === 'Fixed Deposits')
+            .map((h: any) => {
+              let fdMetadata: any = {};
+              if (h.notes) {
+                try {
+                  fdMetadata = JSON.parse(h.notes);
+                } catch (e) {
+                  console.warn('Failed to parse FD notes:', e);
+                }
+              }
+
+              const bank = h.name || 'Unknown Bank';
+              const principal = h.investedValue;
+              const rate = fdMetadata.interest_rate || fdMetadata.fdRate || fdMetadata.rate || 6.5;
+              const startDateStr = fdMetadata.start_date || fdMetadata.fdStartDate || fdMetadata.startDate;
+              const maturityDateStr = fdMetadata.maturity_date || fdMetadata.fdMaturityDate || fdMetadata.maturityDate;
+
+              let startDate: Date;
+              let maturityDate: Date;
+
+              if (startDateStr && maturityDateStr) {
+                startDate = new Date(startDateStr);
+                maturityDate = new Date(maturityDateStr);
+              } else {
+                startDate = new Date();
+                startDate.setMonth(startDate.getMonth() - 6);
+                maturityDate = new Date(startDate);
+                maturityDate.setFullYear(maturityDate.getFullYear() + 1);
+              }
+
+              const today = new Date();
+              const daysLeft = Math.max(0, Math.floor((maturityDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+
+              let currentValue = principal;
+              if (startDateStr && maturityDateStr) {
+                const years = Math.max(0, (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365));
+                currentValue = principal * Math.pow(1 + rate / 100, years);
+              }
+
+              return {
+                id: h.id,
+                bank,
+                fdNumber: fdMetadata.fdNumber || `FD${h.id.slice(0, 8).toUpperCase()}`,
+                principal,
+                rate,
+                startDate: startDate.toISOString(),
+                maturityDate: maturityDate.toISOString(),
+                currentValue,
+                daysLeft,
+                interestType: fdMetadata.interestType || 'Cumulative',
+                tdsApplicable: fdMetadata.tdsApplicable !== undefined ? fdMetadata.tdsApplicable : true,
+                nomineeName: fdMetadata.nomineeName || '',
+                nomineeRelationship: fdMetadata.nomineeRelationship || '',
+              };
+            });
+
+          const totalPrinc = fdHoldings.reduce((sum: number, h: FDHolding) => sum + h.principal, 0);
+          const totalVal = fdHoldings.reduce((sum: number, h: FDHolding) => sum + h.currentValue, 0);
+          const portfolioPct = (totalVal / portfolioData.metrics.netWorth) * 100;
+
+          setHoldings(fdHoldings);
+          setTotalPrincipal(totalPrinc);
+          setTotalValue(totalVal);
+          setPortfolioPercentage(portfolioPct);
+          setLoading(false);
+
+          // Refresh in background if stale
+          if (isCacheStale(user.id)) {
+            fetchData(user.id, true);
+          }
+        } catch (error) {
+          console.error('Failed to process cached data:', error);
+          fetchData(user.id);
+        }
+      } else {
+        // No cache, fetch fresh
+        fetchData(user.id);
+      }
     }
   }, [user?.id, fetchData]);
 
