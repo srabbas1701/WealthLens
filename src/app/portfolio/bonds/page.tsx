@@ -174,9 +174,22 @@ export default function BondsHoldingsPage() {
   const [formData, setFormData] = useState({
     issuer: '',
     amount: '',
+    bondType: '',
+    rating: '',
     couponRate: '',
-    couponFrequency: '',
-    maturityDate: ''
+    yieldToMaturity: '',
+    interestPayoutFrequency: '',
+    principalPayout: '',
+    taxStatus: '',
+    collateralSecurity: '',
+    tenureYears: '',
+    tenureMonths: '',
+    orderId: '',
+    orderDate: '',
+    settlementDate: '',
+    maturityDate: '',
+    faceValuePerUnit: '',
+    units: ''
   });
 
   const fetchData = useCallback(async (userId: string) => {
@@ -476,9 +489,22 @@ export default function BondsHoldingsPage() {
   const handleEditBond = async (bondData: {
     issuer: string;
     amount: number;
+    bondType?: string;
+    rating?: string;
     couponRate?: number;
-    couponFrequency?: string;
+    yieldToMaturity?: number;
+    interestPayoutFrequency?: string;
+    principalPayout?: string;
+    taxStatus?: string;
+    collateralSecurity?: string;
+    tenureYears?: number;
+    tenureMonths?: number;
+    orderId?: string;
+    orderDate?: string;
+    settlementDate?: string;
     maturityDate?: string;
+    faceValuePerUnit?: number;
+    units?: number;
   }) => {
     if (!selectedBond || !user?.id) return;
 
@@ -495,9 +521,22 @@ export default function BondsHoldingsPage() {
             assetType: 'bond',
             bondIssuer: bondData.issuer,
             bondAmount: bondData.amount,
+            bondType: bondData.bondType,
+            bondRating: bondData.rating,
             bondCouponRate: bondData.couponRate,
-            bondCouponFrequency: bondData.couponFrequency,
+            bondYieldToMaturity: bondData.yieldToMaturity,
+            bondInterestPayoutFrequency: bondData.interestPayoutFrequency,
+            bondPrincipalPayout: bondData.principalPayout,
+            bondTaxStatus: bondData.taxStatus,
+            bondCollateralSecurity: bondData.collateralSecurity,
+            bondTenureYears: bondData.tenureYears,
+            bondTenureMonths: bondData.tenureMonths,
+            bondOrderId: bondData.orderId,
+            bondOrderDate: bondData.orderDate,
+            bondSettlementDate: bondData.settlementDate,
             bondMaturityDate: bondData.maturityDate,
+            bondFaceValuePerUnit: bondData.faceValuePerUnit,
+            bondUnits: bondData.units,
           }
         })
       });
@@ -955,9 +994,22 @@ export default function BondsHoldingsPage() {
                                 setFormData({
                                   issuer: holding.issuer || '',
                                   amount: holding.investedValue.toString(),
+                                  bondType: holding.type || '',
+                                  rating: holding.rating || '',
                                   couponRate: holding.couponRate?.toString() || '',
-                                  couponFrequency: holding.couponFrequency || 'Annual',
-                                  maturityDate: holding.maturityDate || ''
+                                  yieldToMaturity: holding.yieldToMaturity?.toString() || '',
+                                  interestPayoutFrequency: holding.interestPayoutFrequency || '',
+                                  principalPayout: holding.principalPayout || '',
+                                  taxStatus: holding.taxStatus || '',
+                                  collateralSecurity: holding.collateralSecurity || '',
+                                  tenureYears: holding.tenureYears?.toString() || '',
+                                  tenureMonths: holding.tenureMonths?.toString() || '',
+                                  orderId: holding.orderId || '',
+                                  orderDate: holding.orderDate || '',
+                                  settlementDate: holding.settlementDate || '',
+                                  maturityDate: holding.maturityDate || '',
+                                  faceValuePerUnit: holding.faceValuePerUnit?.toString() || '',
+                                  units: holding.units?.toString() || ''
                                 });
                                 setShowEditModal(true);
                               }}
@@ -1298,17 +1350,17 @@ function AddBondModal({
 /**
  * Edit Bond Modal Component
  */
-function EditBondModal({ 
-  bond, 
-  onClose, 
+function EditBondModal({
+  bond,
+  onClose,
   onSave,
   formData,
   setFormData,
   isLoading,
   formatCurrency
-}: { 
-  bond: BondHolding; 
-  onClose: () => void; 
+}: {
+  bond: BondHolding;
+  onClose: () => void;
   onSave: (data: any) => void;
   formData: any;
   setFormData: any;
@@ -1317,22 +1369,35 @@ function EditBondModal({
 }) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.issuer || !formData.amount) {
       return;
     }
-    
+
     const amount = parseFloat(formData.amount);
     if (amount <= 0) {
       return;
     }
-    
+
     onSave({
       issuer: formData.issuer,
       amount: amount,
+      bondType: formData.bondType || undefined,
+      rating: formData.rating || undefined,
       couponRate: formData.couponRate ? parseFloat(formData.couponRate) : undefined,
-      couponFrequency: formData.couponFrequency || 'Annual',
+      yieldToMaturity: formData.yieldToMaturity ? parseFloat(formData.yieldToMaturity) : undefined,
+      interestPayoutFrequency: formData.interestPayoutFrequency || undefined,
+      principalPayout: formData.principalPayout || undefined,
+      taxStatus: formData.taxStatus || undefined,
+      collateralSecurity: formData.collateralSecurity || undefined,
+      tenureYears: formData.tenureYears ? parseInt(formData.tenureYears) : undefined,
+      tenureMonths: formData.tenureMonths ? parseInt(formData.tenureMonths) : undefined,
+      orderId: formData.orderId || undefined,
+      orderDate: formData.orderDate || undefined,
+      settlementDate: formData.settlementDate || undefined,
       maturityDate: formData.maturityDate || undefined,
+      faceValuePerUnit: formData.faceValuePerUnit ? parseFloat(formData.faceValuePerUnit) : undefined,
+      units: formData.units ? parseInt(formData.units) : undefined,
     });
   };
 
@@ -1340,7 +1405,7 @@ function EditBondModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155]">
           <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Edit Bond Holding</h2>
           <button
@@ -1352,7 +1417,7 @@ function EditBondModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
           <div className="bg-[#F3F4F6] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
             <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-lg">{bond.name}</div>
             {bond.issuer && (
@@ -1389,34 +1454,194 @@ function EditBondModal({
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-              Coupon Rate (%)
-            </label>
-            <input
-              type="number"
-              value={formData.couponRate}
-              onChange={(e) => setFormData({ ...formData, couponRate: e.target.value })}
-              min="0"
-              step="0.01"
-              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Bond Type
+              </label>
+              <select
+                value={formData.bondType}
+                onChange={(e) => setFormData({ ...formData, bondType: e.target.value })}
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              >
+                <option value="">Select type</option>
+                <option value="Corporate Bond">Corporate Bond</option>
+                <option value="Government Bond">Government Bond (G-Sec)</option>
+                <option value="Treasury Bill">Treasury Bill (T-Bill)</option>
+                <option value="NBFC Bond">NBFC Bond</option>
+                <option value="SDL">State Development Loan (SDL)</option>
+                <option value="PSU Bond">PSU Bond</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Rating
+              </label>
+              <select
+                value={formData.rating}
+                onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              >
+                <option value="">Select rating</option>
+                <option value="AAA">AAA</option>
+                <option value="AA+">AA+</option>
+                <option value="AA">AA</option>
+                <option value="AA-">AA-</option>
+                <option value="A+">A+</option>
+                <option value="A">A</option>
+                <option value="A-">A-</option>
+                <option value="BBB+">BBB+</option>
+                <option value="BBB">BBB</option>
+                <option value="BBB-">BBB-</option>
+                <option value="Sovereign">Sovereign</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Coupon Rate (%)
+              </label>
+              <input
+                type="number"
+                value={formData.couponRate}
+                onChange={(e) => setFormData({ ...formData, couponRate: e.target.value })}
+                min="0"
+                step="0.01"
+                placeholder="7.5"
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Yield to Maturity (%)
+              </label>
+              <input
+                type="number"
+                value={formData.yieldToMaturity}
+                onChange={(e) => setFormData({ ...formData, yieldToMaturity: e.target.value })}
+                min="0"
+                step="0.01"
+                placeholder="8.2"
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Interest Payout
+              </label>
+              <select
+                value={formData.interestPayoutFrequency}
+                onChange={(e) => setFormData({ ...formData, interestPayoutFrequency: e.target.value })}
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              >
+                <option value="">Select frequency</option>
+                <option value="Monthly">Monthly</option>
+                <option value="Quarterly">Quarterly</option>
+                <option value="Half-Yearly">Half-Yearly</option>
+                <option value="Annual">Annual</option>
+                <option value="At Maturity">At Maturity (Zero Coupon)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Principal Payout
+              </label>
+              <select
+                value={formData.principalPayout}
+                onChange={(e) => setFormData({ ...formData, principalPayout: e.target.value })}
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              >
+                <option value="At Maturity">At Maturity</option>
+                <option value="Quarterly">Quarterly</option>
+                <option value="Annual">Annual</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Tax Status
+              </label>
+              <select
+                value={formData.taxStatus}
+                onChange={(e) => setFormData({ ...formData, taxStatus: e.target.value })}
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              >
+                <option value="">Select status</option>
+                <option value="Taxable">Taxable</option>
+                <option value="Tax Free">Tax Free</option>
+                <option value="Tax Saving">Tax Saving (54EC)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Collateral Security
+              </label>
+              <select
+                value={formData.collateralSecurity}
+                onChange={(e) => setFormData({ ...formData, collateralSecurity: e.target.value })}
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              >
+                <option value="">Select type</option>
+                <option value="Secured">Secured</option>
+                <option value="Unsecured">Unsecured</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2">
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Tenure
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="number"
+                  value={formData.tenureYears}
+                  onChange={(e) => setFormData({ ...formData, tenureYears: e.target.value })}
+                  placeholder="Years"
+                  className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                />
+                <input
+                  type="number"
+                  value={formData.tenureMonths}
+                  onChange={(e) => setFormData({ ...formData, tenureMonths: e.target.value })}
+                  placeholder="Months"
+                  className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Units
+              </label>
+              <input
+                type="number"
+                value={formData.units}
+                onChange={(e) => setFormData({ ...formData, units: e.target.value })}
+                placeholder="100"
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              />
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-              Coupon Frequency
+              Face Value per Unit
             </label>
-            <select
-              value={formData.couponFrequency}
-              onChange={(e) => setFormData({ ...formData, couponFrequency: e.target.value })}
+            <input
+              type="number"
+              value={formData.faceValuePerUnit}
+              onChange={(e) => setFormData({ ...formData, faceValuePerUnit: e.target.value })}
+              placeholder="1000"
               className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-            >
-              <option value="Annual">Annual</option>
-              <option value="Semi-Annual">Semi-Annual</option>
-              <option value="Quarterly">Quarterly</option>
-              <option value="Monthly">Monthly</option>
-            </select>
+            />
           </div>
 
           <div>
@@ -1429,6 +1654,44 @@ function EditBondModal({
               onChange={(e) => setFormData({ ...formData, maturityDate: e.target.value })}
               className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Order ID
+            </label>
+            <input
+              type="text"
+              value={formData.orderId}
+              onChange={(e) => setFormData({ ...formData, orderId: e.target.value })}
+              placeholder="e.g., ORD123456"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Order Date
+              </label>
+              <input
+                type="date"
+                value={formData.orderDate}
+                onChange={(e) => setFormData({ ...formData, orderDate: e.target.value })}
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                Settlement Date
+              </label>
+              <input
+                type="date"
+                value={formData.settlementDate}
+                onChange={(e) => setFormData({ ...formData, settlementDate: e.target.value })}
+                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+              />
+            </div>
           </div>
 
           {newInvestedValue > 0 && (
