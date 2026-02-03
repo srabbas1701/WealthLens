@@ -10,6 +10,7 @@
 import React, { useState, useEffect } from 'react';
 import { XIcon, CheckCircleIcon, AlertTriangleIcon, ArrowLeftIcon, InfoIcon } from './icons';
 import { useCurrency } from './AppHeader';
+import { GOLD_ETFS, type GoldETF } from '@/constants/goldEtfs';
 
 interface GoldAddModalProps {
   isOpen: boolean;
@@ -101,7 +102,12 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
     gold_22k: number;
     gold_18k?: number;
   } | null>(null);
-  
+
+  // ETF NAV state
+  const [etfNav, setEtfNav] = useState<number | null>(null);
+  const [loadingNav, setLoadingNav] = useState(false);
+  const [selectedEtf, setSelectedEtf] = useState<GoldETF | null>(null);
+
   const [formData, setFormData] = useState<FormData>({
     goldType: null,
     investedAmount: null,
@@ -151,6 +157,15 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
         vaulted: existingHolding.vaulted ?? false,
       });
       setStep('form');
+
+      // If editing an ETF, find and set the selected ETF
+      if (existingHolding.goldType === 'etf' && existingHolding.isin) {
+        const etf = GOLD_ETFS.find(e => e.isin === existingHolding.isin);
+        if (etf) {
+          setSelectedEtf(etf);
+          fetchEtfNav(etf.isin);
+        }
+      }
     }
   }, [existingHolding, isOpen]);
 
@@ -209,6 +224,8 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
       });
       setError(null);
       setGoldPrices(null);
+      setSelectedEtf(null);
+      setEtfNav(null);
     }
   }, [isOpen]);
 
@@ -256,8 +273,8 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
         return;
       }
     } else if (formData.goldType === 'etf') {
-      if (!formData.etfName) {
-        setError('Please enter ETF name');
+      if (!formData.etfName || !selectedEtf) {
+        setError('Please select a Gold ETF from the dropdown');
         return;
       }
     } else if (formData.goldType === 'digital') {
@@ -369,8 +386,57 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
     return goldPrices.gold_24k;
   };
 
+  // Fetch ETF NAV when ETF is selected
+  const fetchEtfNav = async (isin: string) => {
+    if (!isin) return;
+
+    setLoadingNav(true);
+    try {
+      const response = await fetch(`/api/etf/nav?isin=${isin}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.nav) {
+          setEtfNav(data.nav);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching ETF NAV:', error);
+    } finally {
+      setLoadingNav(false);
+    }
+  };
+
+  // Handle ETF selection
+  const handleEtfSelect = (etf: GoldETF | null) => {
+    setSelectedEtf(etf);
+    if (etf) {
+      setFormData(prev => ({
+        ...prev,
+        etfName: etf.name,
+        isin: etf.isin,
+        exchange: etf.exchange,
+      }));
+      fetchEtfNav(etf.isin);
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        etfName: '',
+        isin: '',
+      }));
+      setEtfNav(null);
+    }
+  };
+
   const calculateCurrentValue = (): number => {
     if (!formData.quantity || !formData.purchaseDate) return 0;
+
+    // For ETFs, use NAV if available
+    if (formData.goldType === 'etf') {
+      if (etfNav) {
+        return formData.quantity * etfNav;
+      }
+      return 0;
+    }
 
     const pricePerGram = getCurrentGoldPrice();
 
@@ -629,44 +695,70 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
             {formData.goldType === 'etf' && (
               <div className="space-y-4 pt-4 border-t border-[#E5E7EB] dark:border-[#334155]">
                 <h3 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Gold ETF Details</h3>
+
                 <div>
                   <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    ETF Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.etfName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, etfName: e.target.value }))}
-                    className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
-                    placeholder="Gold BeES"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    ISIN
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.isin}
-                    onChange={(e) => setFormData(prev => ({ ...prev, isin: e.target.value.toUpperCase() }))}
-                    className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
-                    placeholder="INF204K01YV9"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    Exchange
+                    Select ETF <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={formData.exchange}
-                    onChange={(e) => setFormData(prev => ({ ...prev, exchange: e.target.value }))}
+                    value={selectedEtf?.isin || ''}
+                    onChange={(e) => {
+                      const etf = GOLD_ETFS.find(item => item.isin === e.target.value) || null;
+                      handleEtfSelect(etf);
+                    }}
                     className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
                   >
-                    {EXCHANGES.map(ex => (
-                      <option key={ex} value={ex}>{ex}</option>
+                    <option value="">Select a Gold ETF</option>
+                    {GOLD_ETFS.map((etf) => (
+                      <option key={etf.isin} value={etf.isin}>
+                        {etf.name} ({etf.symbol})
+                      </option>
                     ))}
                   </select>
+                  <p className="mt-1 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                    Select from popular Gold ETFs in India
+                  </p>
                 </div>
+
+                {selectedEtf && (
+                  <>
+                    <div className="p-3 bg-[#F6F8FB] dark:bg-[#334155] rounded-lg space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">ISIN</span>
+                        <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formData.isin}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Exchange</span>
+                        <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formData.exchange}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">AMC</span>
+                        <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{selectedEtf.amc}</span>
+                      </div>
+                      {loadingNav && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-[#6B7280] dark:text-[#94A3B8]">Current NAV</span>
+                          <span className="text-[#6B7280] dark:text-[#94A3B8]">Loading...</span>
+                        </div>
+                      )}
+                      {!loadingNav && etfNav && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-[#6B7280] dark:text-[#94A3B8]">Current NAV</span>
+                          <span className="font-semibold text-[#10B981] dark:text-[#34D399]">₹{etfNav.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {!etfNav && !loadingNav && (
+                      <div className="flex items-start gap-2 p-3 bg-[#FEF3C7] dark:bg-[#78350F] border border-[#FCD34D] dark:border-[#92400E] rounded-lg">
+                        <InfoIcon className="w-4 h-4 text-[#D97706] dark:text-[#FCD34D] flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-[#92400E] dark:text-[#FEF3C7]">
+                          Current NAV not available. Estimated value will be shown as ₹0 until NAV data is fetched.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
@@ -770,8 +862,14 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
                     {formatCurrency(currentValue)}
                   </p>
                   <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                    @ {formatCurrency(currentPrice)}/gram
-                    {formData.goldType === 'physical' && ` (${formData.purity})`}
+                    {formData.goldType === 'etf' ? (
+                      etfNav ? `@ ₹${etfNav.toFixed(2)}/unit` : 'NAV not available'
+                    ) : (
+                      <>
+                        @ {formatCurrency(currentPrice)}/gram
+                        {formData.goldType === 'physical' && ` (${formData.purity})`}
+                      </>
+                    )}
                   </p>
                 </div>
                 <div>
@@ -787,6 +885,27 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
                   <p className="text-xs text-blue-700 dark:text-blue-300">
                     <strong>Note:</strong> Valuation is based on net weight ({formData.netWeight}g) at current {formData.purity} gold rate. Making charges are not included in current value.
                   </p>
+                </div>
+              )}
+
+              {formData.goldType === 'etf' && selectedEtf && (
+                <div className="mt-4 p-3 bg-[#EFF6FF] dark:bg-[#1E3A8A] border border-[#BFDBFE] dark:border-[#1E40AF] rounded-lg space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[#1E40AF] dark:text-[#93C5FD]">ETF Name:</span>
+                    <span className="font-medium text-[#1E3A8A] dark:text-[#DBEAFE]">{selectedEtf.name}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[#1E40AF] dark:text-[#93C5FD]">Symbol:</span>
+                    <span className="font-medium text-[#1E3A8A] dark:text-[#DBEAFE]">{selectedEtf.symbol}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[#1E40AF] dark:text-[#93C5FD]">ISIN:</span>
+                    <span className="font-medium text-[#1E3A8A] dark:text-[#DBEAFE]">{formData.isin}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[#1E40AF] dark:text-[#93C5FD]">AMC:</span>
+                    <span className="font-medium text-[#1E3A8A] dark:text-[#DBEAFE]">{selectedEtf.amc}</span>
+                  </div>
                 </div>
               )}
             </div>
