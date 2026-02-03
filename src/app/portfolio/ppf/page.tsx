@@ -180,7 +180,62 @@ export default function PPFHoldingsPage() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchData(user.id);
+      // Try cache first for instant load
+      const cached = getCachedPortfolioData<any>(user.id);
+
+      if (cached) {
+        // Process cached data immediately (no loading screen)
+        try {
+          const portfolioData = cached;
+          const ppfHoldings = portfolioData.holdings
+            .filter((h: any) => {
+              const assetType = (h.assetType || '').toLowerCase();
+              return assetType === 'ppf' || assetType === 'public provident fund' ||
+                     h.assetType === 'PPF' || h.assetType === 'Public Provident Fund';
+            })
+            .map((h: any) => {
+              const notes = h.notes ? JSON.parse(h.notes) : {};
+
+              return {
+                id: h.id,
+                name: h.name || 'PPF Account',
+                accountNumber: notes.accountNumber || '',
+                accountHolderName: notes.accountHolderName || '',
+                openingDate: notes.openingDate || '',
+                maturityDate: notes.maturityDate || '',
+                currentBalance: notes.currentBalance || h.currentValue || h.investedValue || 0,
+                totalContributions: notes.totalContributions || 0,
+                interestEarned: notes.interestEarned || 0,
+                interestRate: notes.interestRate || 7.1,
+                bankOrPostOffice: notes.bankOrPostOffice || '',
+                branch: notes.branch || '',
+                status: notes.status || 'active',
+                extensionDetails: notes.extensionDetails || null,
+                notes: h.notes,
+              };
+            });
+
+          const totalPPFBalance = ppfHoldings.reduce((sum, h) => sum + (h.currentBalance || 0), 0);
+
+          setHoldings(ppfHoldings);
+          setTotalBalance(totalPPFBalance);
+          setPortfolioPercentage(portfolioData.metrics.netWorth > 0
+            ? (totalPPFBalance / portfolioData.metrics.netWorth) * 100
+            : 0);
+          setLoading(false);
+
+          // Refresh in background if stale
+          if (isCacheStale(user.id)) {
+            fetchData(user.id);
+          }
+        } catch (error) {
+          console.error('Failed to process cached data:', error);
+          fetchData(user.id);
+        }
+      } else {
+        // No cache, fetch fresh
+        fetchData(user.id);
+      }
     }
   }, [user?.id, fetchData]);
 

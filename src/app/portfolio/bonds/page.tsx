@@ -316,7 +316,111 @@ export default function BondsHoldingsPage() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchData(user.id);
+      // Try cache first for instant load
+      const cached = getCachedPortfolioData<any>(user.id);
+
+      if (cached) {
+        // Process cached data immediately (no loading screen)
+        try {
+          const portfolioData = cached;
+          const bondHoldings = portfolioData.holdings
+            .filter((h: any) => h.assetType === 'Bonds' || h.assetType === 'Bond')
+            .map((h: any) => {
+              let bondMetadata: any = {};
+              if (h.notes) {
+                try {
+                  bondMetadata = JSON.parse(h.notes);
+                } catch (e) {
+                  console.warn('Failed to parse bond notes:', e);
+                }
+              }
+
+              const issuer = bondMetadata.issuer || bondMetadata.bondIssuer || null;
+              const bondType = bondMetadata.bond_type || bondMetadata.bondType || null;
+              const rating = bondMetadata.rating || bondMetadata.bondRating || null;
+              const couponRate = bondMetadata.coupon_rate || bondMetadata.couponRate || bondMetadata.bondCouponRate || null;
+              const yieldToMaturity = bondMetadata.yield_to_maturity || bondMetadata.yieldToMaturity || bondMetadata.bondYieldToMaturity || null;
+              const interestPayoutFrequency = bondMetadata.interest_payout_frequency || bondMetadata.interestPayoutFrequency || bondMetadata.bondInterestPayoutFrequency || null;
+              const principalPayout = bondMetadata.principal_payout || bondMetadata.principalPayout || bondMetadata.bondPrincipalPayout || null;
+              const taxStatus = bondMetadata.tax_status || bondMetadata.taxStatus || bondMetadata.bondTaxStatus || null;
+              const collateralSecurity = bondMetadata.collateral_security || bondMetadata.collateralSecurity || bondMetadata.bondCollateralSecurity || null;
+              const tenureYears = bondMetadata.tenure_years || bondMetadata.tenureYears || bondMetadata.bondTenureYears || null;
+              const tenureMonths = bondMetadata.tenure_months || bondMetadata.tenureMonths || bondMetadata.bondTenureMonths || null;
+              const orderId = bondMetadata.order_id || bondMetadata.orderId || bondMetadata.bondOrderId || null;
+              const orderDate = bondMetadata.order_date || bondMetadata.orderDate || bondMetadata.bondOrderDate || null;
+              const settlementDate = bondMetadata.settlement_date || bondMetadata.settlementDate || bondMetadata.bondSettlementDate || null;
+              const maturityDateStr = bondMetadata.maturity_date || bondMetadata.maturityDate || bondMetadata.bondMaturityDate || null;
+              const faceValuePerUnit = bondMetadata.face_value_per_unit || bondMetadata.faceValuePerUnit || bondMetadata.bondFaceValuePerUnit || null;
+              const units = bondMetadata.units || bondMetadata.bondUnits || h.quantity || null;
+
+              const faceValue = faceValuePerUnit && units
+                ? faceValuePerUnit * units
+                : (h.quantity > 0 && h.quantity !== 1
+                  ? h.investedValue / h.quantity
+                  : h.investedValue);
+
+              const currentValue = h.currentValue > 0 ? h.currentValue : h.investedValue;
+              const yieldValue = calculateYield(couponRate, interestPayoutFrequency, faceValue, currentValue);
+              const status = getBondStatus(maturityDateStr);
+              const daysToMaturity = getDaysToMaturity(maturityDateStr);
+              const hasCompleteData = !!(issuer && bondType && couponRate && maturityDateStr);
+
+              return {
+                id: h.id,
+                name: h.name,
+                issuer,
+                type: bondType || getBondType(issuer, h.name),
+                rating,
+                couponRate,
+                yieldToMaturity,
+                interestPayoutFrequency,
+                principalPayout,
+                taxStatus,
+                collateralSecurity,
+                tenureYears,
+                tenureMonths,
+                orderId,
+                orderDate,
+                settlementDate,
+                maturityDate: maturityDateStr,
+                faceValuePerUnit,
+                units,
+                faceValue,
+                investedValue: h.investedValue,
+                currentValue,
+                yield: yieldValue,
+                status,
+                daysToMaturity,
+                hasCompleteData,
+              };
+            });
+
+          const totalFace = bondHoldings.reduce((sum: number, h: BondHolding) => sum + h.faceValue, 0);
+          const totalInv = bondHoldings.reduce((sum: number, h: BondHolding) => sum + h.investedValue, 0);
+          const totalCurrent = bondHoldings.reduce((sum: number, h: BondHolding) => sum + h.currentValue, 0);
+          const portfolioPct = portfolioData.metrics.netWorth > 0
+            ? (totalCurrent / portfolioData.metrics.netWorth) * 100
+            : 0;
+
+          setHoldings(bondHoldings);
+          setTotalFaceValue(totalFace);
+          setTotalInvested(totalInv);
+          setTotalCurrentValue(totalCurrent);
+          setPortfolioPercentage(portfolioPct);
+          setLoading(false);
+
+          // Refresh in background if stale
+          if (isCacheStale(user.id)) {
+            fetchData(user.id);
+          }
+        } catch (error) {
+          console.error('Failed to process cached data:', error);
+          fetchData(user.id);
+        }
+      } else {
+        // No cache, fetch fresh
+        fetchData(user.id);
+      }
     }
   }, [user?.id, fetchData]);
 

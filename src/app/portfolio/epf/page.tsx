@@ -164,7 +164,60 @@ export default function EPFHoldingsPage() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchData(user.id);
+      // Try cache first for instant load
+      const cached = getCachedPortfolioData<any>(user.id);
+
+      if (cached) {
+        // Process cached data immediately (no loading screen)
+        try {
+          const portfolioData = cached;
+          const epfHoldings = portfolioData.holdings
+            .filter((h: any) => h.assetType === 'EPF')
+            .map((h: any) => {
+              let epfMetadata: any = {};
+              if (h.notes) {
+                try {
+                  epfMetadata = JSON.parse(h.notes);
+                } catch (e) {
+                  console.warn('Failed to parse EPF notes:', e);
+                }
+              }
+
+              return {
+                id: h.id,
+                uanNumber: epfMetadata.uanNumber || h.name || 'Not provided',
+                employeeName: epfMetadata.employeeName || 'Not provided',
+                employerName: epfMetadata.employerName || 'Not provided',
+                dateOfJoining: epfMetadata.dateOfJoining || null,
+                employeeContribution: epfMetadata.employeeContribution || 0,
+                employerContribution: epfMetadata.employerContribution || 0,
+                pensionContribution: epfMetadata.pensionContribution || 0,
+                currentBalance: h.currentValue || h.investedValue || 0,
+                lastUpdated: epfMetadata.lastUpdated || new Date().toISOString(),
+              };
+            });
+
+          const totalEPFBalance = epfHoldings.reduce((sum: number, h: EPFHolding) => sum + h.currentBalance, 0);
+
+          setHoldings(epfHoldings);
+          setTotalBalance(totalEPFBalance);
+          setPortfolioPercentage(portfolioData.metrics.netWorth > 0
+            ? (totalEPFBalance / portfolioData.metrics.netWorth) * 100
+            : 0);
+          setLoading(false);
+
+          // Refresh in background if stale
+          if (isCacheStale(user.id)) {
+            fetchData(user.id);
+          }
+        } catch (error) {
+          console.error('Failed to process cached data:', error);
+          fetchData(user.id);
+        }
+      } else {
+        // No cache, fetch fresh
+        fetchData(user.id);
+      }
     }
   }, [user?.id, fetchData]);
 
