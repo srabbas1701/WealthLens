@@ -27,6 +27,8 @@ import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
 import GoldAddModal from '@/components/GoldAddModal';
+import SimpleToast from '@/components/SimpleToast';
+import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
 import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 
 interface GoldHolding {
@@ -85,7 +87,22 @@ export default function GoldHoldingsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingHolding, setEditingHolding] = useState<GoldHolding | null>(null);
   const [deletingHoldingId, setDeletingHoldingId] = useState<string | null>(null);
-  
+
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Delete confirmation modal state
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
+    isOpen: boolean;
+    holdingId: string | null;
+    holdingName: string | null;
+  }>({
+    isOpen: false,
+    holdingId: null,
+    holdingName: null,
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Price update state
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
   const [priceUpdateDisabled, setPriceUpdateDisabled] = useState(false);
@@ -272,7 +289,7 @@ export default function GoldHoldingsPage() {
         
         // Show success message with IBJA info
         const successMsg = data.message || `Gold prices updated successfully (IBJA · ${data.session || 'AM'} · ${new Date(data.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })})`;
-        alert(successMsg);
+        setToast({ message: successMsg, type: 'success' });
         
         // Refresh gold price info
         try {
@@ -301,7 +318,7 @@ export default function GoldHoldingsPage() {
         
         // If there's a fallback price, show it but still indicate error
         if (data.fallback) {
-          alert(`Gold price update failed: ${errorMessage}\n\nUsing last available rates from ${data.fallback.date}`);
+          setToast({ message: `Gold price update failed: ${errorMessage}. Using last available rates from ${data.fallback.date}`, type: 'error' });
           // Update gold price info with fallback
           setGoldPriceInfo({
             gold_24k: data.fallback.gold_24k,
@@ -312,30 +329,36 @@ export default function GoldHoldingsPage() {
             isIndicative: data.fallback.source === 'MCX_PROXY' || data.fallback.source === 'MOCK',
           });
         } else {
-          alert('Failed to update gold prices: ' + errorMessage);
+          setToast({ message: 'Failed to update gold prices: ' + errorMessage, type: 'error' });
         }
       }
     } catch (error) {
       console.error('Error updating gold prices:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Error updating gold prices: ${errorMessage}\n\nPlease try again later or check if gold price data is available.`);
+      setToast({ message: `Error updating gold prices: ${errorMessage}. Please try again later or check if gold price data is available.`, type: 'error' });
     } finally {
       setPriceUpdateLoading(false);
     }
   }, [priceUpdateLoading, priceUpdateDisabled, user?.id, fetchData]);
 
-  const handleDelete = async (holdingId: string) => {
-    if (!user?.id) return;
-    
-    if (!confirm('Are you sure you want to delete this gold holding? This action cannot be undone.')) {
-      return;
-    }
+  const handleDeleteClick = (holding: GoldHolding) => {
+    setDeleteConfirmModal({
+      isOpen: true,
+      holdingId: holding.asset_id,
+      holdingName: holding.name,
+    });
+  };
 
-    setDeletingHoldingId(holdingId);
+  const handleDeleteConfirm = async () => {
+    if (!user?.id || !deleteConfirmModal.holdingId) return;
+
+    setIsDeleting(true);
+    setDeletingHoldingId(deleteConfirmModal.holdingId);
+
     try {
       const params = new URLSearchParams({
         user_id: user.id,
-        holding_id: holdingId,
+        holding_id: deleteConfirmModal.holdingId,
       });
 
       const response = await fetch(`/api/gold/holdings?${params}`, {
@@ -345,14 +368,17 @@ export default function GoldHoldingsPage() {
       const result = await response.json();
 
       if (result.success) {
+        setToast({ message: 'Gold holding deleted successfully', type: 'success' });
         fetchData(user.id);
+        setDeleteConfirmModal({ isOpen: false, holdingId: null, holdingName: null });
       } else {
-        alert(`Failed to delete gold holding: ${result.error}`);
+        setToast({ message: `Failed to delete gold holding: ${result.error}`, type: 'error' });
       }
     } catch (error) {
       console.error('Delete error:', error);
-      alert('Failed to delete gold holding. Please try again.');
+      setToast({ message: 'Failed to delete gold holding. Please try again.', type: 'error' });
     } finally {
+      setIsDeleting(false);
       setDeletingHoldingId(null);
     }
   };
@@ -684,12 +710,12 @@ export default function GoldHoldingsPage() {
                                 <EditIcon className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => handleDelete(holding.id)}
-                                disabled={deletingHoldingId === holding.id}
+                                onClick={() => handleDeleteClick(holding)}
+                                disabled={deletingHoldingId === holding.asset_id}
                                 className="p-2 text-[#DC2626] dark:text-[#EF4444] hover:bg-[#FEF2F2] dark:hover:bg-[#7F1D1D] rounded-lg transition-colors disabled:opacity-50"
                                 title="Delete holding"
                               >
-                                {deletingHoldingId === holding.id ? (
+                                {deletingHoldingId === holding.asset_id ? (
                                   <div className="w-4 h-4 border-2 border-[#DC2626] dark:border-[#EF4444] border-t-transparent rounded-full animate-spin" />
                                 ) : (
                                   <TrashIcon className="w-4 h-4" />
@@ -769,6 +795,26 @@ export default function GoldHoldingsPage() {
             provider: editingHolding.provider,
             vaulted: editingHolding.vaulted,
           } : undefined}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteConfirmModal.isOpen}
+        onClose={() => setDeleteConfirmModal({ isOpen: false, holdingId: null, holdingName: null })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Gold Holding"
+        message="Are you sure you want to delete this gold holding?"
+        itemName={deleteConfirmModal.holdingName || undefined}
+        isDeleting={isDeleting}
+      />
+
+      {/* Toast Notification */}
+      {toast && (
+        <SimpleToast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
         />
       )}
     </div>
