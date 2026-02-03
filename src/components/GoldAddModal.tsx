@@ -163,7 +163,7 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
         const etf = GOLD_ETFS.find(e => e.isin === existingHolding.isin);
         if (etf) {
           setSelectedEtf(etf);
-          fetchEtfNav(etf.isin);
+          fetchEtfNav(etf.schemeCode);
         }
       }
     }
@@ -387,12 +387,12 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
   };
 
   // Fetch ETF NAV when ETF is selected
-  const fetchEtfNav = async (isin: string) => {
-    if (!isin) return;
+  const fetchEtfNav = async (schemeCode: string) => {
+    if (!schemeCode) return;
 
     setLoadingNav(true);
     try {
-      const response = await fetch(`/api/etf/nav?isin=${isin}`);
+      const response = await fetch(`/api/etf/nav?scheme_code=${schemeCode}`);
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.nav) {
@@ -416,7 +416,7 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
         isin: etf.isin,
         exchange: etf.exchange,
       }));
-      fetchEtfNav(etf.isin);
+      fetchEtfNav(etf.schemeCode);
     } else {
       setFormData(prev => ({
         ...prev,
