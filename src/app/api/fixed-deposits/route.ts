@@ -143,6 +143,8 @@ export async function POST(request: NextRequest) {
       maturityDate,
       interestType,
       tdsApplicable,
+      nomineeName,
+      nomineeRelationship,
     } = body;
 
     if (!user_id || !bank || !principal || !rate || !startDate || !maturityDate) {
@@ -168,6 +170,8 @@ export async function POST(request: NextRequest) {
       maturity_date: maturityDate,
       interestType: interestType || 'Cumulative',
       tdsApplicable: tdsApplicable !== undefined ? tdsApplicable : true,
+      nomineeName: nomineeName || '',
+      nomineeRelationship: nomineeRelationship || '',
     };
 
     // Insert into holdings table
@@ -218,6 +222,8 @@ export async function PUT(request: NextRequest) {
       maturityDate,
       interestType,
       tdsApplicable,
+      nomineeName,
+      nomineeRelationship,
     } = body;
 
     if (!id || !bank || !principal || !rate || !startDate || !maturityDate) {
@@ -240,6 +246,8 @@ export async function PUT(request: NextRequest) {
       maturity_date: maturityDate,
       interestType: interestType || 'Cumulative',
       tdsApplicable: tdsApplicable !== undefined ? tdsApplicable : true,
+      nomineeName: nomineeName || '',
+      nomineeRelationship: nomineeRelationship || '',
     };
 
     // Update holdings table

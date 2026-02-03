@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React from 'react';
-import { 
+import {
   ArrowLeftIcon,
   FileIcon,
   CheckCircleIcon,
@@ -20,11 +20,14 @@ import {
   EditIcon,
   TrashIcon,
   XIcon,
+  RefreshIcon,
+  InfoIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
 import { generateFixedDepositsPDF } from '@/lib/pdf/generateHoldingsPDF';
+import { INDIAN_BANKS } from '@/constants/banks';
 
 type SortField = 'bank' | 'principal' | 'rate' | 'startDate' | 'maturityDate' | 'currentValue' | 'daysLeft';
 type SortDirection = 'asc' | 'desc';
@@ -41,6 +44,8 @@ interface FDHolding {
   daysLeft: number;
   interestType: string;
   tdsApplicable: boolean;
+  nomineeName?: string;
+  nomineeRelationship?: string;
 }
 
 interface FDFormData {
@@ -50,8 +55,13 @@ interface FDFormData {
   rate: string;
   startDate: string;
   maturityDate: string;
+  durationYears: string;
+  durationMonths: string;
+  durationDays: string;
   interestType: 'Cumulative' | 'Simple' | 'Monthly' | 'Quarterly';
   tdsApplicable: boolean;
+  nomineeName: string;
+  nomineeRelationship: string;
 }
 
 export default function FixedDepositsPage() {
@@ -81,8 +91,13 @@ export default function FixedDepositsPage() {
     rate: '',
     startDate: '',
     maturityDate: '',
+    durationYears: '',
+    durationMonths: '',
+    durationDays: '',
     interestType: 'Cumulative',
     tdsApplicable: true,
+    nomineeName: '',
+    nomineeRelationship: '',
   });
   const [formErrors, setFormErrors] = useState<Partial<FDFormData>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -90,6 +105,12 @@ export default function FixedDepositsPage() {
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Refresh state
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Nomination modal
+  const [showNomination, setShowNomination] = useState<FDHolding | null>(null);
 
   const fetchData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -153,6 +174,8 @@ export default function FixedDepositsPage() {
                 daysLeft,
                 interestType: fdMetadata.interestType || 'Cumulative',
                 tdsApplicable: fdMetadata.tdsApplicable !== undefined ? fdMetadata.tdsApplicable : true,
+                nomineeName: fdMetadata.nomineeName || '',
+                nomineeRelationship: fdMetadata.nomineeRelationship || '',
               };
             });
 
@@ -206,8 +229,13 @@ export default function FixedDepositsPage() {
       rate: '',
       startDate: '',
       maturityDate: '',
+      durationYears: '',
+      durationMonths: '',
+      durationDays: '',
       interestType: 'Cumulative',
       tdsApplicable: true,
+      nomineeName: '',
+      nomineeRelationship: '',
     });
     setFormErrors({});
     setIsModalOpen(true);
@@ -217,6 +245,17 @@ export default function FixedDepositsPage() {
   const handleEdit = (holding: FDHolding) => {
     setModalMode('edit');
     setEditingId(holding.id);
+
+    const startDate = new Date(holding.startDate);
+    const maturityDate = new Date(holding.maturityDate);
+    const diffTime = maturityDate.getTime() - startDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    const years = Math.floor(diffDays / 365);
+    const remainingDaysAfterYears = diffDays % 365;
+    const months = Math.floor(remainingDaysAfterYears / 30);
+    const days = remainingDaysAfterYears % 30;
+
     setFormData({
       bank: holding.bank,
       fdNumber: holding.fdNumber,
@@ -224,11 +263,33 @@ export default function FixedDepositsPage() {
       rate: holding.rate.toString(),
       startDate: holding.startDate.split('T')[0],
       maturityDate: holding.maturityDate.split('T')[0],
+      durationYears: years.toString(),
+      durationMonths: months.toString(),
+      durationDays: days.toString(),
       interestType: holding.interestType as any,
       tdsApplicable: holding.tdsApplicable,
+      nomineeName: holding.nomineeName || '',
+      nomineeRelationship: holding.nomineeRelationship || '',
     });
     setFormErrors({});
     setIsModalOpen(true);
+  };
+
+  // Calculate maturity date from duration
+  const calculateMaturityDate = (startDate: string, years: string, months: string, days: string): string => {
+    if (!startDate) return '';
+
+    const start = new Date(startDate);
+    const y = parseInt(years) || 0;
+    const m = parseInt(months) || 0;
+    const d = parseInt(days) || 0;
+
+    const maturity = new Date(start);
+    maturity.setFullYear(maturity.getFullYear() + y);
+    maturity.setMonth(maturity.getMonth() + m);
+    maturity.setDate(maturity.getDate() + d);
+
+    return maturity.toISOString().split('T')[0];
   };
 
   // Validate form
@@ -239,8 +300,18 @@ export default function FixedDepositsPage() {
     if (!formData.principal || parseFloat(formData.principal) <= 0) errors.principal = 'Valid principal amount is required';
     if (!formData.rate || parseFloat(formData.rate) <= 0) errors.rate = 'Valid interest rate is required';
     if (!formData.startDate) errors.startDate = 'Start date is required';
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedStartDate = new Date(formData.startDate);
+    selectedStartDate.setHours(0, 0, 0, 0);
+
+    if (selectedStartDate > today) {
+      errors.startDate = 'Start date cannot be in the future';
+    }
+
     if (!formData.maturityDate) errors.maturityDate = 'Maturity date is required';
-    
+
     if (formData.startDate && formData.maturityDate) {
       if (new Date(formData.maturityDate) <= new Date(formData.startDate)) {
         errors.maturityDate = 'Maturity date must be after start date';
@@ -271,6 +342,8 @@ export default function FixedDepositsPage() {
         maturityDate: formData.maturityDate,
         interestType: formData.interestType,
         tdsApplicable: formData.tdsApplicable,
+        nomineeName: formData.nomineeName.trim() || undefined,
+        nomineeRelationship: formData.nomineeRelationship.trim() || undefined,
       };
 
       const method = modalMode === 'add' ? 'POST' : 'PUT';
@@ -311,6 +384,32 @@ export default function FixedDepositsPage() {
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Refresh current values
+  const handleRefreshValues = async () => {
+    if (!user?.id) return;
+
+    setRefreshing(true);
+    try {
+      await fetchData(user.id);
+      showToast({
+        type: 'success',
+        title: 'Values Refreshed',
+        message: 'Current values have been recalculated based on today\'s date.',
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Error refreshing values:', error);
+      showToast({
+        type: 'error',
+        title: 'Refresh Failed',
+        message: 'Unable to refresh values. Please try again.',
+        duration: 5000,
+      });
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -544,7 +643,7 @@ export default function FixedDepositsPage() {
         />
 
         <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
-          {/* Page Title with Add Button */}
+          {/* Page Title with Actions */}
           <div className="mb-6 flex items-start justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Fixed Deposit Holdings</h1>
@@ -552,13 +651,24 @@ export default function FixedDepositsPage() {
                 {holdings.length} holdings • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
               </p>
             </div>
-            <button
-              onClick={handleAddNew}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium text-sm shadow-sm"
-            >
-              <PlusIcon className="w-5 h-5" />
-              Add New FD
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleRefreshValues}
+                disabled={refreshing}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium text-sm shadow-sm disabled:opacity-50"
+                title="Refresh Current Values"
+              >
+                <RefreshIcon className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <button
+                onClick={handleAddNew}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium text-sm shadow-sm"
+              >
+                <PlusIcon className="w-5 h-5" />
+                Add New FD
+              </button>
+            </div>
           </div>
 
           {/* Maturity Alert */}
@@ -712,6 +822,15 @@ export default function FixedDepositsPage() {
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center justify-center gap-2">
+                            {(holding.nomineeName || holding.nomineeRelationship) && (
+                              <button
+                                onClick={() => setShowNomination(holding)}
+                                className="p-2 rounded-lg hover:bg-[#DBEAFE] dark:hover:bg-[#1E3A8A] text-[#2563EB] dark:text-[#3B82F6] transition-colors"
+                                title="View Nomination Details"
+                              >
+                                <InfoIcon className="w-4 h-4" />
+                              </button>
+                            )}
                             <button
                               onClick={() => handleEdit(holding)}
                               className="p-2 rounded-lg hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A8A] text-[#2563EB] dark:text-[#3B82F6] transition-colors"
@@ -815,16 +934,22 @@ export default function FixedDepositsPage() {
                 </label>
                 <input
                   type="text"
+                  list="bank-list"
                   value={formData.bank}
                   onChange={(e) => setFormData({ ...formData, bank: e.target.value })}
                   className={`w-full px-4 py-2.5 rounded-lg border ${
-                    formErrors.bank 
-                      ? 'border-[#DC2626] dark:border-[#EF4444]' 
+                    formErrors.bank
+                      ? 'border-[#DC2626] dark:border-[#EF4444]'
                       : 'border-[#E5E7EB] dark:border-[#334155]'
                   } bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-colors`}
                   placeholder="e.g., HDFC Bank, SBI, ICICI Bank"
                   disabled={submitting}
                 />
+                <datalist id="bank-list">
+                  {INDIAN_BANKS.map(bank => (
+                    <option key={bank} value={bank} />
+                  ))}
+                </datalist>
                 {formErrors.bank && (
                   <p className="mt-1 text-xs text-[#DC2626] dark:text-[#EF4444]">{formErrors.bank}</p>
                 )}
@@ -892,6 +1017,71 @@ export default function FixedDepositsPage() {
                 </div>
               </div>
 
+              {/* Duration */}
+              <div>
+                <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  Duration
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.durationYears}
+                      onChange={(e) => {
+                        const newData = { ...formData, durationYears: e.target.value };
+                        setFormData({
+                          ...newData,
+                          maturityDate: calculateMaturityDate(newData.startDate, e.target.value, newData.durationMonths, newData.durationDays)
+                        });
+                      }}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-colors"
+                      placeholder="Years"
+                      disabled={submitting}
+                    />
+                    <p className="mt-1 text-xs text-[#6B7280] dark:text-[#94A3B8]">Years</p>
+                  </div>
+                  <div>
+                    <input
+                      type="number"
+                      min="0"
+                      max="11"
+                      value={formData.durationMonths}
+                      onChange={(e) => {
+                        const newData = { ...formData, durationMonths: e.target.value };
+                        setFormData({
+                          ...newData,
+                          maturityDate: calculateMaturityDate(newData.startDate, newData.durationYears, e.target.value, newData.durationDays)
+                        });
+                      }}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-colors"
+                      placeholder="Months"
+                      disabled={submitting}
+                    />
+                    <p className="mt-1 text-xs text-[#6B7280] dark:text-[#94A3B8]">Months</p>
+                  </div>
+                  <div>
+                    <input
+                      type="number"
+                      min="0"
+                      max="30"
+                      value={formData.durationDays}
+                      onChange={(e) => {
+                        const newData = { ...formData, durationDays: e.target.value };
+                        setFormData({
+                          ...newData,
+                          maturityDate: calculateMaturityDate(newData.startDate, newData.durationYears, newData.durationMonths, e.target.value)
+                        });
+                      }}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-colors"
+                      placeholder="Days"
+                      disabled={submitting}
+                    />
+                    <p className="mt-1 text-xs text-[#6B7280] dark:text-[#94A3B8]">Days</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Start and Maturity Date */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -901,10 +1091,17 @@ export default function FixedDepositsPage() {
                   <input
                     type="date"
                     value={formData.startDate}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                    max={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => {
+                      const newData = { ...formData, startDate: e.target.value };
+                      setFormData({
+                        ...newData,
+                        maturityDate: calculateMaturityDate(e.target.value, newData.durationYears, newData.durationMonths, newData.durationDays)
+                      });
+                    }}
                     className={`w-full px-4 py-2.5 rounded-lg border ${
-                      formErrors.startDate 
-                        ? 'border-[#DC2626] dark:border-[#EF4444]' 
+                      formErrors.startDate
+                        ? 'border-[#DC2626] dark:border-[#EF4444]'
                         : 'border-[#E5E7EB] dark:border-[#334155]'
                     } bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-colors`}
                     disabled={submitting}
@@ -951,6 +1148,41 @@ export default function FixedDepositsPage() {
                   <option value="Monthly">Monthly</option>
                   <option value="Quarterly">Quarterly</option>
                 </select>
+              </div>
+
+              {/* Nomination Details */}
+              <div className="border-t border-[#E5E7EB] dark:border-[#334155] pt-4">
+                <h3 className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
+                  Nomination Details <span className="text-[#6B7280] dark:text-[#94A3B8] text-xs font-normal">(Optional)</span>
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Nominee Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.nomineeName}
+                      onChange={(e) => setFormData({ ...formData, nomineeName: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-colors"
+                      placeholder="e.g., John Doe"
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Relationship
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.nomineeRelationship}
+                      onChange={(e) => setFormData({ ...formData, nomineeRelationship: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-colors"
+                      placeholder="e.g., Spouse, Parent, Child"
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* TDS Applicable */}
@@ -1024,6 +1256,64 @@ export default function FixedDepositsPage() {
                   {deleting ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Nomination Details Modal */}
+      {showNomination && (
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-[#1E293B] rounded-2xl max-w-md w-full shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Nomination Details</h3>
+                <button
+                  onClick={() => setShowNomination(null)}
+                  className="p-2 rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
+                >
+                  <XIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-1">Bank / Institution</p>
+                  <p className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{showNomination.bank}</p>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-1">FD Number</p>
+                  <p className="text-base text-[#0F172A] dark:text-[#F8FAFC]">{showNomination.fdNumber}</p>
+                </div>
+
+                {showNomination.nomineeName && (
+                  <div>
+                    <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-1">Nominee Name</p>
+                    <p className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{showNomination.nomineeName}</p>
+                  </div>
+                )}
+
+                {showNomination.nomineeRelationship && (
+                  <div>
+                    <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-1">Relationship</p>
+                    <p className="text-base text-[#0F172A] dark:text-[#F8FAFC]">{showNomination.nomineeRelationship}</p>
+                  </div>
+                )}
+
+                {!showNomination.nomineeName && !showNomination.nomineeRelationship && (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">No nomination details available</p>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setShowNomination(null)}
+                className="w-full mt-6 px-4 py-2.5 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
