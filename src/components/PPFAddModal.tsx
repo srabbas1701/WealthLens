@@ -44,6 +44,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
   const [step, setStep] = useState<Step>('basic');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [realtimeError, setRealtimeError] = useState<string | null>(null);
 
   // Basic Information
   const [accountNumber, setAccountNumber] = useState(existingHolding?.accountNumber || '');
@@ -59,6 +60,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
   const [totalContributions, setTotalContributions] = useState(existingHolding?.totalContributions || 0);
   const [interestEarned, setInterestEarned] = useState(existingHolding?.interestEarned || 0);
   const [interestRate, setInterestRate] = useState(existingHolding?.interestRate || 7.1); // Current PPF rate
+  const [averageInterestRate, setAverageInterestRate] = useState(0);
 
   // Extension Details (if status is 'extended')
   const [hasExtension, setHasExtension] = useState(!!existingHolding?.extensionDetails);
@@ -97,15 +99,40 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
     }
   }, [openingDate, isEditing]);
 
-  // Auto-calculate interest earned
+  // Auto-calculate interest earned and check for real-time errors
   useEffect(() => {
     if (currentBalance > 0 && totalContributions > 0) {
       const calculated = currentBalance - totalContributions;
       if (calculated >= 0) {
         setInterestEarned(calculated);
+        setRealtimeError(null);
+      } else {
+        setInterestEarned(0);
+        setRealtimeError('Total contributions cannot be greater than current balance');
       }
+    } else if (totalContributions > currentBalance) {
+      setRealtimeError('Total contributions cannot be greater than current balance');
+    } else {
+      setRealtimeError(null);
     }
   }, [currentBalance, totalContributions]);
+
+  // Calculate average interest rate
+  useEffect(() => {
+    if (totalContributions > 0 && interestEarned > 0 && openingDate) {
+      const accountAge = Math.floor(
+        (new Date().getTime() - new Date(openingDate).getTime()) / (1000 * 60 * 60 * 24 * 365.25)
+      );
+
+      if (accountAge > 0) {
+        // Average annual return = (Interest Earned / Total Contributions) / Years * 100
+        const avgRate = (interestEarned / totalContributions / accountAge) * 100;
+        setAverageInterestRate(Number(avgRate.toFixed(2)));
+      }
+    } else {
+      setAverageInterestRate(0);
+    }
+  }, [interestEarned, totalContributions, openingDate]);
 
   // Reset form when modal closes
   const handleClose = () => {
@@ -126,8 +153,10 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
       setExtensionStartDate('');
       setExtensionEndDate('');
       setExtensionNumber(1);
+      setAverageInterestRate(0);
     }
     setError(null);
+    setRealtimeError(null);
     onClose();
   };
 
@@ -425,16 +454,26 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                 type="text"
                 value={accountHolderName}
                 onChange={(e) => {
-                  // Only allow letters, spaces, hyphens, and apostrophes
-                  const value = e.target.value.replace(/[^A-Za-z\s'-]/g, '');
+                  // Only allow letters, spaces, hyphens, and apostrophes - block all numbers and special chars
+                  let value = e.target.value;
+                  // Remove all digits first
+                  value = value.replace(/[0-9]/g, '');
+                  // Then remove all special characters except space, hyphen, and apostrophe
+                  value = value.replace(/[^A-Za-z\s'-]/g, '');
                   setAccountHolderName(value);
+                }}
+                onKeyPress={(e) => {
+                  // Prevent typing numbers
+                  if (/[0-9]/.test(e.key)) {
+                    e.preventDefault();
+                  }
                 }}
                 maxLength={100}
                 placeholder="John Doe"
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
               />
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                Letters, spaces, hyphens, and apostrophes only
+                Letters, spaces, hyphens, and apostrophes only (no numbers allowed)
               </p>
             </div>
 
@@ -635,6 +674,31 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                 Government-set PPF rate (currently 7.1% for FY 2024-25) - Must be between 0.1% and 20%
               </p>
             </div>
+
+            {averageInterestRate > 0 && (
+              <div className="p-4 bg-[#F0FDF4] dark:bg-[#14532D] border border-[#16A34A]/20 dark:border-[#22C55E]/20 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-[#15803D] dark:text-[#86EFAC]">
+                      Average Interest Rate (Based on your data)
+                    </p>
+                    <p className="text-xs text-[#15803D] dark:text-[#86EFAC] mt-1">
+                      This is calculated from your interest earned and contributions
+                    </p>
+                  </div>
+                  <div className="text-2xl font-bold text-[#15803D] dark:text-[#86EFAC]">
+                    {averageInterestRate}%
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {realtimeError && (
+              <div className="p-4 bg-[#FEF2F2] dark:bg-[#7F1D1D] border border-[#FEE2E2] dark:border-[#EF4444] rounded-lg flex items-start gap-3">
+                <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] dark:text-[#EF4444] flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-[#991B1B] dark:text-[#FEE2E2]">{realtimeError}</p>
+              </div>
+            )}
 
             {status === 'extended' && (
               <div className="space-y-4 pt-4 border-t border-[#E5E7EB] dark:border-[#334155]">
@@ -940,7 +1004,8 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                 onClick={() => {
                   if (validateFinancial()) setStep('review');
                 }}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+                disabled={!!realtimeError}
+                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Review & Save
               </button>
