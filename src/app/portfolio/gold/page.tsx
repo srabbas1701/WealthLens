@@ -344,7 +344,7 @@ export default function GoldHoldingsPage() {
   const handleDeleteClick = (holding: GoldHolding) => {
     setDeleteConfirmModal({
       isOpen: true,
-      holdingId: holding.asset_id,
+      holdingId: holding.id,
       holdingName: holding.name,
     });
   };
@@ -711,11 +711,11 @@ export default function GoldHoldingsPage() {
                               </button>
                               <button
                                 onClick={() => handleDeleteClick(holding)}
-                                disabled={deletingHoldingId === holding.asset_id}
+                                disabled={deletingHoldingId === holding.id}
                                 className="p-2 text-[#DC2626] dark:text-[#EF4444] hover:bg-[#FEF2F2] dark:hover:bg-[#7F1D1D] rounded-lg transition-colors disabled:opacity-50"
                                 title="Delete holding"
                               >
-                                {deletingHoldingId === holding.asset_id ? (
+                                {deletingHoldingId === holding.id ? (
                                   <div className="w-4 h-4 border-2 border-[#DC2626] dark:border-[#EF4444] border-t-transparent rounded-full animate-spin" />
                                 ) : (
                                   <TrashIcon className="w-4 h-4" />
