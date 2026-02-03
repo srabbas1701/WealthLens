@@ -90,10 +90,17 @@ const DIGITAL_PROVIDERS = ['SafeGold', 'MMTC-PAMP', 'Digital Gold India', 'Paytm
 export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, existingHolding }: GoldAddModalProps) {
   const { formatCurrency } = useCurrency();
   const isEditing = !!existingHolding;
-  
+
   const [step, setStep] = useState<Step>(existingHolding ? 'form' : 'select');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Gold price state
+  const [goldPrices, setGoldPrices] = useState<{
+    gold_24k: number;
+    gold_22k: number;
+    gold_18k?: number;
+  } | null>(null);
   
   const [formData, setFormData] = useState<FormData>({
     goldType: null,
@@ -147,6 +154,33 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
     }
   }, [existingHolding, isOpen]);
 
+  // Fetch gold prices on open
+  useEffect(() => {
+    if (isOpen && !goldPrices) {
+      fetchGoldPrices();
+    }
+  }, [isOpen]);
+
+  const fetchGoldPrices = async () => {
+    try {
+      const params = new URLSearchParams({ user_id: userId });
+      const response = await fetch(`/api/portfolio/data?${params}`);
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data?.price) {
+          setGoldPrices({
+            gold_24k: result.data.price.gold_24k,
+            gold_22k: result.data.price.gold_22k,
+            gold_18k: result.data.price.gold_18k || result.data.price.gold_24k * 0.75,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching gold prices:', err);
+    }
+  };
+
   // Reset on close
   useEffect(() => {
     if (!isOpen) {
@@ -174,6 +208,7 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
         vaulted: false,
       });
       setError(null);
+      setGoldPrices(null);
     }
   }, [isOpen]);
 
@@ -311,16 +346,41 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
     }
   };
 
-  // Get current gold price (mock for now)
+  // Get current gold price based on type and purity
   const getCurrentGoldPrice = (): number => {
-    // This will be replaced with actual API call
-    return formData.unitType === 'gram' ? 6400 : 6400; // Mock 22k price per gram
+    if (!goldPrices) {
+      // Fallback to approximate values if prices not yet loaded
+      return formData.purity === '24k' ? 7000 : formData.purity === '18k' ? 5250 : 6400;
+    }
+
+    // For Physical Gold, use purity-specific rate
+    if (formData.goldType === 'physical') {
+      if (formData.purity === '24k') return goldPrices.gold_24k;
+      if (formData.purity === '18k') return goldPrices.gold_18k || goldPrices.gold_24k * 0.75;
+      return goldPrices.gold_22k; // Default 22k
+    }
+
+    // For SGB and Digital Gold, use 24k rate
+    if (formData.goldType === 'sgb' || formData.goldType === 'digital') {
+      return goldPrices.gold_24k;
+    }
+
+    // For ETF, we would need NAV but for preview use 24k
+    return goldPrices.gold_24k;
   };
 
   const calculateCurrentValue = (): number => {
     if (!formData.quantity || !formData.purchaseDate) return 0;
-    const pricePerUnit = getCurrentGoldPrice();
-    return formData.quantity * pricePerUnit;
+
+    const pricePerGram = getCurrentGoldPrice();
+
+    // For physical gold with net weight, use that for valuation
+    if (formData.goldType === 'physical' && formData.netWeight) {
+      return formData.netWeight * pricePerGram;
+    }
+
+    // For other types, use quantity directly (assuming grams)
+    return formData.quantity * pricePerGram;
   };
 
   const renderStepContent = () => {
@@ -504,8 +564,14 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                     Gross Weight (grams)
+                    <div className="group relative">
+                      <InfoIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] cursor-help" />
+                      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-[#0F172A] dark:bg-[#F8FAFC] text-white dark:text-[#0F172A] text-xs rounded-lg shadow-lg z-50">
+                        Total weight including stones, other metals, and impurities. This is the weight shown on your bill.
+                      </div>
+                    </div>
                   </label>
                   <input
                     type="number"
@@ -518,8 +584,14 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                     Net Weight (grams)
+                    <div className="group relative">
+                      <InfoIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] cursor-help" />
+                      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-[#0F172A] dark:bg-[#F8FAFC] text-white dark:text-[#0F172A] text-xs rounded-lg shadow-lg z-50">
+                        Pure gold weight after removing stones and other materials. This is the weight used for valuation. Usually lower than gross weight.
+                      </div>
+                    </div>
                   </label>
                   <input
                     type="number"
@@ -532,8 +604,14 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                     Making Charges (₹)
+                    <div className="group relative">
+                      <InfoIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] cursor-help" />
+                      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-[#0F172A] dark:bg-[#F8FAFC] text-white dark:text-[#0F172A] text-xs rounded-lg shadow-lg z-50">
+                        Labor and design charges paid to the jeweller. This is separate from the gold value and is not recovered when selling.
+                      </div>
+                    </div>
                   </label>
                   <input
                     type="number"
@@ -651,9 +729,10 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
       case 'review':
         const currentValue = calculateCurrentValue();
         const gainLoss = currentValue - (formData.investedAmount || 0);
-        const gainLossPct = formData.investedAmount && formData.investedAmount > 0 
-          ? (gainLoss / formData.investedAmount) * 100 
+        const gainLossPct = formData.investedAmount && formData.investedAmount > 0
+          ? (gainLoss / formData.investedAmount) * 100
           : 0;
+        const currentPrice = getCurrentGoldPrice();
 
         return (
           <div className="space-y-6">
@@ -690,6 +769,10 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
                   <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                     {formatCurrency(currentValue)}
                   </p>
+                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                    @ {formatCurrency(currentPrice)}/gram
+                    {formData.goldType === 'physical' && ` (${formData.purity})`}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Gain/Loss</p>
@@ -698,6 +781,14 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
                   </p>
                 </div>
               </div>
+
+              {formData.goldType === 'physical' && formData.netWeight && formData.quantity !== formData.netWeight && (
+                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    <strong>Note:</strong> Valuation is based on net weight ({formData.netWeight}g) at current {formData.purity} gold rate. Making charges are not included in current value.
+                  </p>
+                </div>
+              )}
             </div>
 
             {error && (
@@ -771,7 +862,12 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
             </h2>
             <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
               {step === 'select' && 'Select gold type'}
-              {step === 'form' && 'Enter details'}
+              {step === 'form' && formData.goldType && (
+                <span>
+                  {GOLD_TYPES.find(t => t.id === formData.goldType)?.name} · Enter details
+                </span>
+              )}
+              {step === 'form' && !formData.goldType && 'Enter details'}
               {step === 'review' && 'Review & confirm'}
               {step === 'saving' && 'Saving...'}
               {step === 'success' && 'Success!'}
