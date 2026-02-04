@@ -297,7 +297,14 @@ function LoanOutstandingChart({
   const labelStart = purchaseDate ? formatDate(purchaseDate) : 'Loan Start';
   const labelEnd = 'Now';
 
-  if (!hasLoan || loanAmount == null || loanAmount <= 0) {
+  // Check if loan is closed (outstanding balance = 0)
+  const isLoanClosed = outstandingBalance === 0 || outstandingBalance === null;
+
+  if (!hasLoan || loanAmount == null || loanAmount <= 0 || isLoanClosed) {
+    const emptyMessage = isLoanClosed
+      ? 'Loan has been fully paid off'
+      : 'No loan. Add loan details to see the paydown trend.';
+
     return (
       <Card className="h-full bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
         <CardHeader>
@@ -309,7 +316,7 @@ function LoanOutstandingChart({
         <CardContent>
           <div className="flex items-center justify-center h-[300px] bg-[#F6F8FB] dark:bg-[#0F172A] rounded-lg border border-dashed border-[#E5E7EB] dark:border-[#334155]">
             <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-              No loan. Add loan details to see the paydown trend.
+              {emptyMessage}
             </p>
           </div>
         </CardContent>
@@ -321,12 +328,9 @@ function LoanOutstandingChart({
   const generateLoanTrendData = () => {
     const ob = outstandingBalance ?? loanAmount;
 
-    // If loan is fully paid off, find when it was paid off
-    const isLoanClosed = ob === 0 || ob == null;
-
     if (!purchaseDate) return [
       { value: loanAmount, label: 'Loan Start', date: null },
-      { value: ob, label: isLoanClosed ? 'Loan Closed' : 'Now', date: null },
+      { value: ob, label: 'Now', date: null },
     ];
 
     const startDate = new Date(purchaseDate);
@@ -337,7 +341,7 @@ function LoanOutstandingChart({
       // Less than 6 months, just show start and end
       return [
         { value: loanAmount, label: 'Loan Start', date: purchaseDate },
-        { value: ob, label: isLoanClosed ? 'Loan Closed' : 'Now', date: null },
+        { value: ob, label: 'Now', date: null },
       ];
     }
 
@@ -347,35 +351,15 @@ function LoanOutstandingChart({
 
     // Generate points for each year
     const points: { value: number; label: string; date: string | null }[] = [];
+    const numYears = Math.ceil(yearsDiff);
 
-    // If loan is closed, calculate years to payoff instead of using current date
-    let endYear = Math.ceil(yearsDiff);
-    if (isLoanClosed && totalPaydown > 0) {
-      // Calculate years to full payoff
-      endYear = Math.ceil(loanAmount / annualPaydown);
-    }
-
-    for (let year = 0; year <= endYear; year++) {
+    for (let year = 0; year <= numYears; year++) {
       const pointDate = new Date(startDate);
       pointDate.setFullYear(pointDate.getFullYear() + year);
 
       // Calculate projected outstanding for this year
       const projectedOutstanding = Math.max(0, loanAmount - annualPaydown * year);
-
-      // For closed loans, stop at payoff point
-      if (isLoanClosed && projectedOutstanding <= 0) {
-        // Add the payoff point if not already there
-        if (year > 0 && points[points.length - 1]?.value > 0) {
-          points.push({
-            value: 0,
-            label: `Year ${year}`,
-            date: pointDate.toISOString().split('T')[0],
-          });
-        }
-        break;
-      }
-
-      const isLastPoint = year === endYear && !isLoanClosed;
+      const isLastPoint = year === numYears;
       const label = year === 0 ? 'Loan Start' : (isLastPoint ? 'Now' : `Year ${year}`);
 
       points.push({
