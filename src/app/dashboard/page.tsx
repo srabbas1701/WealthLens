@@ -1672,20 +1672,18 @@ function DashboardContent() {
               );
             })()}
 
-            {/* Card 2: Insurance — disabled placeholder for future */}
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 opacity-75">
-              <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Insurance</h3>
-              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-4">
-                Insurance module coming soon
-              </p>
-              <button
-                type="button"
-                disabled
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#9CA3AF] dark:text-[#64748B] border-2 border-[#E5E7EB] dark:border-[#334155] rounded-lg cursor-not-allowed"
-              >
-                Add Insurance
-              </button>
-            </div>
+            {/* Card 2: Insurance */}
+            <Link href="/portfolio/insurance">
+              <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-colors cursor-pointer h-full">
+                <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Insurance</h3>
+                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-4">
+                  Manage your life, health, and other insurance policies
+                </p>
+                <div className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 border-2 border-blue-600 dark:border-blue-500 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
+                  View Insurance
+                </div>
+              </div>
+            </Link>
           </div>
         </section>
 
