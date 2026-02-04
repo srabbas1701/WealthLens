@@ -47,8 +47,11 @@ export async function getRealEstatePropertyDetailData(
       : null;
 
   // Calculate net monthly cash flow
+  // Only include EMI if the loan is still active (outstanding balance > 0)
   const monthlyRent = ownershipAdjusted.monthlyRent;
-  const monthlyEmi = loan?.emi ?? null;
+  const outstandingBalance = ownershipAdjusted.outstandingBalance ?? 0;
+  const isLoanActive = outstandingBalance > 0;
+  const monthlyEmi = isLoanActive ? loan?.emi ?? null : null;
   const expenses = monthlyExpenses ?? 0;
   const netMonthlyCashFlow =
     monthlyRent !== null && monthlyEmi !== null
