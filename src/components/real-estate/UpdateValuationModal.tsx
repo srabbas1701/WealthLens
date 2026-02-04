@@ -151,67 +151,81 @@ export default function UpdateValuationModal({
           <div className="space-y-4">
             {/* System Estimate Info */}
             {estimatedMin !== null && estimatedMax !== null && (
-              <div className="p-3 rounded-lg bg-muted/50">
-                <p className="text-xs text-muted-foreground mb-1">System Estimated Range</p>
-                <p className="text-sm font-semibold text-foreground">
-                  ₹{estimatedMin.toLocaleString('en-IN')} - ₹{estimatedMax.toLocaleString('en-IN')}
+              <div className="p-4 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border border-blue-200 dark:border-blue-800/50">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">System Estimated Range</p>
+                    <p className="text-base font-bold text-blue-900 dark:text-blue-100">
+                      ₹{estimatedMin.toLocaleString('en-IN')} — ₹{estimatedMax.toLocaleString('en-IN')}
+                    </p>
+                    {estimatedMidpoint !== null && (
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1.5">
+                        Suggested midpoint: ₹{estimatedMidpoint.toLocaleString('en-IN')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                  Based on market comparables, location, and property characteristics
                 </p>
-                {estimatedMidpoint !== null && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Midpoint: ₹{estimatedMidpoint.toLocaleString('en-IN')}
-                  </p>
-                )}
               </div>
             )}
 
             {/* Current Override Info */}
-            {currentValue !== null && (
-              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
-                <p className="text-xs text-muted-foreground mb-1">Current Override Value</p>
-                <p className="text-sm font-semibold text-foreground">
+            {currentValue !== null && useOverride && (
+              <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+                <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Your Current Value</p>
+                <p className="text-sm font-semibold text-green-900 dark:text-green-100">
                   ₹{currentValue.toLocaleString('en-IN')}
                 </p>
               </div>
             )}
 
             {/* Toggle */}
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="useOverride"
-                checked={useOverride}
-                onChange={(e) => setUseOverride(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300"
-              />
-              <Label htmlFor="useOverride" className="cursor-pointer">
-                Set manual override value
-              </Label>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-800">
+                <input
+                  type="checkbox"
+                  id="useOverride"
+                  checked={useOverride}
+                  onChange={(e) => setUseOverride(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 accent-blue-600"
+                  disabled={loading}
+                />
+                <Label htmlFor="useOverride" className="cursor-pointer text-sm font-medium">
+                  Enter your property's current value
+                </Label>
+              </div>
             </div>
 
             {/* Override Input */}
             {useOverride && (
               <div>
-                <Label htmlFor="overrideValue">Your Property Value (₹)</Label>
+                <Label htmlFor="overrideValue" className="font-medium">Your Property Valuation (₹)</Label>
                 <Input
                   id="overrideValue"
                   type="number"
-                  step="0.01"
-                  min="0"
+                  step="1"
+                  min="1"
+                  max="999999999"
                   value={overrideValue}
                   onChange={(e) => setOverrideValue(e.target.value)}
-                  placeholder="Enter value"
+                  placeholder="e.g., 5000000"
                   required={useOverride}
+                  disabled={loading}
+                  className="mt-2"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  This value will be used for all analytics calculations
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                  This value will override the system estimate for all calculations (XIRR, returns, analytics, etc.)
                 </p>
               </div>
             )}
 
-            {!useOverride && (
+            {!useOverride && currentValue !== null && (
               <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-1">Clearing your override</p>
                 <p className="text-sm text-amber-800 dark:text-amber-200">
-                  Clearing override will revert to system estimated range
+                  System will use the estimated range instead
                 </p>
               </div>
             )}

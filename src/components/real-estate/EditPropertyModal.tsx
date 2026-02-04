@@ -159,6 +159,7 @@ export default function EditPropertyModal({
     }
 
     setLoading(true);
+    setError(null);
 
     try {
       const payload = {
@@ -194,12 +195,13 @@ export default function EditPropertyModal({
         throw new Error(result.error || 'Failed to update property');
       }
 
+      // Call onSuccess immediately to close modal and refresh data
       onSuccess();
-      onClose();
+      // Close modal after brief delay to ensure success state is visible
+      setTimeout(() => onClose(), 300);
     } catch (err) {
       console.error('[EditPropertyModal] Update error:', err);
       setError(err instanceof Error ? err.message : 'Failed to update property');
-    } finally {
       setLoading(false);
     }
   };

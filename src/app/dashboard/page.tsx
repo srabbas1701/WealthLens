@@ -24,15 +24,19 @@
  * - Portfolio data fetched from /api/portfolio/data
  * - AI summaries fetched from /api/copilot/daily-summary and weekly-summary
  * - Frontend renders API responses VERBATIM (no recalculation)
+ * - Uses client-side caching (2-minute TTL) for instant return navigation
  *
  * TRANSPARENCY FEATURES:
  * - "All Investments" section shows every holding
  * - Grouped views by Asset Type, Instrument, Sector
  * - Shows: Name | Asset Type | Quantity | Avg Price | Invested Value | % of Portfolio
  * - Users can verify totals match sum of holdings
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Client-side caching with 2-minute TTL prevents unnecessary server requests
+ * - Uses Next.js intelligent caching - allows instant load when navigating back
+ * - Cache expires when switching users or after TTL
  */
-
-export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import Link from 'next/link';

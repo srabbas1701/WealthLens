@@ -678,7 +678,7 @@ export default function PropertyDetailPage() {
                 </Badge>
               </div>
               <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                {data.city} • {data.propertyType.charAt(0).toUpperCase() + data.propertyType.slice(1)}
+                {data.city} • {data.propertyType.charAt(0).toUpperCase() + data.propertyType.slice(1)} • {data.propertyStatus === 'under_construction' ? 'Under Construction' : 'Ready'}
               </p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
@@ -1071,6 +1071,10 @@ export default function PropertyDetailPage() {
                         <InfoRow
                           label="Registration Value"
                           value={formatValue(data.registrationValue)}
+                        />
+                        <InfoRow
+                          label="Property Status"
+                          value={data.propertyStatus === 'under_construction' ? 'Under Construction' : 'Ready to Occupy'}
                         />
                       </div>
                     </CardContent>
