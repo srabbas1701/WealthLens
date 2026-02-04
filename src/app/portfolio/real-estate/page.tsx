@@ -28,10 +28,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { PlusIcon, FileIcon } from '@/components/icons';
+import { PlusIcon, FileIcon, TrashIcon } from '@/components/icons';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import RealEstateAddModal from '@/components/real-estate/RealEstateAddModal';
+import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
+import SimpleToast from '@/components/SimpleToast';
 import { useAuth } from '@/lib/auth';
+import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 import type { RealEstateDashboardData } from '@/types/realEstateDashboard.types';
 
 // ============================================================================
@@ -434,24 +437,56 @@ export default function RealEstateDashboard() {
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const fetchingRef = useRef(false);
-  
+
   const [activeTab, setActiveTab] = useState<TabValue>('properties');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<RealEstateDashboardData | null>(null);
 
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Delete modal state
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
+    isOpen: boolean;
+    propertyId: string | null;
+    propertyName: string | null;
+  }>({
+    isOpen: false,
+    propertyId: null,
+    propertyName: null,
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Fetch Real Estate data
-  const fetchData = useCallback(async (userId: string) => {
+  const fetchData = useCallback(async (userId: string, skipCache = false) => {
     if (fetchingRef.current) {
       return;
     }
-    
+
+    // Try cache first (unless skipCache is true)
+    if (!skipCache) {
+      const cached = getCachedPortfolioData<RealEstateDashboardData>(userId);
+      if (cached) {
+        setDashboardData(cached);
+        setLoading(false);
+
+        // Refresh in background if stale
+        if (isCacheStale(userId)) {
+          fetchData(userId, true).catch(err =>
+            console.error('[RealEstate] Background refresh failed:', err)
+          );
+        }
+        return;
+      }
+    }
+
     fetchingRef.current = true;
     setLoading(true);
-    
+
     try {
       const response = await fetch('/api/real-estate/assets');
-      
+
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {
@@ -573,12 +608,16 @@ export default function RealEstateDashboard() {
             // Update asset allocation series with normalized data
             dashboard.assetAllocationSeries = normalizedAllocation.filter(item => item.value > 0);
           }
-          
+
           setDashboardData(dashboard);
+
+          // Cache the dashboard data
+          setCachedPortfolioData(userId, dashboard);
         }
       }
     } catch (error) {
       console.error('[RealEstateDashboard] Error fetching data:', error);
+      setToast({ message: 'Failed to load real estate data', type: 'error' });
     } finally {
       setLoading(false);
       fetchingRef.current = false;
@@ -596,7 +635,80 @@ export default function RealEstateDashboard() {
     setIsAddModalOpen(false);
     // Refresh data
     if (user?.id) {
-      fetchData(user.id);
+      fetchData(user.id, true); // Skip cache to get fresh data
+    }
+    setToast({ message: 'Property added successfully', type: 'success' });
+  };
+
+  // Delete handlers
+  const handleDeleteClick = (propertyId: string, propertyName: string) => {
+    setDeleteConfirmModal({
+      isOpen: true,
+      propertyId,
+      propertyName,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmModal.propertyId || !user?.id) return;
+
+    setIsDeleting(true);
+
+    try {
+      const response = await fetch(`/api/real-estate/assets?id=${deleteConfirmModal.propertyId}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setToast({ message: 'Property deleted successfully', type: 'success' });
+
+        // Close modal
+        setDeleteConfirmModal({
+          isOpen: false,
+          propertyId: null,
+          propertyName: null,
+        });
+
+        // Refresh data
+        fetchData(user.id, true); // Skip cache to get fresh data
+      } else {
+        setToast({
+          message: result.error || 'Failed to delete property',
+          type: 'error',
+        });
+      }
+    } catch (error) {
+      console.error('[RealEstate] Delete error:', error);
+      setToast({ message: 'Failed to delete property', type: 'error' });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmModal({
+      isOpen: false,
+      propertyId: null,
+      propertyName: null,
+    });
+  };
+
+  // Export handler
+  const handleExport = async () => {
+    if (!dashboardData || dashboardData.properties.length === 0) {
+      setToast({ message: 'No data to export', type: 'error' });
+      return;
+    }
+
+    try {
+      const { exportRealEstateToExcel } = await import('@/exports/realEstate.export');
+      await exportRealEstateToExcel(dashboardData.properties);
+      setToast({ message: 'Export successful', type: 'success' });
+    } catch (error) {
+      console.error('[RealEstate] Export error:', error);
+      setToast({ message: 'Export failed', type: 'error' });
     }
   };
 
@@ -628,10 +740,8 @@ export default function RealEstateDashboard() {
                 variant="outline"
                 size="lg"
                 className="gap-2"
-                onClick={() => {
-                  // Export functionality will be wired when data fetching is implemented
-                  alert('Export functionality will be available once data is loaded.');
-                }}
+                onClick={handleExport}
+                disabled={!dashboardData || dashboardData.properties.length === 0}
               >
                 <FileIcon className="w-4 h-4" />
                 Export
@@ -803,10 +913,12 @@ export default function RealEstateDashboard() {
                       {dashboardData.properties.map((property) => (
                         <div
                           key={property.propertyId}
-                          className="flex items-center justify-between p-4 border-b border-[#E5E7EB] dark:border-[#334155] last:border-b-0 hover:bg-[#F6F8FB] dark:hover:bg-[#1E293B] transition-colors cursor-pointer"
-                          onClick={() => router.push(`/portfolio/real-estate/${property.propertyId}`)}
+                          className="flex items-center justify-between p-4 border-b border-[#E5E7EB] dark:border-[#334155] last:border-b-0 hover:bg-[#F6F8FB] dark:hover:bg-[#1E293B] transition-colors"
                         >
-                          <div className="flex-1 min-w-0">
+                          <div
+                            className="flex-1 min-w-0 cursor-pointer"
+                            onClick={() => router.push(`/portfolio/real-estate/${property.propertyId}`)}
+                          >
                             <div className="flex items-center gap-3 mb-1">
                               <h3 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] truncate">
                                 {property.propertyName}
@@ -818,11 +930,13 @@ export default function RealEstateDashboard() {
                           </div>
                           <div className="flex items-center gap-6 ml-4">
                             <div className="text-right">
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Value</p>
                               <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                                 {formatCurrency(property.estimatedValue)}
                               </p>
                             </div>
-                            <div className="text-right min-w-[80px]">
+                            <div className="text-right min-w-[100px]">
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Rental Yield</p>
                               {property.netRentalYield !== null ? (
                                 <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                                   {property.netRentalYield.toFixed(2)}%
@@ -831,6 +945,16 @@ export default function RealEstateDashboard() {
                                 <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">—</p>
                               )}
                             </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteClick(property.propertyId, property.propertyName);
+                              }}
+                              className="p-2 text-[#DC2626] dark:text-[#EF4444] hover:bg-[#FEF2F2] dark:hover:bg-[#7F1D1D] rounded-lg transition-colors"
+                              title="Delete property"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -877,6 +1001,25 @@ export default function RealEstateDashboard() {
         onClose={() => setIsAddModalOpen(false)}
         onSuccess={handleAddSuccess}
       />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteConfirmModal.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Property"
+        message={`Are you sure you want to delete "${deleteConfirmModal.propertyName}"? This action cannot be undone.`}
+        isDeleting={isDeleting}
+      />
+
+      {/* Toast Notifications */}
+      {toast && (
+        <SimpleToast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

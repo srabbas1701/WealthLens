@@ -10,12 +10,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 
-// Import core functions
-import { getUserRealEstateAssets, getRealEstateAssetById } from '@/lib/real-estate/get-assets';
-import { createRealEstateAsset } from '@/lib/real-estate/create-asset';
-import { updateRealEstateAsset } from '@/lib/real-estate/update-asset';
-import { upsertRealEstateLoan } from '@/lib/real-estate/upsert-loan';
-import { upsertRealEstateCashflow } from '@/lib/real-estate/upsert-cashflow';
+// Import core functions with aliases to avoid naming conflicts
+import { getUserRealEstateAssets as _getUserAssets, getRealEstateAssetById as _getAssetById } from '@/lib/real-estate/get-assets';
+import { createRealEstateAsset as _createAsset } from '@/lib/real-estate/create-asset';
+import { updateRealEstateAsset as _updateAsset } from '@/lib/real-estate/update-asset';
+import { upsertRealEstateLoan as _upsertLoan } from '@/lib/real-estate/upsert-loan';
+import { upsertRealEstateCashflow as _upsertCashflow } from '@/lib/real-estate/upsert-cashflow';
 
 // Re-export types for convenience
 export type { OwnershipAdjustedAsset } from '@/lib/real-estate/get-assets';
@@ -59,7 +59,7 @@ export async function getAllRealEstateAssets(
   supabase: SupabaseClientType,
   userId: UserId
 ): Promise<import('@/lib/real-estate/get-assets').OwnershipAdjustedAsset[]> {
-  return getUserRealEstateAssets(supabase, userId);
+  return _getUserAssets(supabase, userId);
 }
 
 /**
@@ -93,7 +93,7 @@ export async function getRealEstateAssetById(
   assetId: AssetId,
   userId: UserId
 ): Promise<import('@/lib/real-estate/get-assets').OwnershipAdjustedAsset> {
-  return getRealEstateAssetById(supabase, assetId, userId);
+  return _getAssetById(supabase, assetId, userId);
 }
 
 /**
@@ -136,7 +136,7 @@ export async function createRealEstateAsset(
   userId: UserId,
   input: Omit<import('@/lib/real-estate/create-asset').CreateRealEstateAssetInput, 'user_id'>
 ): Promise<import('@/lib/real-estate/create-asset').CreateRealEstateAssetResult> {
-  return createRealEstateAsset(supabase, {
+  return _createAsset(supabase, {
     ...input,
     user_id: userId, // Automatically set from authenticated user
   });
@@ -180,7 +180,7 @@ export async function updateRealEstateAsset(
   userId: UserId,
   updates: import('@/lib/real-estate/update-asset').UpdateRealEstateAssetInput
 ): Promise<Database['public']['Tables']['real_estate_assets']['Row']> {
-  return updateRealEstateAsset(supabase, assetId, userId, updates);
+  return _updateAsset(supabase, assetId, userId, updates);
 }
 
 /**
@@ -282,7 +282,7 @@ export async function upsertRealEstateLoan(
   userId: UserId,
   loanData: import('@/lib/real-estate/upsert-loan').UpsertRealEstateLoanInput
 ): Promise<Database['public']['Tables']['real_estate_loans']['Row']> {
-  return upsertRealEstateLoan(supabase, assetId, userId, loanData);
+  return _upsertLoan(supabase, assetId, userId, loanData);
 }
 
 /**
@@ -385,7 +385,7 @@ export async function upsertRealEstateCashflow(
   userId: UserId,
   cashflowData: import('@/lib/real-estate/upsert-cashflow').UpsertRealEstateCashflowInput
 ): Promise<Database['public']['Tables']['real_estate_cashflows']['Row']> {
-  return upsertRealEstateCashflow(supabase, assetId, userId, cashflowData);
+  return _upsertCashflow(supabase, assetId, userId, cashflowData);
 }
 
 /**

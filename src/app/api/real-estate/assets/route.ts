@@ -122,12 +122,61 @@ export async function POST(request: NextRequest) {
       success: true,
       data: result.data,
     });
-    
+
   } catch (error) {
     console.error('[Real Estate API] Unexpected error:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
+    );
+  }
+}
+
+// ============================================================================
+// DELETE: Delete a real estate asset
+// ============================================================================
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+
+    // Get authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const assetId = searchParams.get('id');
+
+    if (!assetId) {
+      return NextResponse.json(
+        { success: false, error: 'Asset ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Use the delete service function
+    const { deleteRealEstateAsset } = await import('@/services/realEstate.service');
+
+    await deleteRealEstateAsset(supabase, assetId, user.id);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Property deleted successfully',
+    });
+
+  } catch (error) {
+    console.error('[Real Estate API] Delete error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete property';
+    const statusCode = errorMessage.includes('not found') || errorMessage.includes('unauthorized') ? 404 : 500;
+
+    return NextResponse.json(
+      { success: false, error: errorMessage },
+      { status: statusCode }
     );
   }
 }
