@@ -751,6 +751,37 @@ export default function PropertyDetailPage() {
           </Card>
         </section>
 
+        {/* Current Value Explanation Banner */}
+        <section className="mb-8">
+          <Card className="bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200 dark:border-blue-800/50">
+            <CardContent className="pt-6">
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5">
+                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">About Current Estimated Value</h3>
+                    <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+                      Your property's current value is calculated in this priority order:
+                    </p>
+                    <ol className="text-xs text-blue-700 dark:text-blue-300 space-y-1 ml-2 list-decimal">
+                      <li><strong>Your Manual Override</strong> (if you set one via "Update Value" button) - highest priority</li>
+                      <li><strong>System Estimate</strong> (based on market comparables, location, and property characteristics)</li>
+                      <li><strong>Purchase Price</strong> (if no estimate available)</li>
+                    </ol>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                      Current value differs from purchase price because market conditions and property valuations change over time. Click "Update Value" to set your own estimate if you believe the system estimate is inaccurate.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
         {/* ==================================================================== */}
         {/* INSIGHTS & ALERTS */}
         {/* ==================================================================== */}
