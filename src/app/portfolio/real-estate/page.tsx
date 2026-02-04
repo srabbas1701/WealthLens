@@ -523,12 +523,14 @@ export default function RealEstateDashboard() {
                     metadata: h.metadata || {},
                   }))
                 );
-                
+
                 // Use individual asset class allocation (not buckets)
-                fullAllocation = classification.allocation.map((item: any) => ({
-                  assetClass: item.assetClass.toLowerCase(),
-                  value: item.value || 0,
-                }));
+                if (classification && Array.isArray(classification.allocation)) {
+                  fullAllocation = classification.allocation.map((item: any) => ({
+                    assetClass: item.assetClass.toLowerCase(),
+                    value: item.value || 0,
+                  }));
+                }
               } else if (portfolioResult.data.allocation) {
                 // Fallback: Use allocation if holdings not available
                 fullAllocation = portfolioResult.data.allocation.map((item: any) => ({
@@ -703,8 +705,8 @@ export default function RealEstateDashboard() {
     }
 
     try {
-      const { exportRealEstateToExcel } = await import('@/exports/realEstate.export');
-      await exportRealEstateToExcel(dashboardData.properties);
+      const { exportRealEstatePortfolio } = await import('@/exports/realEstate.export');
+      await exportRealEstatePortfolio(dashboardData);
       setToast({ message: 'Export successful', type: 'success' });
     } catch (error) {
       console.error('[RealEstate] Export error:', error);

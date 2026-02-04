@@ -411,7 +411,6 @@ export function classifyAsset(
   // ========================================================================
   // If we can't classify, default to Equity (conservative assumption)
   // This should be logged and reviewed
-  console.warn(`[Asset Classification] Unknown asset type: ${assetType}, defaulting to Equity`);
   return {
     assetClass: 'Equity',
     topLevelBucket: 'Growth',
