@@ -163,6 +163,7 @@ export default function AddInsurancePage() {
 
     try {
       setLoading(true);
+      setError(null);
       const supabase = createClient();
 
       // Upload to Supabase Storage
@@ -171,7 +172,19 @@ export default function AddInsurancePage() {
         .from('insurance-documents')
         .upload(fileName, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        // If bucket doesn't exist, allow form to proceed without document
+        if (uploadError.message.includes('not found') || uploadError.message.includes('does not exist')) {
+          console.warn('Document storage not configured, proceeding without document upload');
+          setFormData((prev) => ({
+            ...prev,
+            document_url: '',
+          }));
+          setLoading(false);
+          return;
+        }
+        throw uploadError;
+      }
 
       // Get public URL
       const { data: publicData } = supabase.storage
@@ -182,8 +195,14 @@ export default function AddInsurancePage() {
         ...prev,
         document_url: publicData.publicUrl,
       }));
+      setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload document');
+      console.error('Document upload error:', err);
+      // Don't block form submission if upload fails
+      setFormData((prev) => ({
+        ...prev,
+        document_url: '',
+      }));
     } finally {
       setLoading(false);
     }
@@ -259,7 +278,7 @@ export default function AddInsurancePage() {
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader showBackButton={true} backLabel="Back to Insurance" />
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-4">
         {/* Progress Indicator */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
@@ -541,7 +560,7 @@ export default function AddInsurancePage() {
                   <div>
                     <Label>Policy Document (PDF)</Label>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-3">
-                      Upload your policy document for reference (optional)
+                      Upload your policy document for reference (completely optional - you can skip this)
                     </p>
                     <input
                       ref={fileInputRef}
@@ -554,13 +573,15 @@ export default function AddInsurancePage() {
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={loading}
-                      className="w-full p-4 border-2 border-dashed border-[#E5E7EB] dark:border-[#334155] rounded-lg hover:border-[#2563EB] transition-colors flex items-center justify-center gap-2 text-gray-600 dark:text-gray-400 hover:text-[#2563EB]"
+                      className="w-full p-4 border-2 border-dashed border-[#E5E7EB] dark:border-[#334155] rounded-lg hover:border-[#2563EB] transition-colors flex items-center justify-center gap-2 text-gray-600 dark:text-gray-400 hover:text-[#2563EB] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <UploadIcon className="w-5 h-5" />
                       <span>
-                        {formData.document_url
+                        {loading
+                          ? 'Uploading...'
+                          : formData.document_url
                           ? 'Document uploaded ✓'
-                          : 'Click to upload PDF'}
+                          : 'Click to upload PDF (or skip)'}
                       </span>
                     </button>
                   </div>
