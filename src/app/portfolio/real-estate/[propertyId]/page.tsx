@@ -1014,8 +1014,19 @@ export default function PropertyDetailPage() {
               propertyId={propertyId}
               currentData={{
                 propertyNickname: data.propertyName,
+                propertyType: data.propertyType,
+                propertyStatus: data.propertyStatus,
+                purchasePrice: data.purchasePrice,
+                purchaseDate: data.purchaseDate,
+                registrationValue: data.registrationValue,
                 ownershipPercentage: data.ownershipPercentage,
+                city: data.city,
+                state: data.state,
+                pincode: data.pincode,
                 address: data.address,
+                projectName: data.projectName,
+                builderName: data.builderName,
+                reraNumber: data.reraNumber,
                 carpetAreaSqft: data.carpetAreaSqft,
                 builtupAreaSqft: data.builtupAreaSqft,
               }}

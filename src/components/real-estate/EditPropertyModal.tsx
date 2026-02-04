@@ -1,7 +1,8 @@
 /**
  * Edit Property Modal
- * 
- * Modal for editing basic property information (nickname, ownership, address, area).
+ *
+ * Modal for editing all property information across multiple steps.
+ * Mirrors the Add Property modal structure for consistency.
  */
 
 'use client';
@@ -17,8 +18,19 @@ interface EditPropertyModalProps {
   propertyId: string;
   currentData: {
     propertyNickname: string;
+    propertyType: string;
+    propertyStatus: string;
+    purchasePrice: number;
+    purchaseDate: string;
+    registrationValue: number | null;
     ownershipPercentage: number;
+    city: string;
+    state: string;
+    pincode: string;
     address: string | null;
+    projectName: string | null;
+    builderName: string | null;
+    reraNumber: string | null;
     carpetAreaSqft: number | null;
     builtupAreaSqft: number | null;
   };
@@ -32,54 +44,141 @@ export default function EditPropertyModal({
   currentData,
   onSuccess,
 }: EditPropertyModalProps) {
+  const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [propertyNickname, setPropertyNickname] = useState<string>('');
-  const [ownershipPercentage, setOwnershipPercentage] = useState<string>('');
-  const [address, setAddress] = useState<string>('');
-  const [carpetAreaSqft, setCarpetAreaSqft] = useState<string>('');
-  const [builtupAreaSqft, setBuiltupAreaSqft] = useState<string>('');
+  const [formData, setFormData] = useState({
+    property_nickname: '',
+    property_type: 'residential' as 'residential' | 'commercial' | 'land',
+    property_status: 'ready' as 'ready' | 'under_construction',
+    purchase_price: '',
+    purchase_date: '',
+    registration_value: '',
+    ownership_percentage: '100',
+    city: '',
+    state: '',
+    pincode: '',
+    address: '',
+    project_name: '',
+    builder_name: '',
+    rera_number: '',
+    carpet_area_sqft: '',
+    builtup_area_sqft: '',
+  });
 
-  // Initialize form with current data
   useEffect(() => {
     if (isOpen) {
-      setPropertyNickname(currentData.propertyNickname || '');
-      setOwnershipPercentage(currentData.ownershipPercentage?.toString() || '100');
-      setAddress(currentData.address || '');
-      setCarpetAreaSqft(currentData.carpetAreaSqft?.toString() || '');
-      setBuiltupAreaSqft(currentData.builtupAreaSqft?.toString() || '');
+      setFormData({
+        property_nickname: currentData.propertyNickname || '',
+        property_type: (currentData.propertyType as 'residential' | 'commercial' | 'land') || 'residential',
+        property_status: (currentData.propertyStatus as 'ready' | 'under_construction') || 'ready',
+        purchase_price: currentData.purchasePrice?.toString() || '',
+        purchase_date: currentData.purchaseDate || '',
+        registration_value: currentData.registrationValue?.toString() || '',
+        ownership_percentage: currentData.ownershipPercentage?.toString() || '100',
+        city: currentData.city || '',
+        state: currentData.state || '',
+        pincode: currentData.pincode || '',
+        address: currentData.address || '',
+        project_name: currentData.projectName || '',
+        builder_name: currentData.builderName || '',
+        rera_number: currentData.reraNumber || '',
+        carpet_area_sqft: currentData.carpetAreaSqft?.toString() || '',
+        builtup_area_sqft: currentData.builtupAreaSqft?.toString() || '',
+      });
+      setCurrentStep(1);
       setError(null);
     }
   }, [isOpen, currentData]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const validateStep = (step: number): boolean => {
     setError(null);
+
+    if (step === 1) {
+      if (!formData.property_nickname.trim()) {
+        setError('Property nickname is required');
+        return false;
+      }
+    } else if (step === 2) {
+      if (!formData.purchase_price || parseFloat(formData.purchase_price) <= 0) {
+        setError('Purchase price is required and must be greater than 0');
+        return false;
+      }
+      if (!formData.purchase_date) {
+        setError('Purchase date is required');
+        return false;
+      }
+      const ownership = parseFloat(formData.ownership_percentage) || 100;
+      if (ownership < 0 || ownership > 100) {
+        setError('Ownership percentage must be between 0 and 100');
+        return false;
+      }
+    } else if (step === 3) {
+      if (!formData.address.trim()) {
+        setError('Address is required');
+        return false;
+      }
+      if (!formData.city.trim()) {
+        setError('City is required');
+        return false;
+      }
+      if (!formData.state.trim()) {
+        setError('State is required');
+        return false;
+      }
+      if (!formData.pincode.trim()) {
+        setError('Pincode is required');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleNext = () => {
+    if (validateStep(currentStep)) {
+      if (currentStep < 3) {
+        setCurrentStep(currentStep + 1);
+      } else {
+        handleSubmit();
+      }
+    }
+  };
+
+  const handlePrevious = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+      setError(null);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep(3)) {
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // Validate ownership percentage
-      const ownership = ownershipPercentage ? parseFloat(ownershipPercentage) : 100;
-      if (ownership < 0 || ownership > 100) {
-        throw new Error('Ownership percentage must be between 0 and 100');
-      }
-
-      // Prepare update payload
-      const payload: any = {
-        property_nickname: propertyNickname.trim() || undefined,
-        ownership_percentage: ownership,
-        address: address.trim() || null,
-        carpet_area_sqft: carpetAreaSqft ? parseFloat(carpetAreaSqft) : null,
-        builtup_area_sqft: builtupAreaSqft ? parseFloat(builtupAreaSqft) : null,
+      const payload = {
+        property_nickname: formData.property_nickname.trim(),
+        property_type: formData.property_type,
+        property_status: formData.property_status,
+        purchase_price: parseFloat(formData.purchase_price),
+        purchase_date: formData.purchase_date,
+        registration_value: formData.registration_value ? parseFloat(formData.registration_value) : null,
+        ownership_percentage: parseFloat(formData.ownership_percentage) || 100,
+        city: formData.city.trim(),
+        state: formData.state.trim(),
+        pincode: formData.pincode.trim(),
+        address: formData.address.trim() || null,
+        project_name: formData.project_name.trim() || null,
+        builder_name: formData.builder_name.trim() || null,
+        rera_number: formData.rera_number.trim() || null,
+        carpet_area_sqft: formData.carpet_area_sqft ? parseFloat(formData.carpet_area_sqft) : null,
+        builtup_area_sqft: formData.builtup_area_sqft ? parseFloat(formData.builtup_area_sqft) : null,
       };
-
-      // Remove undefined values
-      Object.keys(payload).forEach((key) => {
-        if (payload[key] === undefined) {
-          delete payload[key];
-        }
-      });
 
       const response = await fetch(`/api/real-estate/assets/${propertyId}`, {
         method: 'PUT',
@@ -95,7 +194,6 @@ export default function EditPropertyModal({
         throw new Error(result.error || 'Failed to update property');
       }
 
-      // Success - close modal and refresh data
       onSuccess();
       onClose();
     } catch (err) {
@@ -116,12 +214,13 @@ export default function EditPropertyModal({
       />
 
       <div className="relative w-full max-w-2xl mx-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
           <div>
             <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Edit Property</h2>
             <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
-              Update basic property information. Changes will affect analytics calculations.
+              {currentStep === 1 && 'Step 1: Basic Information'}
+              {currentStep === 2 && 'Step 2: Financial Details'}
+              {currentStep === 3 && 'Step 3: Location & Property Details'}
             </p>
           </div>
           <button
@@ -145,123 +244,347 @@ export default function EditPropertyModal({
           </button>
         </div>
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-auto p-6 space-y-4">
+        <form className="flex-1 overflow-auto p-6 space-y-4">
           {error && (
-            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/30">
+            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
               <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
             </div>
           )}
 
-          <div className="space-y-4">
-            {/* Property Nickname */}
-            <div className="space-y-2">
-              <Label htmlFor="propertyNickname" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
-                Property Nickname <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="propertyNickname"
-                type="text"
-                value={propertyNickname}
-                onChange={(e) => setPropertyNickname(e.target.value)}
-                placeholder="e.g., 2BHK Apartment, Mumbai"
-                required
-                className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
-              />
-            </div>
-
-            {/* Ownership Percentage */}
-            <div className="space-y-2">
-              <Label htmlFor="ownershipPercentage" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
-                Ownership Percentage (%)
-              </Label>
-              <Input
-                id="ownershipPercentage"
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={ownershipPercentage}
-                onChange={(e) => setOwnershipPercentage(e.target.value)}
-                placeholder="100"
-                className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
-              />
-              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
-                Percentage of property you own (0-100)
-              </p>
-            </div>
-
-            {/* Address */}
-            <div className="space-y-2">
-              <Label htmlFor="address" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
-                Address
-              </Label>
-              <Input
-                id="address"
-                type="text"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="e.g., 123 Main Street, Sector 1"
-                className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
-              />
-            </div>
-
-            {/* Area Details */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {currentStep === 1 && (
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="carpetAreaSqft" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
-                  Carpet Area (sq ft)
+                <Label htmlFor="propertyNickname" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                  Property Nickname <span className="text-red-500">*</span>
                 </Label>
                 <Input
-                  id="carpetAreaSqft"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={carpetAreaSqft}
-                  onChange={(e) => setCarpetAreaSqft(e.target.value)}
-                  placeholder="e.g., 1200"
+                  id="propertyNickname"
+                  type="text"
+                  value={formData.property_nickname}
+                  onChange={(e) =>
+                    setFormData({ ...formData, property_nickname: e.target.value })
+                  }
+                  placeholder="e.g., My Home, Rental Apartment"
+                  required
                   className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="builtupAreaSqft" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
-                  Built-up Area (sq ft)
+                <Label htmlFor="propertyType" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                  Property Type <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="propertyType"
+                  value={formData.property_type}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      property_type: e.target.value as 'residential' | 'commercial' | 'land',
+                    })
+                  }
+                  className="w-full px-4 py-2 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
+                  required
+                >
+                  <option value="residential">Residential</option>
+                  <option value="commercial">Commercial</option>
+                  <option value="land">Land</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="propertyStatus" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                  Property Status <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="propertyStatus"
+                  value={formData.property_status}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      property_status: e.target.value as 'ready' | 'under_construction',
+                    })
+                  }
+                  className="w-full px-4 py-2 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
+                  required
+                >
+                  <option value="ready">Ready</option>
+                  <option value="under_construction">Under Construction</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {currentStep === 2 && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="purchasePrice" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                  Purchase Price (₹) <span className="text-red-500">*</span>
                 </Label>
                 <Input
-                  id="builtupAreaSqft"
+                  id="purchasePrice"
                   type="number"
-                  min="0"
                   step="0.01"
-                  value={builtupAreaSqft}
-                  onChange={(e) => setBuiltupAreaSqft(e.target.value)}
-                  placeholder="e.g., 1500"
+                  min="0"
+                  value={formData.purchase_price}
+                  onChange={(e) =>
+                    setFormData({ ...formData, purchase_price: e.target.value })
+                  }
+                  placeholder="0.00"
+                  required
                   className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="purchaseDate" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                  Purchase Date <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="purchaseDate"
+                  type="date"
+                  value={formData.purchase_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, purchase_date: e.target.value })
+                  }
+                  required
+                  className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="registrationValue" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                  Registration Value (₹)
+                </Label>
+                <Input
+                  id="registrationValue"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.registration_value}
+                  onChange={(e) =>
+                    setFormData({ ...formData, registration_value: e.target.value })
+                  }
+                  placeholder="Optional"
+                  className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="ownershipPercentage" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                  Ownership Percentage (%)
+                </Label>
+                <Input
+                  id="ownershipPercentage"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.ownership_percentage}
+                  onChange={(e) =>
+                    setFormData({ ...formData, ownership_percentage: e.target.value })
+                  }
+                  placeholder="100"
+                  className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                />
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                  Percentage of property you own (0-100)
+                </p>
+              </div>
             </div>
-          </div>
+          )}
+
+          {currentStep === 3 && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="address" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                  Address <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="address"
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) =>
+                    setFormData({ ...formData, address: e.target.value })
+                  }
+                  placeholder="e.g., 123 Main Street, Sector 1"
+                  required
+                  className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="city" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                    City <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="city"
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) =>
+                      setFormData({ ...formData, city: e.target.value })
+                    }
+                    placeholder="e.g., Mumbai"
+                    required
+                    className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="state" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                    State <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="state"
+                    type="text"
+                    value={formData.state}
+                    onChange={(e) =>
+                      setFormData({ ...formData, state: e.target.value })
+                    }
+                    placeholder="e.g., Maharashtra"
+                    required
+                    className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="pincode" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                    Pincode <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="pincode"
+                    type="text"
+                    value={formData.pincode}
+                    onChange={(e) =>
+                      setFormData({ ...formData, pincode: e.target.value })
+                    }
+                    placeholder="e.g., 400001"
+                    required
+                    className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="projectName" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                    Project Name
+                  </Label>
+                  <Input
+                    id="projectName"
+                    type="text"
+                    value={formData.project_name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, project_name: e.target.value })
+                    }
+                    placeholder="Optional"
+                    className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="builderName" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                    Builder Name
+                  </Label>
+                  <Input
+                    id="builderName"
+                    type="text"
+                    value={formData.builder_name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, builder_name: e.target.value })
+                    }
+                    placeholder="Optional"
+                    className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="reraNumber" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                    RERA Number
+                  </Label>
+                  <Input
+                    id="reraNumber"
+                    type="text"
+                    value={formData.rera_number}
+                    onChange={(e) =>
+                      setFormData({ ...formData, rera_number: e.target.value })
+                    }
+                    placeholder="Optional"
+                    className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="carpetArea" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                    Carpet Area (sq ft)
+                  </Label>
+                  <Input
+                    id="carpetArea"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.carpet_area_sqft}
+                    onChange={(e) =>
+                      setFormData({ ...formData, carpet_area_sqft: e.target.value })
+                    }
+                    placeholder="Optional"
+                    className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="builtupArea" className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                    Built-up Area (sq ft)
+                  </Label>
+                  <Input
+                    id="builtupArea"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.builtup_area_sqft}
+                    onChange={(e) =>
+                      setFormData({ ...formData, builtup_area_sqft: e.target.value })
+                    }
+                    placeholder="Optional"
+                    className="bg-white dark:bg-[#0F172A] border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </form>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#0F172A]">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#0F172A]">
           <Button
             type="button"
             variant="outline"
-            onClick={onClose}
-            disabled={loading}
+            onClick={handlePrevious}
+            disabled={loading || currentStep === 1}
             className="border-[#E5E7EB] dark:border-[#334155]"
           >
-            Cancel
+            Previous
           </Button>
-          <Button
-            type="submit"
-            onClick={handleSubmit}
-            disabled={loading || !propertyNickname.trim()}
-            className="bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] text-white"
-          >
-            {loading ? 'Updating...' : 'Update Property'}
-          </Button>
+
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={loading}
+              className="border-[#E5E7EB] dark:border-[#334155]"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleNext}
+              disabled={loading}
+              className="bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] text-white"
+            >
+              {loading ? 'Saving...' : currentStep === 3 ? 'Update Property' : 'Next'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,12 +1,13 @@
 /**
  * Sell vs Hold Simulation Component
- * 
+ *
  * Decision support tool for comparing sell today vs hold scenarios.
+ * Simulation assumptions persist in localStorage.
  */
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,16 +19,50 @@ interface SellHoldSimulationProps {
   propertyData: RealEstatePropertyDetailData;
 }
 
+const DEFAULT_INPUTS: SellHoldSimulationInputs = {
+  holdingPeriodYears: 5,
+  expectedPriceAppreciationPercent: 5,
+  expectedRentGrowthPercent: 5,
+  exitCostsPercent: 2,
+  capitalGainsTaxRate: 20,
+};
+
+const STORAGE_KEY = 'sell-hold-simulation-inputs';
+
 export default function SellHoldSimulation({
   propertyData,
 }: SellHoldSimulationProps) {
-  const [inputs, setInputs] = useState<SellHoldSimulationInputs>({
-    holdingPeriodYears: 5,
-    expectedPriceAppreciationPercent: 5,
-    expectedRentGrowthPercent: 5,
-    exitCostsPercent: 2,
-    capitalGainsTaxRate: 20,
-  });
+  const [inputs, setInputs] = useState<SellHoldSimulationInputs>(DEFAULT_INPUTS);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load saved inputs from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsedInputs = JSON.parse(saved) as SellHoldSimulationInputs;
+        setInputs(parsedInputs);
+      }
+    } catch (err) {
+      console.warn('[SellHoldSimulation] Failed to load saved inputs:', err);
+    }
+    setIsLoaded(true);
+  }, []);
+
+  // Save inputs to localStorage whenever they change
+  useEffect(() => {
+    if (isLoaded) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(inputs));
+      } catch (err) {
+        console.warn('[SellHoldSimulation] Failed to save inputs:', err);
+      }
+    }
+  }, [inputs, isLoaded]);
+
+  const handleResetToDefaults = () => {
+    setInputs(DEFAULT_INPUTS);
+  };
 
   const result = useMemo(() => {
     return simulateSellVsHold(propertyData, inputs);
@@ -89,15 +124,16 @@ export default function SellHoldSimulation({
                 id="holdingPeriod"
                 type="number"
                 min="1"
-                max="10"
+                max="50"
                 value={inputs.holdingPeriodYears}
                 onChange={(e) =>
                   setInputs({
                     ...inputs,
-                    holdingPeriodYears: Math.max(1, Math.min(10, parseInt(e.target.value) || 5)),
+                    holdingPeriodYears: Math.max(1, Math.min(50, parseInt(e.target.value) || 5)),
                   })
                 }
               />
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">Up to 50 years</p>
             </div>
 
             <div>
@@ -171,6 +207,15 @@ export default function SellHoldSimulation({
                 }
               />
             </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={handleResetToDefaults}
+              className="text-xs text-[#2563EB] dark:text-[#3B82F6] hover:underline"
+            >
+              Reset to defaults
+            </button>
           </div>
         </div>
 
