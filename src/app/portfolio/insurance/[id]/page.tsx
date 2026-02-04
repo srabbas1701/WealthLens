@@ -160,7 +160,7 @@ export default function InsuranceDetailPage() {
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader showBackButton={true} backLabel="Back to Insurance" />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-4">
+      <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
         {error && (
           <Card className="mb-6 bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800">
             <CardContent className="pt-4">
@@ -405,7 +405,7 @@ export default function InsuranceDetailPage() {
             Delete Policy
           </Button>
         )}
-      </div>
+      </main>
     </div>
   );
 }

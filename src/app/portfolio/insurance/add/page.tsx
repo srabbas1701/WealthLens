@@ -278,7 +278,7 @@ export default function AddInsurancePage() {
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader showBackButton={true} backLabel="Back to Insurance" />
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-4">
+      <main className="max-w-2xl mx-auto px-6 py-8 pt-24">
         {/* Progress Indicator */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
@@ -614,7 +614,7 @@ export default function AddInsurancePage() {
             {currentStep < 5 && <ArrowRightIcon className="w-4 h-4 ml-2" />}
           </Button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
