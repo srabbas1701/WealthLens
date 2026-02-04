@@ -714,7 +714,7 @@ export default function RealEstateDashboard() {
 
   // Export handler
   const handleExport = async () => {
-    if (!dashboardData || dashboardData.properties.length === 0) {
+    if (!dashboardData || !dashboardData.properties || dashboardData.properties.length === 0) {
       setToast({ message: 'No data to export', type: 'error' });
       return;
     }
@@ -758,7 +758,7 @@ export default function RealEstateDashboard() {
                 size="lg"
                 className="gap-2"
                 onClick={handleExport}
-                disabled={!dashboardData || dashboardData.properties.length === 0}
+                disabled={!dashboardData || !dashboardData.properties || dashboardData.properties.length === 0}
               >
                 <FileIcon className="w-4 h-4" />
                 Export
@@ -925,7 +925,7 @@ export default function RealEstateDashboard() {
                     <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] text-center py-8">
                       Loading properties...
                     </p>
-                  ) : dashboardData && dashboardData.properties.length > 0 ? (
+                  ) : dashboardData && dashboardData.properties && dashboardData.properties.length > 0 ? (
                     <div className="border border-[#E5E7EB] dark:border-[#334155] rounded-lg divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                       {dashboardData.properties.map((property) => (
                         <div
@@ -991,7 +991,7 @@ export default function RealEstateDashboard() {
                     <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] text-center py-8">
                       Loading insights...
                     </p>
-                  ) : dashboardData && dashboardData.insights.length > 0 ? (
+                  ) : dashboardData && dashboardData.insights && dashboardData.insights.length > 0 ? (
                     dashboardData.insights.map((insight) => (
                       <InsightCard
                         key={insight.id}
