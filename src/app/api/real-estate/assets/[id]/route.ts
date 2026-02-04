@@ -151,17 +151,28 @@ export async function PUT(
     }
     
     const body = await request.json();
-    
+
     // Use the helper function (only allows specific fields)
     const { updateRealEstateAsset } = await import('@/lib/real-estate/update-asset');
-    
+
     const updates = {
       property_nickname: body.property_nickname,
-      user_override_value: body.user_override_value,
+      property_type: body.property_type,
+      property_status: body.property_status,
+      purchase_price: body.purchase_price,
+      purchase_date: body.purchase_date,
+      registration_value: body.registration_value,
       ownership_percentage: body.ownership_percentage,
+      city: body.city,
+      state: body.state,
+      pincode: body.pincode,
       address: body.address,
+      project_name: body.project_name,
+      builder_name: body.builder_name,
+      rera_number: body.rera_number,
       carpet_area_sqft: body.carpet_area_sqft,
       builtup_area_sqft: body.builtup_area_sqft,
+      user_override_value: body.user_override_value,
     };
     
     const updatedAsset = await updateRealEstateAsset(

@@ -99,7 +99,7 @@ function InfoRow({
 
 /**
  * Value vs Purchase Price Chart
- * Two-point line chart: purchase (date, price) → now (current value)
+ * Multi-point line chart showing annual value progression from purchase to now
  */
 function ValueVsPurchaseChart({
   purchaseDate,
@@ -138,8 +138,54 @@ function ValueVsPurchaseChart({
     );
   }
 
-  const minVal = Math.min(purchasePrice, currentValue);
-  const maxVal = Math.max(purchasePrice, currentValue);
+  // Generate annual data points
+  const generateTrendData = () => {
+    if (!purchaseDate) return [
+      { value: purchasePrice, label: 'Purchase', date: null },
+      { value: currentValue, label: 'Now', date: null },
+    ];
+
+    const startDate = new Date(purchaseDate);
+    const nowDate = new Date();
+    const yearsDiff = (nowDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+
+    if (yearsDiff < 0.5) {
+      // Less than 6 months, just show start and end
+      return [
+        { value: purchasePrice, label: 'Purchase', date: purchaseDate },
+        { value: currentValue, label: 'Now', date: null },
+      ];
+    }
+
+    // Calculate annual appreciation rate using CAGR formula
+    const cagr = Math.pow(currentValue / purchasePrice, 1 / yearsDiff) - 1;
+
+    // Generate points for each year
+    const points: { value: number; label: string; date: string | null }[] = [];
+    const numYears = Math.ceil(yearsDiff);
+
+    for (let year = 0; year <= numYears; year++) {
+      const pointDate = new Date(startDate);
+      pointDate.setFullYear(pointDate.getFullYear() + year);
+
+      // Calculate projected value for this year
+      const projectedValue = purchasePrice * Math.pow(1 + cagr, year);
+      const isLastPoint = year === numYears;
+      const label = year === 0 ? 'Purchase' : (isLastPoint ? 'Now' : `Year ${year}`);
+
+      points.push({
+        value: isLastPoint ? currentValue : projectedValue,
+        label: label,
+        date: isLastPoint ? null : pointDate.toISOString().split('T')[0],
+      });
+    }
+
+    return points;
+  };
+
+  const trendData = generateTrendData();
+  const minVal = Math.min(...trendData.map(p => p.value));
+  const maxVal = Math.max(...trendData.map(p => p.value));
   const range = maxVal - minVal || 1;
   const padding = { top: 24, right: 24, bottom: 40, left: 56 };
   const w = 320;
@@ -148,11 +194,21 @@ function ValueVsPurchaseChart({
   const chartH = h - padding.top - padding.bottom;
 
   const y = (v: number) => padding.top + chartH - ((v - minVal) / range) * chartH;
-  const x0 = padding.left;
-  const x1 = padding.left + chartW;
+  const pointSpacing = chartW / Math.max(1, trendData.length - 1);
 
-  const pathLine = `M ${x0} ${y(purchasePrice)} L ${x1} ${y(currentValue)}`;
-  const pathArea = `M ${x0} ${y(purchasePrice)} L ${x1} ${y(currentValue)} L ${x1} ${padding.top + chartH} L ${x0} ${padding.top + chartH} Z`;
+  // Generate path for line
+  const pathLine = trendData
+    .map((point, idx) => {
+      const x = padding.left + idx * pointSpacing;
+      const yVal = y(point.value);
+      return `${idx === 0 ? 'M' : 'L'} ${x} ${yVal}`;
+    })
+    .join(' ');
+
+  // Generate path for area
+  const pathArea =
+    pathLine +
+    ` L ${padding.left + (trendData.length - 1) * pointSpacing} ${padding.top + chartH} L ${padding.left} ${padding.top + chartH} Z`;
 
   return (
     <Card className="h-full bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
@@ -180,26 +236,30 @@ function ValueVsPurchaseChart({
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-            <circle cx={x0} cy={y(purchasePrice)} r={4} fill="#2563EB" />
-            <circle cx={x1} cy={y(currentValue)} r={4} fill="#2563EB" />
-            <text
-              x={x0}
-              y={padding.top + chartH + 20}
-              textAnchor="middle"
-              fill="currentColor"
-              className="text-xs text-[#6B7280] dark:text-[#94A3B8]"
-            >
-              {labelStart}
-            </text>
-            <text
-              x={x1}
-              y={padding.top + chartH + 20}
-              textAnchor="middle"
-              fill="currentColor"
-              className="text-xs text-[#6B7280] dark:text-[#94A3B8]"
-            >
-              {labelEnd}
-            </text>
+            {trendData.map((point, idx) => {
+              const x = padding.left + idx * pointSpacing;
+              const yVal = y(point.value);
+              return (
+                <circle key={idx} cx={x} cy={yVal} r={4} fill="#2563EB" />
+              );
+            })}
+            {trendData.map((point, idx) => {
+              const x = padding.left + idx * pointSpacing;
+              const showLabel = idx === 0 || idx === trendData.length - 1 || trendData.length <= 4;
+              if (!showLabel) return null;
+              return (
+                <text
+                  key={`label-${idx}`}
+                  x={x}
+                  y={padding.top + chartH + 20}
+                  textAnchor="middle"
+                  fill="currentColor"
+                  className="text-xs text-[#6B7280] dark:text-[#94A3B8]"
+                >
+                  {point.label}
+                </text>
+              );
+            })}
           </svg>
           <div className="flex justify-between text-sm">
             <span className="text-[#6B7280] dark:text-[#94A3B8]">
@@ -217,7 +277,7 @@ function ValueVsPurchaseChart({
 
 /**
  * Loan Outstanding Trend Chart
- * Two-point line chart: loan start (amount) → now (outstanding)
+ * Multi-point line chart showing annual loan paydown from start to now
  */
 function LoanOutstandingChart({
   loanAmount,
@@ -257,9 +317,57 @@ function LoanOutstandingChart({
     );
   }
 
-  const ob = outstandingBalance ?? loanAmount;
-  const minVal = Math.min(0, ob);
-  const maxVal = Math.max(loanAmount, ob);
+  // Generate annual loan paydown data points
+  const generateLoanTrendData = () => {
+    const ob = outstandingBalance ?? loanAmount;
+
+    if (!purchaseDate) return [
+      { value: loanAmount, label: 'Loan Start', date: null },
+      { value: ob, label: 'Now', date: null },
+    ];
+
+    const startDate = new Date(purchaseDate);
+    const nowDate = new Date();
+    const yearsDiff = (nowDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+
+    if (yearsDiff < 0.5) {
+      // Less than 6 months, just show start and end
+      return [
+        { value: loanAmount, label: 'Loan Start', date: purchaseDate },
+        { value: ob, label: 'Now', date: null },
+      ];
+    }
+
+    // Calculate annual paydown rate
+    const totalPaydown = loanAmount - ob;
+    const annualPaydown = totalPaydown / yearsDiff;
+
+    // Generate points for each year
+    const points: { value: number; label: string; date: string | null }[] = [];
+    const numYears = Math.ceil(yearsDiff);
+
+    for (let year = 0; year <= numYears; year++) {
+      const pointDate = new Date(startDate);
+      pointDate.setFullYear(pointDate.getFullYear() + year);
+
+      // Calculate projected outstanding for this year
+      const projectedOutstanding = Math.max(0, loanAmount - annualPaydown * year);
+      const isLastPoint = year === numYears;
+      const label = year === 0 ? 'Loan Start' : (isLastPoint ? 'Now' : `Year ${year}`);
+
+      points.push({
+        value: isLastPoint ? ob : projectedOutstanding,
+        label: label,
+        date: isLastPoint ? null : pointDate.toISOString().split('T')[0],
+      });
+    }
+
+    return points;
+  };
+
+  const loanTrendData = generateLoanTrendData();
+  const minVal = Math.min(0, ...loanTrendData.map(p => p.value));
+  const maxVal = Math.max(...loanTrendData.map(p => p.value));
   const range = maxVal - minVal || 1;
   const padding = { top: 24, right: 24, bottom: 40, left: 56 };
   const w = 320;
@@ -268,11 +376,21 @@ function LoanOutstandingChart({
   const chartH = h - padding.top - padding.bottom;
 
   const y = (v: number) => padding.top + chartH - ((v - minVal) / range) * chartH;
-  const x0 = padding.left;
-  const x1 = padding.left + chartW;
+  const pointSpacing = chartW / Math.max(1, loanTrendData.length - 1);
 
-  const pathLine = `M ${x0} ${y(loanAmount)} L ${x1} ${y(ob)}`;
-  const pathArea = `M ${x0} ${y(loanAmount)} L ${x1} ${y(ob)} L ${x1} ${padding.top + chartH} L ${x0} ${padding.top + chartH} Z`;
+  // Generate path for line
+  const pathLine = loanTrendData
+    .map((point, idx) => {
+      const x = padding.left + idx * pointSpacing;
+      const yVal = y(point.value);
+      return `${idx === 0 ? 'M' : 'L'} ${x} ${yVal}`;
+    })
+    .join(' ');
+
+  // Generate path for area
+  const pathArea =
+    pathLine +
+    ` L ${padding.left + (loanTrendData.length - 1) * pointSpacing} ${padding.top + chartH} L ${padding.left} ${padding.top + chartH} Z`;
 
   return (
     <Card className="h-full bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
@@ -300,33 +418,37 @@ function LoanOutstandingChart({
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-            <circle cx={x0} cy={y(loanAmount)} r={4} fill="#F59E0B" />
-            <circle cx={x1} cy={y(ob)} r={4} fill="#F59E0B" />
-            <text
-              x={x0}
-              y={padding.top + chartH + 20}
-              textAnchor="middle"
-              fill="currentColor"
-              className="text-xs text-[#6B7280] dark:text-[#94A3B8]"
-            >
-              {labelStart}
-            </text>
-            <text
-              x={x1}
-              y={padding.top + chartH + 20}
-              textAnchor="middle"
-              fill="currentColor"
-              className="text-xs text-[#6B7280] dark:text-[#94A3B8]"
-            >
-              {labelEnd}
-            </text>
+            {loanTrendData.map((point, idx) => {
+              const x = padding.left + idx * pointSpacing;
+              const yVal = y(point.value);
+              return (
+                <circle key={idx} cx={x} cy={yVal} r={4} fill="#F59E0B" />
+              );
+            })}
+            {loanTrendData.map((point, idx) => {
+              const x = padding.left + idx * pointSpacing;
+              const showLabel = idx === 0 || idx === loanTrendData.length - 1 || loanTrendData.length <= 4;
+              if (!showLabel) return null;
+              return (
+                <text
+                  key={`label-${idx}`}
+                  x={x}
+                  y={padding.top + chartH + 20}
+                  textAnchor="middle"
+                  fill="currentColor"
+                  className="text-xs text-[#6B7280] dark:text-[#94A3B8]"
+                >
+                  {point.label}
+                </text>
+              );
+            })}
           </svg>
           <div className="flex justify-between text-sm">
             <span className="text-[#6B7280] dark:text-[#94A3B8]">
               {labelStart}: <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatValue(loanAmount)}</span>
             </span>
             <span className="text-[#6B7280] dark:text-[#94A3B8]">
-              {labelEnd}: <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatValue(ob)}</span>
+              {labelEnd}: <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatValue(outstandingBalance)}</span>
             </span>
           </div>
         </div>
