@@ -489,63 +489,72 @@ export default function RealEstateDashboard() {
 
       if (response.ok) {
         const result = await response.json();
-        if (result.success && result.data) {
+        if (result.success && result.data && Array.isArray(result.data)) {
           // Get assets data
           const assets = result.data;
-          
+
           // Calculate dashboard data using the mapper
           const { getRealEstateDashboardData } = await import('@/analytics/realEstateDashboard.mapper');
-          const { calculateNetWorth } = await import('@/analytics/netWorthAggregator');
-          
-          // Get total net worth and allocation for allocation calculation
-          const portfolioResponse = await fetch(`/api/portfolio/data?user_id=${userId}`);
+
+          // Get total net worth for allocation calculation
           let totalNetWorth: number | null = null;
           let fullAllocation: Array<{ assetClass: string; value: number }> = [];
-          
-          if (portfolioResponse.ok) {
-            const portfolioResult = await portfolioResponse.json();
-            if (portfolioResult.success && portfolioResult.data?.metrics) {
-              totalNetWorth = portfolioResult.data.metrics.netWorth || null;
-              
-              // Get holdings to aggregate by individual asset class (not buckets)
-              // This ensures each asset class gets its own distinct color
-              if (portfolioResult.data.holdings && Array.isArray(portfolioResult.data.holdings)) {
-                const { aggregateByClassification } = await import('@/lib/portfolio-classification-aggregation');
-                
-                // Aggregate holdings by individual asset class
-                const classification = aggregateByClassification(
-                  portfolioResult.data.holdings.map((h: any) => ({
-                    id: h.id,
-                    name: h.name,
-                    assetType: h.assetType,
-                    investedValue: h.investedValue || 0,
-                    currentValue: h.currentValue || 0,
-                    metadata: h.metadata || {},
-                  }))
-                );
 
-                // Use individual asset class allocation (not buckets)
-                if (classification && Array.isArray(classification.allocation)) {
-                  fullAllocation = classification.allocation.map((item: any) => ({
-                    assetClass: item.assetClass.toLowerCase(),
-                    value: item.value || 0,
+          try {
+            const portfolioResponse = await fetch(`/api/portfolio/data?user_id=${userId}`);
+            if (portfolioResponse.ok) {
+              const portfolioResult = await portfolioResponse.json();
+              if (portfolioResult.success && portfolioResult.data?.metrics) {
+                totalNetWorth = portfolioResult.data.metrics.netWorth || null;
+
+                // Get holdings to aggregate by individual asset class (not buckets)
+                // This ensures each asset class gets its own distinct color
+                if (portfolioResult.data.holdings && Array.isArray(portfolioResult.data.holdings) && portfolioResult.data.holdings.length > 0) {
+                  try {
+                    const { aggregateByClassification } = await import('@/lib/portfolio-classification-aggregation');
+
+                    // Aggregate holdings by individual asset class
+                    const classification = aggregateByClassification(
+                      portfolioResult.data.holdings.map((h: any) => ({
+                        id: h?.id || '',
+                        name: h?.name || '',
+                        assetType: h?.assetType || 'Unknown',
+                        investedValue: h?.investedValue || 0,
+                        currentValue: h?.currentValue || 0,
+                        metadata: h?.metadata || {},
+                      }))
+                    );
+
+                    // Use individual asset class allocation (not buckets)
+                    if (classification && classification.allocation && Array.isArray(classification.allocation)) {
+                      fullAllocation = classification.allocation.map((item: any) => ({
+                        assetClass: (item?.assetClass || 'equity').toLowerCase(),
+                        value: item?.value || 0,
+                      }));
+                    }
+                  } catch (classificationError) {
+                    console.error('[RealEstate] Classification error:', classificationError);
+                    fullAllocation = [];
+                  }
+                } else if (portfolioResult.data.allocation && Array.isArray(portfolioResult.data.allocation)) {
+                  // Fallback: Use allocation if holdings not available
+                  fullAllocation = portfolioResult.data.allocation.map((item: any) => ({
+                    assetClass: (item?.name || 'equity').toLowerCase().replace(/\s+/g, '_'),
+                    value: item?.value || 0,
                   }));
                 }
-              } else if (portfolioResult.data.allocation) {
-                // Fallback: Use allocation if holdings not available
-                fullAllocation = portfolioResult.data.allocation.map((item: any) => ({
-                  assetClass: item.name.toLowerCase().replace(/\s+/g, '_'),
-                  value: item.value || 0,
-                }));
               }
             }
+          } catch (portfolioError) {
+            console.error('[RealEstate] Portfolio data fetch error:', portfolioError);
+            fullAllocation = [];
           }
-          
+
           // Calculate dashboard data
           const dashboard = await getRealEstateDashboardData(assets, totalNetWorth);
-          
+
           // Merge real estate allocation with other asset classes for the chart
-          if (fullAllocation.length > 0) {
+          if (Array.isArray(fullAllocation) && fullAllocation.length > 0) {
             // Normalize asset class names to match color mapping
             // Classification system uses PascalCase (Equity, FixedIncome, etc.)
             // We need to map to lowercase keys that match the color mapping
@@ -611,15 +620,21 @@ export default function RealEstateDashboard() {
             dashboard.assetAllocationSeries = normalizedAllocation.filter(item => item.value > 0);
           }
 
-          setDashboardData(dashboard);
-
-          // Cache the dashboard data
-          setCachedPortfolioData(userId, dashboard);
+          if (dashboard) {
+            setDashboardData(dashboard);
+            // Cache the dashboard data
+            setCachedPortfolioData(userId, dashboard);
+          }
+        } else {
+          setToast({ message: 'Invalid data format received', type: 'error' });
         }
+      } else {
+        setToast({ message: 'Failed to fetch real estate data', type: 'error' });
       }
     } catch (error) {
       console.error('[RealEstateDashboard] Error fetching data:', error);
-      setToast({ message: 'Failed to load real estate data', type: 'error' });
+      const errorMsg = error instanceof Error ? error.message : 'Failed to load real estate data';
+      setToast({ message: errorMsg, type: 'error' });
     } finally {
       setLoading(false);
       fetchingRef.current = false;
