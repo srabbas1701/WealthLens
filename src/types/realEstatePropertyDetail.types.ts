@@ -15,7 +15,8 @@ export interface RealEstatePropertyDetailData {
   propertyId: string;
   propertyName: string;
   city: string;
-  propertyType: 'residential' | 'commercial' | 'land';
+  propertyType: 'residential' | 'commercial' | 'land' | null;
+  propertyStatus: 'ready' | 'under_construction' | null;
   ownershipPercentage: number;
 
   // KPI Fields

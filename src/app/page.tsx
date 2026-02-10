@@ -23,6 +23,8 @@ import { AppHeader } from '@/components/AppHeader';
 import { LogoLockup } from '@/components/LogoLockup';
 import { Logo } from '@/components/Logo';
 import RealEstateHighlights from '@/components/home/RealEstateHighlights';
+import { usePlans } from '@/hooks/usePlans';
+import PricingSection from '@/components/home/PricingSection';
 
 /**
  * LensOnWealth Landing Page - Best-in-Class Fintech Design
@@ -40,6 +42,7 @@ export default function HomePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [showTimeoutMessage, setShowTimeoutMessage] = useState(false);
   const [showSessionExpiredMessage, setShowSessionExpiredMessage] = useState(false);
+  const { plans, loading: plansLoading, error: plansError } = usePlans();
   
   // Check for timeout message from auto-logout
   useEffect(() => {
@@ -600,183 +603,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]">
-        <div className="container mx-auto px-4 sm:px-6">
-          <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
-              Simple, Transparent Pricing
-            </h2>
-            <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8]">
-              Free to start. Upgrade when you need deeper insights.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 max-w-5xl mx-auto mb-8 sm:mb-12">
-            {/* Free Tier Card */}
-            <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-xl sm:rounded-2xl p-6 sm:p-8 hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-colors duration-300">
-              <div className="mb-4 sm:mb-6">
-                <h3 className="text-xl sm:text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Free</h3>
-                <p className="text-sm sm:text-base text-[#6B7280] dark:text-[#94A3B8]">Portfolio Visibility</p>
-              </div>
-              
-              <div className="mb-6 sm:mb-8">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl sm:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">₹0</span>
-                  <span className="text-base sm:text-lg text-[#6B7280] dark:text-[#94A3B8]">/month</span>
-                </div>
-              </div>
-              
-              <ul className="space-y-3 sm:space-y-4">
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm sm:text-base text-[#6B7280] dark:text-[#94A3B8]">Complete portfolio tracking</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm sm:text-base text-[#6B7280] dark:text-[#94A3B8]">Net worth dashboard</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm sm:text-base text-[#6B7280] dark:text-[#94A3B8]">Asset-wise overview</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm sm:text-base text-[#6B7280] dark:text-[#94A3B8]">Full holdings tables</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm sm:text-base text-[#6B7280] dark:text-[#94A3B8]">Basic insights (3 per week)</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm sm:text-base text-[#6B7280] dark:text-[#94A3B8]">Portfolio analyst (5 queries/month)</span>
-                </li>
-              </ul>
-              
-              <Link
-                href="/signup"
-                className="block w-full mt-6 sm:mt-8 px-6 py-4 min-h-[48px] bg-[#F1F5F9] dark:bg-[#334155] hover:bg-[#E5E7EB] dark:hover:bg-[#475569] text-[#475569] dark:text-[#CBD5E1] rounded-lg font-semibold transition-colors duration-300 text-center touch-target"
-              >
-                Get Started Free
-              </Link>
-            </div>
-
-            {/* Premium Tier Card */}
-            <div className="relative bg-white dark:bg-[#1E293B] border-2 border-[#2563EB] dark:border-[#3B82F6] rounded-xl sm:rounded-2xl p-6 sm:p-8 hover:border-[#1E40AF] dark:hover:border-[#2563EB] transition-colors duration-300 shadow-xl">
-              <div className="absolute -top-3 sm:-top-4 right-6 sm:right-8">
-                <span className="bg-[#2563EB] dark:bg-[#3B82F6] text-white px-3 sm:px-4 py-1 rounded-full text-xs sm:text-sm font-semibold">
-                  Premium
-                </span>
-              </div>
-              
-              <div className="mb-4 sm:mb-6">
-                <h3 className="text-xl sm:text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Premium</h3>
-                <p className="text-sm sm:text-base text-[#6B7280] dark:text-[#94A3B8]">Advanced Insights</p>
-              </div>
-              
-              <div className="mb-6 sm:mb-8">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl sm:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">₹499</span>
-                  <span className="text-base sm:text-lg text-[#6B7280] dark:text-[#94A3B8]">/month</span>
-                </div>
-                <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm mt-2">
-                  or ₹4,999/year (₹416/month)
-                </p>
-              </div>
-              
-              <ul className="space-y-3 sm:space-y-4">
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Everything in Free, plus:</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Portfolio Health Score with detailed breakdown</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Stability & downside analysis</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Scenario-linked impact insights</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Advanced analytics (sector, market cap, geography)</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Unlimited portfolio analyst queries</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm sm:text-base text-[#6B7280] dark:text-[#94A3B8]">PDF reports & Excel exports</span>
-                </li>
-              </ul>
-              
-              <Link
-                href="/signup"
-                className="block w-full mt-6 sm:mt-8 px-6 py-4 min-h-[48px] bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 text-center touch-target"
-              >
-                Start 14-Day Trial
-              </Link>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-4 sm:gap-6 md:gap-8 text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm mb-4 sm:mb-6 px-4">
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>No credit card required to start</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>Cancel anytime</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>No commissions or hidden fees</span>
-            </div>
-          </div>
-
-          <p className="text-center text-[#6B7280] dark:text-[#94A3B8] text-sm sm:text-base max-w-3xl mx-auto px-4">
-            Your wealth is always visible in the free tier. Premium unlocks deeper clarity and insights—upgrade only when you need more.
-          </p>
-        </div>
-      </section>
+      <PricingSection plans={plans} loading={plansLoading} error={plansError} />
 
       {/* FAQ Section */}
       <section id="faq" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A]">

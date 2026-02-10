@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WealthLens (investment-copilot)
 
-## Getting Started
+**Investment portfolio dashboard for Indian retail investors.**  
+Unified net worth, holdings by asset class, advanced analytics, real estate tracking, and an AI Portfolio Analyst (Copilot).
 
-First, run the development server:
+---
+
+## Quick start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open **[http://localhost:5175](http://localhost:5175)** (dev server runs on port 5175).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### First-time setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Supabase** — Create a project at [supabase.com](https://supabase.com), run `supabase/schema.sql` in the SQL Editor.
+2. **Environment** — Add `.env.local` in the project root:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+   ```
+3. **Optional (AI Copilot)** — Add `OPENAI_API_KEY=sk-...` and `OPENAI_MODEL=gpt-4o-mini` for natural-language portfolio Q&A.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Tech stack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Next.js 16** (App Router), **TypeScript**, **React 19**
+- **Tailwind CSS 4**, **Radix UI** (shadcn-style components), **Lucide** icons
+- **Supabase** (PostgreSQL, Auth, RLS)
+- **OpenAI** (optional) for Portfolio Analyst
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Full documentation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**All project details** — architecture, routes, API, features, design system, and a full index of existing docs — are in:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**[PROJECT.md](./PROJECT.md)** — master project documentation
+
+Use it for:
+
+- Application structure and routes
+- Environment variables and Supabase setup
+- Features (dashboard, holdings, analytics, Copilot, real estate, auth, etc.)
+- Design system and wireframes
+- API reference and documentation index
+
+---
+
+## Scripts
+
+| Command      | Description                |
+|-------------|----------------------------|
+| `npm run dev`   | Start dev server (port 5175) |
+| `npm run build` | Production build            |
+| `npm start`     | Start production server     |
+| `npm run lint`  | Run ESLint                  |
+
+---
+
+## Testing
+
+### Mobile Layout Tests (Playwright)
+
+Visual regression and layout tests for mobile viewports (375px, 390px, 430px) to ensure:
+- Header does not overflow horizontally
+- Mobile menu icon is visible and clickable
+- Net Worth card fits within viewport
+- Currency segmented control renders cleanly
+
+**Prerequisites:**
+```bash
+npm install --save-dev @playwright/test
+npx playwright install
+```
+
+**Run tests:**
+```bash
+npx playwright test tests/mobile-layout.spec.ts
+```
+
+**Generate initial snapshots:**
+```bash
+npx playwright test tests/mobile-layout.spec.ts --update-snapshots
+```
+
+**View test results:**
+```bash
+npx playwright show-report
+```
+
+Tests verify:
+- **Landing page** (logged out): Header, mobile menu sheet with marketing links
+- **Dashboard page** (logged in): Header, Net Worth card, currency unit toggle
+
+Snapshots are stored in `tests/mobile-layout.spec.ts-snapshots/` and will fail if layout regresses.
+
+---
+
+## License & usage
+
+Private project. See terms and privacy in the app (`/terms`, `/privacy`).

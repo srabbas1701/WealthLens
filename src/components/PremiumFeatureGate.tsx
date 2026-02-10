@@ -1,60 +1,48 @@
 /**
- * Premium Feature Gate
- * 
- * Wraps premium features with a preview and upsell.
- * Shows preview content, then offers upgrade for full access.
+ * Wraps premium features with a preview and paywall.
+ * All locked actions route through ShowPaywall(reason, capability).
  */
 
 'use client';
 
 import { ReactNode } from 'react';
-import PremiumUpsell from './PremiumUpsell';
+import ShowPaywall from '@/components/ShowPaywall';
+import { useCapabilities, type CapabilityKey } from '@/lib/capabilities';
 
 interface PremiumFeatureGateProps {
-  /** Whether user has premium access */
-  hasAccess: boolean;
-  /** Preview content (shown to free users) */
+  capabilityKey: CapabilityKey | string;
   preview: ReactNode;
-  /** Full content (shown to premium users) */
   children: ReactNode;
-  /** Feature name for upsell */
-  featureName: string;
-  /** Description of what premium unlocks */
-  description: string;
-  /** List of benefits */
-  benefits?: string[];
+  requireAll?: (CapabilityKey | string)[];
+  requireAny?: (CapabilityKey | string)[];
 }
 
 export default function PremiumFeatureGate({
-  hasAccess,
+  capabilityKey,
   preview,
   children,
-  featureName,
-  description,
-  benefits = [],
+  requireAll,
+  requireAny,
 }: PremiumFeatureGateProps) {
-  if (hasAccess) {
-    return <>{children}</>;
+  const { hasCapability, hasAllCapabilities, hasAnyCapability, loading } = useCapabilities();
+
+  if (loading) return <>{preview}</>;
+
+  let hasAccess = false;
+  if (requireAll?.length) {
+    hasAccess = hasAllCapabilities([capabilityKey, ...requireAll]);
+  } else if (requireAny?.length) {
+    hasAccess = hasAnyCapability([capabilityKey, ...requireAny]);
+  } else {
+    hasAccess = hasCapability(capabilityKey);
   }
+
+  if (hasAccess) return <>{children}</>;
 
   return (
     <>
       {preview}
-      <PremiumUpsell
-        feature={featureName}
-        description={description}
-        benefits={benefits}
-        variant="card"
-      />
+      <ShowPaywall reason="feature_locked" capability={capabilityKey} variant="card" />
     </>
   );
 }
-
-
-
-
-
-
-
-
-

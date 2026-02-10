@@ -1,0 +1,381 @@
+/**
+ * Phone Login API Route
+ * 
+ * Supports BOTH login and signup for phone-based authentication.
+ * 
+ * FLOW:
+ * 1. Frontend verifies OTP with MSG91 widget (already done)
+ * 2. Frontend sends verified phone number to this endpoint
+ * 3. Backend normalizes phone to E.164 format
+ * 4. Backend finds existing user OR creates new user
+ * 5. Backend sets temp password on user (updateUserById)
+ * 6. Backend syncs user profile to public.users table
+ * 7. Backend returns credentials { email, password } to frontend
+ * 8. Frontend calls signInWithPassword({ email, password }) - Supabase creates session
+ *    NOTE: signInWithPassword ONLY supports email, NOT phone. Internal email is never shown to user.
+ * 
+ * IMPORTANT:
+ * - MSG91 handles OTP verification (already done before this endpoint is called)
+ * - Supabase only handles user creation and session management
+ * - This endpoint supports BOTH login (existing user) and signup (new user)
+ * - Never throws error if user exists - just uses existing user
+ * 
+ * SECURITY:
+ * - No MSG91 token decoding (OTP already verified by widget)
+ * - No custom JWT handling
+ * - No magic link generation
+ * - No OTP verification (handled by MSG91)
+ * - Supabase is the only authority for login/session
+ * - Fully production-safe
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase/server';
+
+type PhoneLoginPayload = {
+  phone: string; // e.g., "+919810155042" or "919810155042"
+  optionalEmail?: string; // User's actual email (optional, no auth verification needed)
+};
+
+/**
+ * Normalize phone number to E.164 format
+ * Examples:
+ * - "+919810155042" → "+919810155042" (already E.164)
+ * - "919810155042" → "+919810155042" (adds +)
+ * - "9810155042" → "+919810155042" (adds +91 for India)
+ */
+function normalizePhone(phone: string): string {
+  // Remove any whitespace
+  phone = phone.trim();
+  
+  if (phone.startsWith("+")) {
+    return phone;
+  }
+  
+  if (phone.startsWith("91")) {
+    return `+${phone}`;
+  }
+  
+  // Default to India (+91) for 10-digit numbers
+  return `+91${phone}`;
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body: PhoneLoginPayload = await req.json();
+
+    // 1. Validate phone in payload
+    if (!body.phone) {
+      return NextResponse.json(
+        { error: "Phone number is required" },
+        { status: 400 }
+      );
+    }
+
+    // 2. Normalize phone to E.164 format
+    const phone = normalizePhone(body.phone);
+
+    // Validate E.164 format: + followed by 10-15 digits
+    if (!/^\+\d{10,15}$/.test(phone)) {
+      return NextResponse.json(
+        { error: "Invalid phone number format" },
+        { status: 400 }
+      );
+    }
+
+    console.log('📱 Processing phone:', phone);
+
+    // 3. Initialize Supabase admin client
+    const supabaseAdmin = createAdminClient();
+
+    // Helper: Normalize phone for comparison (digits only)
+    const normalizeForMatch = (p: string) => p.replace(/\D/g, '');
+    const searchPhoneDigits = normalizeForMatch(phone);
+
+    // 4. CRITICAL: PRIORITIZE public.users over auth.users for account linking
+    // When user originally signed up with EMAIL, their profile (and portfolios) are under that user.
+    // public.users.phone_number may be set during onboarding even if auth.users.phone is null.
+    // This ensures phone login uses the SAME user who has portfolios (not a duplicate auth identity).
+    let user: { id: string; phone?: string } | null = null;
+
+    // Search public.users for phone_number match
+    // When multiple users have same phone (e.g. email user + phone-only duplicate), prefer one with portfolio
+    const { data: profilesWithPhone } = await supabaseAdmin
+      .from('users')
+      .select('id, phone_number')
+      .not('phone_number', 'is', null);
+
+    const matchingProfiles = (profilesWithPhone || []).filter((p) => {
+      if (!p.phone_number) return false;
+      return normalizeForMatch(p.phone_number) === searchPhoneDigits;
+    });
+
+    if (matchingProfiles.length > 0) {
+      // Prefer user who has a portfolio (existing user with data)
+      const { data: portfoliosByUser } = await supabaseAdmin
+        .from('portfolios')
+        .select('user_id')
+        .eq('is_primary', true)
+        .in('user_id', matchingProfiles.map((p) => p.id));
+
+      const userIdsWithPortfolio = new Set((portfoliosByUser || []).map((p) => p.user_id));
+      const chosenProfile =
+        matchingProfiles.find((p) => userIdsWithPortfolio.has(p.id)) || matchingProfiles[0];
+
+      if (userIdsWithPortfolio.has(chosenProfile.id)) {
+        console.log('✅ Found user with portfolio (account linking):', chosenProfile.id);
+      } else {
+        console.log('✅ Found user in public.users (profile has phone):', chosenProfile.id);
+      }
+
+      const { data: authUserData } = await supabaseAdmin.auth.admin.getUserById(chosenProfile.id);
+      if (authUserData?.user) {
+        user = authUserData.user;
+        console.log('✅ Using profile-linked auth user:', user.id);
+      }
+    }
+
+    // 5. Fallback: Search auth.users if no profile match (e.g., phone-only signup)
+    if (!user) {
+      const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (listError) {
+        console.error('❌ Error listing users:', listError);
+        return NextResponse.json(
+          { error: 'Failed to check existing users', details: listError.message },
+          { status: 500 }
+        );
+      }
+
+      console.log('🔍 Searching auth.users for phone:', phone);
+      console.log('📋 Total users in auth:', usersData?.users?.length || 0);
+
+      const authUser = usersData?.users?.find((u) => {
+        if (!u.phone) return false;
+        return normalizeForMatch(u.phone) === searchPhoneDigits;
+      });
+
+      if (authUser) {
+        user = authUser;
+        console.log('✅ Found matching user in auth.users:', { userId: user.id, storedPhone: user.phone });
+      } else {
+        console.log('❌ No user found. Phones in auth:', usersData?.users
+          ?.filter(u => u.phone)
+          ?.map(u => u.phone)
+          ?.slice(0, 5)
+        );
+      }
+    }
+
+    // 5. Generate internal email and temp password upfront
+    // Internal email is deterministic: phone digits → @lensonwealth.app
+    // This is NEVER shown to user - purely for Supabase signInWithPassword
+    const internalEmail = `${phone.replace(/\D/g, '')}@lensonwealth.app`;
+    const tempPassword = `ph-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+
+    // Get optional email from request body (user-provided, not auth email)
+    const optionalEmail = body.optionalEmail?.trim() || null;
+    if (optionalEmail) {
+      console.log('📧 Optional email provided:', optionalEmail);
+    }
+
+    // 6. Handle user: use existing OR create new
+    // NEVER throw error if user exists - just use existing user (login flow)
+    let isNewUser = false;
+
+    if (user) {
+      // LOGIN: User exists, use existing user
+      console.log('✅ LOGIN flow - existing user found:', user.id);
+    } else {
+      // SIGNUP: Create new user
+      // BULLETPROOF APPROACH: Create with EMAIL+PASSWORD only (Supabase's most reliable path).
+      // Then add phone via a separate updateUserById call.
+      // This avoids any trigger issues with phone fields in auth.users.
+      console.log('🆕 SIGNUP flow - creating new user for:', phone);
+      console.log('🔧 Step 1: Create email-only user:', internalEmail);
+      
+      const { data: newUserData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email: internalEmail,
+        email_confirm: true,
+        password: tempPassword,
+      });
+
+      if (createError) {
+        console.error('🚨 CreateUser error:', {
+          message: createError.message,
+          code: createError.code,
+          status: createError.status,
+        });
+        
+        // Check for "already registered" / duplicate
+        const errorMsg = createError.message?.toLowerCase() || '';
+        const isAlreadyRegistered = 
+          errorMsg.includes('already registered') ||
+          errorMsg.includes('already exists') ||
+          errorMsg.includes('unique') ||
+          errorMsg.includes('duplicate') ||
+          createError.code === 'user_already_exists' ||
+          createError.code === '23505';
+
+        if (isAlreadyRegistered) {
+          console.log('⚠️ User already exists - finding existing user...');
+          const { data: allUsers } = await supabaseAdmin.auth.admin.listUsers();
+          user = allUsers?.users?.find((u) => {
+            if (u.email === internalEmail) return true;
+            if (!u.phone) return false;
+            return normalizeForMatch(u.phone) === searchPhoneDigits;
+          }) || null;
+          
+          if (!user) {
+            console.error('❌ User exists but could not be found');
+            return NextResponse.json(
+              { error: 'Account issue. Please try again or contact support.' },
+              { status: 500 }
+            );
+          }
+          console.log('✅ Found existing user:', user.id);
+        } else {
+          console.error('❌ Error creating user:', createError);
+          return NextResponse.json(
+            { error: createError.message || 'Failed to create user' },
+            { status: 500 }
+          );
+        }
+      } else if (newUserData?.user) {
+        user = newUserData.user;
+        isNewUser = true;
+        console.log('✅ Step 1 done - email user created:', user.id);
+        
+        // Step 2: Add phone number to the user (separate call, no trigger issues)
+        console.log('🔧 Step 2: Adding phone to user...');
+        const { error: phoneUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+          user.id,
+          {
+            phone,
+            phone_confirm: true,
+          }
+        );
+        if (phoneUpdateError) {
+          // Non-fatal: user is created, phone just wasn't added to auth.users
+          // The phone will still be stored in public.users profile below
+          console.warn('⚠️ Could not add phone to auth user (non-fatal):', phoneUpdateError.message);
+        } else {
+          console.log('✅ Step 2 done - phone added to auth user');
+        }
+      } else {
+        console.error('❌ No user data returned from createUser');
+        return NextResponse.json(
+          { error: 'Failed to create user' },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Validate user was found or created
+    if (!user || !user.id) {
+      console.error('❌ No valid user found or created');
+      return NextResponse.json(
+        { error: 'Failed to authenticate user' },
+        { status: 500 }
+      );
+    }
+
+    // 7. Sync profile to public.users table
+    console.log('🔄 Syncing user profile to users table...');
+    
+    const { data: existingProfile, error: profileCheckError } = await supabaseAdmin
+      .from('users')
+      .select('id, phone_number, email')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileCheckError && profileCheckError.code !== 'PGRST116') {
+      console.error('⚠️ Error checking user profile:', profileCheckError);
+    }
+
+    if (!existingProfile) {
+      // Create profile (trigger may not have run yet or may have been the old version)
+      console.log('📝 Creating user profile in users table...');
+      const { error: insertError } = await supabaseAdmin
+        .from('users')
+        .insert({
+          id: user.id,
+          phone_number: phone,
+          email: optionalEmail, // User's real email (optional, not the internal auth email)
+          primary_auth_method: 'mobile',
+          phone_verified_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (insertError) {
+        console.error('⚠️ Insert failed (trigger may have created row), trying update...');
+        await supabaseAdmin
+          .from('users')
+          .update({
+            phone_number: phone,
+            ...(optionalEmail ? { email: optionalEmail } : {}),
+            primary_auth_method: 'mobile',
+            phone_verified_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+      }
+    } else {
+      // Update existing profile
+      const updates: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+        primary_auth_method: 'mobile',
+        phone_verified_at: new Date().toISOString(),
+      };
+      if (existingProfile.phone_number !== phone) updates.phone_number = phone;
+      if (optionalEmail && !existingProfile.email) updates.email = optionalEmail;
+      
+      await supabaseAdmin.from('users').update(updates).eq('id', user.id);
+      console.log('✅ User profile synced');
+    }
+
+    // 8. For EXISTING users, update credentials (new users already have them from createUser)
+    if (!isNewUser) {
+      console.log('🔐 Updating credentials for existing user:', user.id);
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        user.id,
+        {
+          email: internalEmail,
+          email_confirm: true,
+          password: tempPassword,
+          phone_confirm: true,
+        }
+      );
+
+      if (updateError) {
+        console.error('❌ Error updating user credentials:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to create session', details: updateError.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    console.log('✅ Ready - returning credentials for frontend signin');
+
+    // 9. Return credentials for frontend signin
+    return NextResponse.json({
+      success: true,
+      user: {
+        id: user.id,
+        phone: phone,
+      },
+      credentials: {
+        email: internalEmail,
+        password: tempPassword,
+      }
+    });
+  } catch (error) {
+    console.error('❌ Unhandled error in phone-login route:', error);
+    return NextResponse.json(
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}

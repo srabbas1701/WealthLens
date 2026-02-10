@@ -14,6 +14,9 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { requirePaidAction } from '@/lib/capabilities/server';
+import { CAPABILITY_KEYS } from '@/types/capabilities';
+import { incrementTrialUsage } from '@/lib/entitlements';
 import { normalizeHoldings } from '@/lib/portfolio-intelligence/asset-normalization';
 import {
   calculateStabilityAnalysis,
@@ -32,16 +35,19 @@ interface StabilityAnalyticsResponse {
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requirePaidAction(CAPABILITY_KEYS.SCENARIO_ANALYSIS);
+    if (!guard.ok) return guard.response;
+
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('user_id');
-    
-    if (!userId) {
+    const requestedUserId = searchParams.get('user_id') ?? guard.userId;
+    if (requestedUserId !== guard.userId) {
       return NextResponse.json<StabilityAnalyticsResponse>(
-        { success: false, error: 'User ID is required' },
-        { status: 400 }
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
       );
     }
-    
+    const userId = requestedUserId;
+
     const supabase = createAdminClient();
     
     // 1. Get user's primary portfolio
@@ -167,7 +173,10 @@ export async function GET(request: NextRequest) {
     
     // 6. Calculate stability analysis
     const analysis = calculateStabilityAnalysis(normalizedHoldings);
-    
+
+    // Increment scenario usage if still on trial (incrementTrialUsage re-checks ends_at)
+    await incrementTrialUsage(guard.supabase, guard.userId, 'scenario');
+
     return NextResponse.json<StabilityAnalyticsResponse>({
       success: true,
       data: analysis,

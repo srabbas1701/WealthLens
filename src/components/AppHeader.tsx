@@ -3,7 +3,7 @@
 import { createContext, useState, useEffect, ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, SparklesIcon } from '@/components/icons';
+import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, SparklesIcon, XIcon } from '@/components/icons';
 import { useAuthSession, useAuthAppData } from '@/lib/auth';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
 import { type CurrencyFormat } from '@/lib/currency/formatCurrency';
@@ -27,6 +27,16 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('currencyFormat') as CurrencyFormat;
     if (saved && ['raw', 'lacs', 'crores'].includes(saved)) {
       setFormat(saved);
+    } else {
+      // Mobile-first default: use Lacs on smaller screens where raw values are huge
+      try {
+        if (typeof window !== 'undefined') {
+          const isMobileViewport = window.innerWidth <= 768;
+          setFormat(isMobileViewport ? 'lacs' : 'raw');
+        }
+      } catch {
+        setFormat('raw');
+      }
     }
   }, []);
 
@@ -93,6 +103,7 @@ export function AppHeader({
   const router = useRouter();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Close user menu when clicking outside (must be before early return)
@@ -113,8 +124,7 @@ export function AppHeader({
   }, [showUserMenu]);
 
   // EARLY RETURN GUARD: Landing page and demo routes
-  // Return simple header that doesn't depend on portfolio/onboarding state
-  // This ensures / loads instantly without waiting for portfolio queries
+  // Use marketing header that reuses the same mobile navigation pattern
   if (isLandingPage || isInDemoMode) {
     const handleLogout = () => {
       setShowLogoutModal(false);
@@ -126,10 +136,26 @@ export function AppHeader({
       signOut({ reason: 'manual', skipRedirect: true }).catch(() => {});
     };
 
-    // Return landing/demo header (no portfolio dependencies)
     return (
       <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+        {/* Mobile header: Logo + single menu icon */}
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between md:hidden">
+          <div className="flex items-center gap-3">
+            <LogoLockup iconSize="w-8 h-8" />
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2563EB]"
+            aria-label="Open navigation menu"
+            data-testid="mobile-menu-button"
+          >
+            <UserIcon className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Desktop header: marketing navigation */}
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 hidden md:flex items-center justify-between">
           {/* Left: Logo */}
           <div className="flex items-center gap-3">
             <LogoLockup iconSize="w-8 h-8" />
@@ -140,16 +166,16 @@ export function AppHeader({
             <a href="#features" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
               Features
             </a>
-            <a href="#trust" className="text-xs text-[#6B7280] hover:text-[#0F172A] transition-colors font-medium">
+            <a href="#trust" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
               Trust
             </a>
-            <a href="#pricing" className="text-xs text-[#6B7280] hover:text-[#0F172A] transition-colors font-medium">
+            <a href="#pricing" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
               Pricing
             </a>
           </nav>
 
           {/* Right: Navigation and Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden md:flex items-center gap-2 sm:gap-3">
             {/* Theme Toggle */}
             <ThemeToggle />
             
@@ -195,7 +221,7 @@ export function AppHeader({
                         onClick={() => setShowUserMenu(false)}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left"
                       >
-                        <ShieldCheckIcon className="w-4 h-4 text-[#6B7280]" />
+                        <ShieldCheckIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8]" />
                         <span>Security</span>
                       </Link>
                       <button
@@ -205,7 +231,7 @@ export function AppHeader({
                         }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left"
                       >
-                        <LogOutIcon className="w-4 h-4 text-[#6B7280]" />
+                        <LogOutIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8]" />
                         <span>Logout</span>
                       </button>
                     </div>
@@ -230,6 +256,76 @@ export function AppHeader({
             )}
           </div>
         </div>
+
+        {/* Mobile navigation sheet for marketing routes (logged out experience) */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden fixed inset-0 z-[60] bg-black/40" onClick={() => setIsMobileMenuOpen(false)}>
+            <div
+              className="absolute top-0 left-0 right-0 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155] rounded-b-2xl shadow-lg pt-4 pb-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4">
+                <span className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Menu</span>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#F1F5F9] dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC]"
+                  aria-label="Close navigation menu"
+                >
+                  <XIcon className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="mt-4 px-4 space-y-2">
+                <Link
+                  href="/"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-[#F9FAFB] dark:bg-[#111827] hover:bg-[#E5E7EB] dark:hover:bg-[#111827]/80 transition-colors"
+                >
+                  Home
+                </Link>
+                <Link
+                  href="/#features"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F9FAFB] dark:hover:bg-[#111827] transition-colors"
+                >
+                  Features
+                </Link>
+                <Link
+                  href="/demo"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F9FAFB] dark:hover:bg-[#111827] transition-colors"
+                >
+                  Demo
+                </Link>
+                <Link
+                  href="/#pricing"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F9FAFB] dark:hover:bg-[#111827] transition-colors"
+                >
+                  Pricing
+                </Link>
+                <Link
+                  href="/login"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#020617] hover:bg-[#F9FAFB] dark:hover:bg-[#111827] transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/signup"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block w-full px-4 py-3 rounded-lg text-sm font-semibold text-white bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+                >
+                  Get Started
+                </Link>
+                <div className="pt-3 mt-1 border-t border-[#E5E7EB] dark:border-[#334155] flex items-center justify-between">
+                  <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Theme</span>
+                  <ThemeToggle />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Logout Confirmation Modal */}
         <LogoutConfirmationModal
@@ -256,7 +352,24 @@ export function AppHeader({
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]" style={{ pointerEvents: 'auto' }}>
-      <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between" style={{ pointerEvents: 'auto' }}>
+      {/* Mobile header: minimal layout (Logo + single action icon) */}
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between md:hidden" style={{ pointerEvents: 'auto' }}>
+        <div className="flex items-center gap-3">
+          <LogoLockup />
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2563EB]"
+          aria-label="Open navigation menu"
+          data-testid="mobile-menu-button"
+        >
+          <UserIcon className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Desktop / tablet header */}
+      <div className="max-w-[1400px] mx-auto px-6 h-16 hidden md:flex items-center justify-between" style={{ pointerEvents: 'auto' }}>
         {/* Left: Logo and Back Button */}
         <div className="flex items-center gap-4">
           <LogoLockup />
@@ -270,10 +383,10 @@ export function AppHeader({
             </Link>
           )}
         </div>
-
+        
         {/* Center: Currency Format Selector (only show on app routes when authenticated and has portfolio) */}
         {isAppRoute && authStatus === 'authenticated' && user && hasPortfolio && (
-          <div className="flex items-center gap-2 bg-[#F6F8FB] dark:bg-[#1E293B] rounded-lg p-1">
+          <div className="hidden md:flex items-center gap-2 bg-[#F6F8FB] dark:bg-[#1E293B] rounded-lg p-1">
             <button
               onClick={() => setFormat('raw')}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
@@ -306,9 +419,9 @@ export function AppHeader({
             </button>
           </div>
         )}
-
+        
         {/* Right: Navigation and Actions */}
-        <div className="flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-3">
           {/* Theme Toggle */}
           <ThemeToggle />
           
@@ -449,6 +562,103 @@ export function AppHeader({
           )}
         </div>
       </div>
+
+      {/* Mobile navigation sheet */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-[60] bg-black/40" onClick={() => setIsMobileMenuOpen(false)}>
+          <div
+            className="absolute top-0 left-0 right-0 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155] rounded-b-2xl shadow-lg pt-4 pb-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4">
+              <span className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Menu</span>
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#F1F5F9] dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC]"
+                aria-label="Close navigation menu"
+              >
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="mt-4 px-4 space-y-2">
+              {!isInDemoMode && authStatus === 'authenticated' && user ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-[#F9FAFB] dark:bg-[#111827] hover:bg-[#E5E7EB] dark:hover:bg-[#111827]/80 transition-colors"
+                  >
+                    Dashboard
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      window.dispatchEvent(new CustomEvent('openCopilot'));
+                      if (!pathname?.startsWith('/dashboard')) {
+                        sessionStorage.setItem('navigation_source', 'header');
+                        sessionStorage.setItem('navigation_time', Date.now().toString());
+                        router.push('/dashboard?openHelp=true');
+                      }
+                    }}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-[#ECFDF5] dark:bg-[#022C22] hover:bg-[#DCFCE7] dark:hover:bg-[#064E3B] transition-colors"
+                  >
+                    <span>Help</span>
+                    <SparklesIcon className="w-4 h-4" />
+                  </button>
+                  <Link
+                    href="/account"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F9FAFB] dark:hover:bg-[#111827] transition-colors"
+                  >
+                    Account Settings
+                  </Link>
+                  <Link
+                    href="/security"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F9FAFB] dark:hover:bg-[#111827] transition-colors"
+                  >
+                    Security
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setShowLogoutModal(true);
+                    }}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium text-[#B91C1C] dark:text-[#FCA5A5] hover:bg-[#FEF2F2] dark:hover:bg-[#7F1D1D]/40 transition-colors"
+                  >
+                    <span>Logout</span>
+                    <LogOutIcon className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-[#F9FAFB] dark:bg-[#111827] hover:bg-[#E5E7EB] dark:hover:bg-[#111827]/80 transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/signup"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block w-full px-4 py-3 rounded-lg text-sm font-semibold text-white bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
+              <div className="pt-3 mt-1 border-t border-[#E5E7EB] dark:border-[#334155] flex items-center justify-between">
+                <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Theme</span>
+                <ThemeToggle />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Logout Confirmation Modal */}
       <LogoutConfirmationModal

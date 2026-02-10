@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { getCopilotContext, logCopilotSession } from '@/lib/db/copilot-context';
+import { requirePaidAction } from '@/lib/capabilities/server';
+import { CAPABILITY_KEYS } from '@/types/capabilities';
+import { incrementTrialUsage } from '@/lib/entitlements';
 import type { 
   CopilotQueryRequest, 
   CopilotQueryResponse,
@@ -699,16 +702,24 @@ function applyPostLLMGuardrails(response: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requirePaidAction(CAPABILITY_KEYS.USE_AI_HELP);
+    if (!guard.ok) return guard.response;
+
     const body: CopilotQueryRequest = await request.json();
-    
-    // Validate required fields
+
     if (!body.question || !body.user_id) {
       return NextResponse.json(
         { error: 'Missing required fields: question and user_id' },
         { status: 400 }
       );
     }
-    
+    if (body.user_id !== guard.userId) {
+      return NextResponse.json(
+        { error: 'Forbidden', details: 'user_id does not match authenticated user' },
+        { status: 403 }
+      );
+    }
+
     // Step 1: Apply pre-LLM guardrails
     const guardrailResult = applyPreLLMGuardrails(body.question);
     const guardrailsTriggered: string[] = [];
@@ -733,8 +744,7 @@ export async function POST(request: NextRequest) {
       
       // Log the blocked query
       try {
-        const supabase = await createClient();
-        await logCopilotSession(supabase, {
+        await logCopilotSession(guard.supabase, {
           user_id: body.user_id,
           session_id: body.session_id || 'anonymous',
           question: body.question,
@@ -760,8 +770,7 @@ export async function POST(request: NextRequest) {
     let usedRealData = false;
     
     try {
-      const supabase = await createClient();
-      const ctx = await getCopilotContext(supabase, body.user_id);
+      const ctx = await getCopilotContext(guard.supabase, body.user_id);
       
       if (ctx) {
         const transformed = transformSupabaseContext(ctx);
@@ -810,8 +819,7 @@ export async function POST(request: NextRequest) {
     
     // Step 6: Log session to Supabase
     try {
-      const supabase = await createClient();
-      await logCopilotSession(supabase, {
+      await logCopilotSession(guard.supabase, {
         user_id: body.user_id,
         session_id: body.session_id || 'anonymous',
         question: body.question,
@@ -825,7 +833,10 @@ export async function POST(request: NextRequest) {
       console.error('Failed to log session:', logError);
       // Don't fail the request if logging fails
     }
-    
+
+    // Step 7: Increment AI usage if still on trial (incrementTrialUsage re-checks ends_at)
+    await incrementTrialUsage(guard.supabase, guard.userId, 'ai');
+
     return NextResponse.json(response);
     
   } catch (error) {

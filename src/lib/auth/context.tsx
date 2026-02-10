@@ -383,6 +383,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAppDataLoading(false);
           }
         }
+        
+        // Save optional phone from localStorage (set during email signup)
+        // This handles the case where user signed up via email and provided an optional phone
+        if (event === 'SIGNED_IN' && session.user) {
+          try {
+            const pendingPhone = localStorage.getItem('signup_optional_phone');
+            if (pendingPhone) {
+              localStorage.removeItem('signup_optional_phone');
+              console.log('[Auth] Saving optional phone from email signup:', pendingPhone);
+              // Save to user profile via API (fire-and-forget, non-blocking)
+              fetch('/api/auth/save-optional-contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  userId: session.user.id, 
+                  phoneNumber: pendingPhone 
+                }),
+              }).catch((err) => {
+                console.error('[Auth] Failed to save optional phone:', err);
+              });
+            }
+          } catch {
+            // localStorage may not be available (SSR, private browsing)
+          }
+        }
       } else {
         // SIGNED_OUT or no session
         setSession(null);

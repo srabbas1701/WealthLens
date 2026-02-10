@@ -600,6 +600,19 @@ export default function PropertyDetailPage() {
       return '—';
     }
   };
+  
+  const formatPropertyType = (propertyType: RealEstatePropertyDetailData['propertyType']): string => {
+    if (!propertyType) return '—';
+    return `${propertyType.charAt(0).toUpperCase()}${propertyType.slice(1)}`;
+  };
+
+  const formatPropertyStatus = (
+    propertyStatus: RealEstatePropertyDetailData['propertyStatus']
+  ): string => {
+    if (propertyStatus === 'under_construction') return 'Under Construction';
+    if (propertyStatus === 'ready') return 'Ready';
+    return '—';
+  };
 
   // Format tenure helper
   const formatTenure = (months: number | null): string => {
@@ -678,7 +691,7 @@ export default function PropertyDetailPage() {
                 </Badge>
               </div>
               <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                {data.city} • {data.propertyType.charAt(0).toUpperCase() + data.propertyType.slice(1)} • {data.propertyStatus === 'under_construction' ? 'Under Construction' : 'Ready'}
+                {data.city} • {formatPropertyType(data.propertyType)} • {formatPropertyStatus(data.propertyStatus)}
               </p>
             </div>
             <div className="flex items-center gap-3 shrink-0">

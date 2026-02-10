@@ -4,14 +4,16 @@
  *
  * GET /api/portfolio/health-score?user_id=xxx
  *
- * Returns the Portfolio Health Score (0-100) with 7 weighted pillars,
- * deductions, risks, and improvement suggestions.
+ * Requires PORTFOLIO_HEALTH_SCORE capability (use hasCapability; never check plan === premium).
+ * Returns the Portfolio Health Score (0-100) with 7 weighted pillars.
  */
 
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { requirePaidAction } from '@/lib/capabilities/server';
+import { CAPABILITY_KEYS } from '@/types/capabilities';
 import {
   normalizeHoldings,
   NormalizedHolding,
@@ -33,16 +35,19 @@ interface HealthScoreResponse {
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requirePaidAction(CAPABILITY_KEYS.PORTFOLIO_HEALTH_SCORE);
+    if (!guard.ok) return guard.response;
+
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('user_id');
-    
-    if (!userId) {
+    const requestedUserId = searchParams.get('user_id') ?? guard.userId;
+    if (requestedUserId !== guard.userId) {
       return NextResponse.json<HealthScoreResponse>(
-        { success: false, error: 'User ID is required' },
-        { status: 400 }
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
       );
     }
-    
+    const userId = requestedUserId;
+
     const supabase = createAdminClient();
     
     // 1. Get user's primary portfolio

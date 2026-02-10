@@ -274,7 +274,7 @@ function DashboardContent() {
   // CRITICAL: useAuthAppData triggers lazy loading of portfolio/profile data
   // This MUST be called on dashboard route for hasPortfolio/portfolioCheckComplete to work
   const { profile, hasPortfolio, portfolioCheckComplete } = useAuthAppData();
-  const { formatCurrency } = useCurrency();
+  const { format, setFormat, formatCurrency } = useCurrency();
   const redirectAttemptedRef = useRef(false);
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous portfolio fetches
   const fetchingAiSummaryRef = useRef(false); // Prevent duplicate AI summary fetches
@@ -348,6 +348,7 @@ function DashboardContent() {
   // Portfolio Health Score state (fetched from API)
   const [portfolioHealthScore, setPortfolioHealthScore] = useState<PortfolioHealthScore | null>(null);
   const [healthScoreLoading, setHealthScoreLoading] = useState(false);
+  const [showUnitHint, setShowUnitHint] = useState(false);
 
   // PERMANENT FIX: Simplified - use portfolioCheckComplete as single source of truth
   // Removed portfolioCheckTimeout to eliminate race conditions
@@ -363,6 +364,30 @@ function DashboardContent() {
       localStorage.setItem(viewedKey, 'true');
     }
   }, [user]);
+
+  // One-time unit switch hint (mobile-only)
+  useEffect(() => {
+    if (!user?.id) return;
+    if (typeof window === 'undefined') return;
+
+    const storageKey = `unit_hint_dismissed_${user.id}`;
+    if (localStorage.getItem(storageKey)) {
+      setShowUnitHint(false);
+      return;
+    }
+
+    setShowUnitHint(true);
+    const timer = setTimeout(() => {
+      setShowUnitHint(false);
+      try {
+        localStorage.setItem(storageKey, 'auto');
+      } catch {
+        // ignore
+      }
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, [user?.id]);
 
   // Track when insights are viewed
   useEffect(() => {
@@ -1118,6 +1143,19 @@ function DashboardContent() {
     );
   }
 
+  const handleUnitFormatChange = (nextFormat: 'raw' | 'lacs' | 'crores') => {
+    setFormat(nextFormat);
+    if (showUnitHint && typeof window !== 'undefined' && user?.id) {
+      const storageKey = `unit_hint_dismissed_${user.id}`;
+      try {
+        localStorage.setItem(storageKey, 'tap');
+      } catch {
+        // ignore
+      }
+      setShowUnitHint(false);
+    }
+  };
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
@@ -1130,7 +1168,7 @@ function DashboardContent() {
         {/* ============================================================================ */}
         {/* ZONE 1: HEADER */}
         {/* ============================================================================ */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Dashboard</h1>
             <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">{greeting}, {userName}</p>
@@ -1138,6 +1176,53 @@ function DashboardContent() {
           <div className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
             Last 12 months
           </div>
+        </div>
+
+        {/* Currency unit toggle - mobile-first, directly under Dashboard title */}
+        <div className="mb-6 md:hidden">
+          <div
+            className="flex w-full rounded-full bg-[#F9FAFB] dark:bg-[#020617] border border-[#E5E7EB] dark:border-[#1E293B] p-1"
+            data-testid="unit-toggle-mobile"
+          >
+            <button
+              type="button"
+              onClick={() => handleUnitFormatChange('raw')}
+              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                format === 'raw'
+                  ? 'bg-white dark:bg-[#111827] text-[#2563EB] dark:text-[#60A5FA] shadow-sm'
+                  : 'text-[#6B7280] dark:text-[#94A3B8]'
+              }`}
+            >
+              Raw
+            </button>
+            <button
+              type="button"
+              onClick={() => handleUnitFormatChange('lacs')}
+              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                format === 'lacs'
+                  ? 'bg-white dark:bg-[#111827] text-[#2563EB] dark:text-[#60A5FA] shadow-sm'
+                  : 'text-[#6B7280] dark:text-[#94A3B8]'
+              }`}
+            >
+              Lacs
+            </button>
+            <button
+              type="button"
+              onClick={() => handleUnitFormatChange('crores')}
+              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                format === 'crores'
+                  ? 'bg-white dark:bg-[#111827] text-[#2563EB] dark:text-[#60A5FA] shadow-sm'
+                  : 'text-[#6B7280] dark:text-[#94A3B8]'
+              }`}
+            >
+              Crores
+            </button>
+          </div>
+          {showUnitHint && (
+            <p className="mt-1 text-[10px] text-[#6B7280] dark:text-[#9CA3AF]">
+              Tap to change units
+            </p>
+          )}
         </div>
 
         {/* ============================================================================ */}
@@ -1230,7 +1315,10 @@ function DashboardContent() {
           position="bottom"
         >
           <section className="mb-6">
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-10">
+            <div
+              className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] px-6 py-8 sm:p-10"
+              data-testid="dashboard-net-worth-card"
+            >
               <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-4">Total Net Worth</p>
               {portfolioLoading ? (
                 <div className="h-16 w-64 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-4" />
@@ -1267,7 +1355,9 @@ function DashboardContent() {
 
                     return (
                       <>
-                        <h2 className="text-6xl font-semibold text-[#0A2540] dark:text-[#F8FAFC] number-emphasis mb-4">{formatCurrency(displayNetWorth)}</h2>
+                        <h2 className="font-semibold text-[#0A2540] dark:text-[#F8FAFC] number-emphasis mb-4 break-words text-[clamp(2.25rem,4.8vw,3.75rem)]">
+                          {formatCurrency(displayNetWorth)}
+                        </h2>
                         <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-4">
                           Net Worth = Assets (excluding Insurance) − Liabilities
                         </p>

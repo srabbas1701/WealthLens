@@ -33,6 +33,9 @@ interface GoldHoldingRequest {
   gross_weight?: number;
   net_weight?: number;
   making_charges?: number;
+  // Physical Gold (Coin/Bar) metadata
+  physical_quantity?: number;
+  total_grams?: number;
   // Gold ETF fields
   etf_name?: string;
   isin?: string;
@@ -233,6 +236,8 @@ export async function POST(req: NextRequest) {
       gross_weight,
       net_weight,
       making_charges,
+      physical_quantity,
+      total_grams,
       etf_name,
       isin,
       exchange,
@@ -268,11 +273,20 @@ export async function POST(req: NextRequest) {
       metadata.maturity_date = maturity_date;
       metadata.interest_rate = interest_rate || 2.5;
     } else if (gold_type === 'physical') {
-      metadata.form = form || 'jewellery';
+      const upperForm = (form || 'jewellery').toUpperCase();
+      metadata.form = upperForm;
       metadata.purity = purity || '22k';
-      metadata.gross_weight = gross_weight;
-      metadata.net_weight = net_weight;
-      metadata.making_charges = making_charges;
+
+      if (upperForm === 'JEWELLERY') {
+        // Jewellery: weights and making charges only
+        metadata.gross_weight = gross_weight;
+        metadata.net_weight = net_weight;
+        metadata.making_charges = making_charges;
+      } else if (upperForm === 'COIN' || upperForm === 'BAR') {
+        // Coin / Bar: quantity & total grams only
+        metadata.quantity = physical_quantity;
+        metadata.total_grams = total_grams;
+      }
     } else if (gold_type === 'etf') {
       metadata.etf_name = etf_name;
       metadata.isin = isin;
@@ -374,7 +388,32 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body: GoldHoldingRequest = await req.json();
-    const { holding_id, user_id, gold_type, invested_amount, quantity, unit_type, purchase_date, ...metadata } = body;
+    const {
+      holding_id,
+      user_id,
+      gold_type,
+      invested_amount,
+      quantity,
+      unit_type,
+      purchase_date,
+      form,
+      purity,
+      gross_weight,
+      net_weight,
+      making_charges,
+      physical_quantity,
+      total_grams,
+      series_name,
+      issue_date,
+      maturity_date,
+      interest_rate,
+      etf_name,
+      isin,
+      exchange,
+      platform,
+      provider,
+      vaulted,
+    } = body;
 
     if (!holding_id || !user_id) {
       return NextResponse.json(
@@ -404,16 +443,43 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Update metadata
+    // Update metadata with clean, type-specific shape
     const fullMetadata: any = {
       gold_type,
       unit_type,
       purchase_date,
-      ...metadata,
     };
 
+    if (gold_type === 'sgb') {
+      fullMetadata.series_name = series_name;
+      fullMetadata.issue_date = issue_date;
+      fullMetadata.maturity_date = maturity_date;
+      fullMetadata.interest_rate = interest_rate || 2.5;
+    } else if (gold_type === 'physical') {
+      const upperForm = (form || 'jewellery').toUpperCase();
+      fullMetadata.form = upperForm;
+      fullMetadata.purity = purity || '22k';
+
+      if (upperForm === 'JEWELLERY') {
+        fullMetadata.gross_weight = gross_weight;
+        fullMetadata.net_weight = net_weight;
+        fullMetadata.making_charges = making_charges;
+      } else if (upperForm === 'COIN' || upperForm === 'BAR') {
+        fullMetadata.quantity = physical_quantity;
+        fullMetadata.total_grams = total_grams;
+      }
+    } else if (gold_type === 'etf') {
+      fullMetadata.etf_name = etf_name;
+      fullMetadata.isin = isin;
+      fullMetadata.exchange = exchange || 'NSE';
+    } else if (gold_type === 'digital') {
+      fullMetadata.platform = platform;
+      fullMetadata.provider = provider;
+      fullMetadata.vaulted = vaulted || false;
+    }
+
     // Update asset name if changed
-    const assetName = createAssetName(gold_type || 'gold', metadata);
+    const assetName = createAssetName(gold_type || 'gold', fullMetadata);
     await adminClient
       .from('assets')
       .update({ name: assetName })

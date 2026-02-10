@@ -55,6 +55,9 @@ interface GoldHolding {
   grossWeight?: number;
   netWeight?: number;
   makingCharges?: number;
+  // Physical Gold (Coin/Bar) metadata
+  physicalQuantity?: number;
+  totalGrams?: number;
   // Gold ETF fields
   etfName?: string;
   isin?: string;
@@ -170,11 +173,15 @@ export default function GoldHoldingsPage() {
                 maturityDate: notes.maturity_date,
                 interestRate: notes.interest_rate,
                 // Physical Gold fields
-                form: notes.form,
+                form: typeof notes.form === 'string'
+                  ? (notes.form.toLowerCase() as 'jewellery' | 'coin' | 'bar')
+                  : undefined,
                 purity: notes.purity,
                 grossWeight: notes.gross_weight,
                 netWeight: notes.net_weight,
                 makingCharges: notes.making_charges,
+                physicalQuantity: notes.quantity,
+                totalGrams: notes.total_grams,
                 // Gold ETF fields
                 etfName: notes.etf_name,
                 isin: notes.isin,
@@ -800,6 +807,8 @@ export default function GoldHoldingsPage() {
             grossWeight: editingHolding.grossWeight,
             netWeight: editingHolding.netWeight,
             makingCharges: editingHolding.makingCharges,
+            physicalQuantity: editingHolding.physicalQuantity,
+            totalGrams: editingHolding.totalGrams,
             etfName: editingHolding.etfName,
             isin: editingHolding.isin,
             exchange: editingHolding.exchange,

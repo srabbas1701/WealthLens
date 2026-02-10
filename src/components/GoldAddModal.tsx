@@ -64,6 +64,10 @@ interface FormData {
   // Physical Gold fields
   form: 'jewellery' | 'coin' | 'bar';
   purity: string;
+  // For Physical Gold (Coin/Bar)
+  physicalQuantity: number | null;
+  totalGrams: number | null;
+  // For Physical Gold (Jewellery)
   grossWeight: number | null;
   netWeight: number | null;
   makingCharges: number | null;
@@ -120,6 +124,8 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
     interestRate: 2.5,
     form: 'jewellery',
     purity: '22k',
+    physicalQuantity: null,
+    totalGrams: null,
     grossWeight: null,
     netWeight: null,
     makingCharges: null,
@@ -146,6 +152,17 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
         interestRate: existingHolding.interestRate || 2.5,
         form: existingHolding.form || 'jewellery',
         purity: existingHolding.purity || '22k',
+        physicalQuantity: (existingHolding.form === 'coin' || existingHolding.form === 'bar')
+          ? // Prefer explicit metadata quantity if present in future, else fall back gracefully
+            (existingHolding as any).physicalQuantity ?? null
+          : null,
+        totalGrams: (existingHolding.form === 'coin' || existingHolding.form === 'bar')
+          ? // Prefer explicit total grams if present, else fall back to quantity/net/gross
+            (existingHolding as any).totalGrams ??
+            existingHolding.netWeight ??
+            existingHolding.grossWeight ??
+            existingHolding.quantity
+          : existingHolding.netWeight ?? existingHolding.grossWeight ?? existingHolding.quantity,
         grossWeight: existingHolding.grossWeight || null,
         netWeight: existingHolding.netWeight || null,
         makingCharges: existingHolding.makingCharges || null,
@@ -251,13 +268,9 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
       return;
     }
 
+    // Common required fields
     if (!formData.investedAmount || formData.investedAmount <= 0) {
       setError('Please enter invested amount');
-      return;
-    }
-
-    if (!formData.quantity || formData.quantity <= 0) {
-      setError('Please enter quantity');
       return;
     }
 
@@ -267,20 +280,74 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
     }
 
     // Type-specific validation
-    if (formData.goldType === 'sgb') {
-      if (!formData.seriesName) {
-        setError('Please enter series name');
+    if (formData.goldType === 'physical') {
+      const isJewellery = formData.form === 'jewellery';
+
+      if (isJewellery) {
+        // Jewellery validations
+        if (!formData.grossWeight || formData.grossWeight <= 0) {
+          setError('Please enter gross weight greater than 0');
+          return;
+        }
+        if (!formData.netWeight || formData.netWeight <= 0) {
+          setError('Please enter net weight greater than 0');
+          return;
+        }
+        if (formData.netWeight > formData.grossWeight) {
+          setError('Net weight cannot be greater than gross weight');
+          return;
+        }
+        if (formData.makingCharges === null || formData.makingCharges === undefined || formData.makingCharges < 0) {
+          setError('Making charges must be 0 or more');
+          return;
+        }
+      } else {
+        // Coin / Bar validations
+        const qty = formData.physicalQuantity;
+        const totalGrams = formData.totalGrams;
+
+        if (!qty || qty < 1 || !Number.isInteger(qty)) {
+          setError('Quantity must be an integer of at least 1');
+          return;
+        }
+
+        if (!totalGrams || totalGrams <= 0) {
+          setError('Total grams must be greater than 0');
+          return;
+        }
+
+        // Guard: jewellery-only fields must not be set
+        if (
+          formData.grossWeight !== null ||
+          formData.netWeight !== null ||
+          formData.makingCharges !== null
+        ) {
+          setError('Gross weight, net weight, and making charges are not required for coins/bars');
+          return;
+        }
+      }
+    } else {
+      // Non-physical types keep existing quantity validation
+      if (!formData.quantity || formData.quantity <= 0) {
+        setError('Please enter quantity');
         return;
       }
-    } else if (formData.goldType === 'etf') {
-      if (!formData.etfName || !selectedEtf) {
-        setError('Please select a Gold ETF from the dropdown');
-        return;
-      }
-    } else if (formData.goldType === 'digital') {
-      if (!formData.platform) {
-        setError('Please enter platform');
-        return;
+
+      if (formData.goldType === 'sgb') {
+        if (!formData.seriesName) {
+          setError('Please enter series name');
+          return;
+        }
+      } else if (formData.goldType === 'etf') {
+        if (!formData.etfName || !selectedEtf) {
+          setError('Please select a Gold ETF from the dropdown');
+          return;
+        }
+      } else if (formData.goldType === 'digital') {
+        if (!formData.platform) {
+          setError('Please enter platform');
+          return;
+        }
       }
     }
 
@@ -305,8 +372,26 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
     setError(null);
 
     try {
+      const isPhysical = formData.goldType === 'physical';
+
       // For ETFs, always use 'unit' as unit_type
-      const unitType = formData.goldType === 'etf' ? 'unit' : formData.unitType;
+      // For Physical Gold, normalize to grams
+      const unitType: UnitType = formData.goldType === 'etf'
+        ? 'unit'
+        : isPhysical
+          ? 'gram'
+          : formData.unitType;
+
+      // Derive backend quantity depending on physical form
+      let backendQuantity = formData.quantity || 0;
+      if (isPhysical) {
+        if (formData.form === 'jewellery') {
+          backendQuantity = formData.netWeight ?? formData.grossWeight ?? 0;
+        } else {
+          // Coin / Bar: quantity tracks total grams for valuation
+          backendQuantity = formData.totalGrams ?? 0;
+        }
+      }
       
       const response = await fetch('/api/gold/holdings', {
         method: existingHolding ? 'PUT' : 'POST',
@@ -316,7 +401,7 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
           holding_id: existingHolding?.id,
           gold_type: formData.goldType,
           invested_amount: formData.investedAmount,
-          quantity: formData.quantity,
+          quantity: backendQuantity,
           unit_type: unitType,
           purchase_date: formData.purchaseDate,
           // SGB fields
@@ -327,9 +412,28 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
           // Physical Gold fields
           form: formData.goldType === 'physical' ? formData.form : undefined,
           purity: formData.goldType === 'physical' ? formData.purity : undefined,
-          gross_weight: formData.goldType === 'physical' ? formData.grossWeight : undefined,
-          net_weight: formData.goldType === 'physical' ? formData.netWeight : undefined,
-          making_charges: formData.goldType === 'physical' ? formData.makingCharges : undefined,
+          // Jewellery metadata
+          gross_weight:
+            formData.goldType === 'physical' && formData.form === 'jewellery'
+              ? formData.grossWeight
+              : undefined,
+          net_weight:
+            formData.goldType === 'physical' && formData.form === 'jewellery'
+              ? formData.netWeight
+              : undefined,
+          making_charges:
+            formData.goldType === 'physical' && formData.form === 'jewellery'
+              ? formData.makingCharges
+              : undefined,
+          // Coin / Bar metadata
+          physical_quantity:
+            formData.goldType === 'physical' && formData.form !== 'jewellery'
+              ? formData.physicalQuantity
+              : undefined,
+          total_grams:
+            formData.goldType === 'physical' && formData.form !== 'jewellery'
+              ? formData.totalGrams
+              : undefined,
           // Gold ETF fields
           etf_name: formData.goldType === 'etf' ? formData.etfName : undefined,
           isin: formData.goldType === 'etf' ? formData.isin : undefined,
@@ -477,6 +581,261 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
         );
 
       case 'form':
+        // Dedicated layout for Physical Gold form
+        if (formData.goldType === 'physical') {
+          const isJewellery = formData.form === 'jewellery';
+          const isCoinOrBar = formData.form === 'coin' || formData.form === 'bar';
+
+          return (
+            <div className="space-y-6">
+              {/* 1. Form (Jewellery / Coin / Bar) */}
+              <div>
+                <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  Form
+                </label>
+                <select
+                  value={formData.form}
+                  onChange={(e) => {
+                    const nextForm = e.target.value as 'jewellery' | 'coin' | 'bar';
+                    setFormData(prev => {
+                      const nextIsJewellery = nextForm === 'jewellery';
+                      const nextIsCoinOrBar = nextForm === 'coin' || nextForm === 'bar';
+
+                      // Purity default logic
+                      let nextPurity = prev.purity;
+                      if (nextForm === 'jewellery') {
+                        nextPurity = '22k';
+                      } else if (nextForm === 'coin' || nextForm === 'bar') {
+                        nextPurity = '24k';
+                      }
+
+                      return {
+                        ...prev,
+                        form: nextForm,
+                        purity: nextPurity,
+                        // When switching to jewellery, clear quantity/grams
+                        physicalQuantity: nextIsJewellery ? null : prev.physicalQuantity,
+                        totalGrams: nextIsJewellery ? null : prev.totalGrams,
+                        // When switching to coin/bar, clear jewellery-only fields
+                        grossWeight: nextIsCoinOrBar ? null : prev.grossWeight,
+                        netWeight: nextIsCoinOrBar ? null : prev.netWeight,
+                        makingCharges: nextIsCoinOrBar ? null : prev.makingCharges,
+                      };
+                    });
+                  }}
+                  className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-colors"
+                >
+                  <option value="jewellery">Jewellery</option>
+                  <option value="coin">Coin</option>
+                  <option value="bar">Bar</option>
+                </select>
+              </div>
+
+              {/* 2. Purity with default logic but editable */}
+              <div>
+                <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  Purity
+                </label>
+                <select
+                  value={formData.purity}
+                  onChange={(e) => setFormData(prev => ({ ...prev, purity: e.target.value }))}
+                  className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-colors"
+                >
+                  <option value="24k">24k</option>
+                  <option value="22k">22k</option>
+                  <option value="18k">18k</option>
+                </select>
+              </div>
+
+              {/* 3. Invested Amount */}
+              <div>
+                <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  Invested Amount (₹) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  value={formData.investedAmount || ''}
+                  onChange={(e) =>
+                    setFormData(prev => ({
+                      ...prev,
+                      investedAmount: e.target.value ? parseFloat(e.target.value) : null,
+                    }))
+                  }
+                  className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
+                  placeholder="100000"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              {/* 4. Quantity & Total Grams (Coin/Bar only) */}
+              <div>
+                <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  Quantity &amp; Total Grams
+                </label>
+                <div className="flex gap-4">
+                  <input
+                    type="number"
+                    value={formData.physicalQuantity ?? ''}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        physicalQuantity: e.target.value ? parseInt(e.target.value, 10) || null : null,
+                      }))
+                    }
+                    disabled={!isCoinOrBar}
+                    className={`flex-1 px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-opacity ${
+                      !isCoinOrBar ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                    placeholder="Number of coins/bars"
+                    min="1"
+                    step="1"
+                  />
+                  <input
+                    type="number"
+                    value={formData.totalGrams ?? ''}
+                    onChange={(e) =>
+                      setFormData(prev => ({
+                        ...prev,
+                        totalGrams: e.target.value ? parseFloat(e.target.value) || null : null,
+                        // Keep quantity in sync for valuation/review
+                        quantity: e.target.value ? parseFloat(e.target.value) || null : prev.quantity,
+                      }))
+                    }
+                    disabled={!isCoinOrBar}
+                    className={`flex-1 px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-opacity ${
+                      !isCoinOrBar ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                    placeholder="Total grams"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                {isCoinOrBar && (
+                  <p className="mt-1 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                    Quantity is the number of coins/bars. Total grams is the combined gold weight.
+                  </p>
+                )}
+                {!isCoinOrBar && (
+                  <p className="mt-1 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                    Quantity and total grams are not required for jewellery.
+                  </p>
+                )}
+              </div>
+
+              {/* 5. Purchase Date */}
+              <div>
+                <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  Purchase Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={formData.purchaseDate}
+                  onChange={(e) => setFormData(prev => ({ ...prev, purchaseDate: e.target.value }))}
+                  className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
+                  max={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+
+              {/* 6. Physical Gold Details (Jewellery only) */}
+              {isJewellery && (
+                <div className="space-y-4 pt-4 border-t border-[#E5E7EB] dark:border-[#334155]">
+                  <h3 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                    Physical Gold Details
+                  </h3>
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Gross Weight (grams)
+                      <div className="group relative">
+                        <InfoIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] cursor-help" />
+                        <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-[#0F172A] dark:bg-[#F8FAFC] text-white dark:text-[#0F172A] text-xs rounded-lg shadow-lg z-50">
+                          Total weight including stones, other metals, and impurities. This is the weight shown on your bill.
+                        </div>
+                      </div>
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.grossWeight || ''}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          grossWeight: e.target.value ? parseFloat(e.target.value) || null : null,
+                        }))
+                      }
+                      className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
+                      placeholder="10"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Net Weight (grams)
+                      <div className="group relative">
+                        <InfoIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] cursor-help" />
+                        <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-[#0F172A] dark:bg-[#F8FAFC] text-white dark:text-[#0F172A] text-xs rounded-lg shadow-lg z-50">
+                          Pure gold weight after removing stones and other materials. This is the weight used for valuation. Usually lower than gross weight.
+                        </div>
+                      </div>
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.netWeight || ''}
+                      onChange={(e) =>
+                        setFormData(prev => {
+                          const nextNet = e.target.value ? parseFloat(e.target.value) || null : null;
+                          return {
+                            ...prev,
+                            netWeight: nextNet,
+                            // Keep quantity in sync for valuation/review
+                            quantity: nextNet ?? prev.quantity,
+                          };
+                        })
+                      }
+                      className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
+                      placeholder="8"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                      Making Charges (₹)
+                      <div className="group relative">
+                        <InfoIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] cursor-help" />
+                        <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-[#0F172A] dark:bg-[#F8FAFC] text-white dark:text-[#0F172A] text-xs rounded-lg shadow-lg z-50">
+                          Labor and design charges paid to the jeweller. This is separate from the gold value and is not recovered when selling.
+                        </div>
+                      </div>
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.makingCharges || ''}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          makingCharges: e.target.value ? parseFloat(e.target.value) || null : null,
+                        }))
+                      }
+                      className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
+                      placeholder="5000"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Default form layout for non-physical gold types
         return (
           <div className="space-y-6">
             {/* Common Fields */}
@@ -598,99 +957,6 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
               </div>
             )}
 
-            {formData.goldType === 'physical' && (
-              <div className="space-y-4 pt-4 border-t border-[#E5E7EB] dark:border-[#334155]">
-                <h3 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Physical Gold Details</h3>
-                <div>
-                  <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    Form
-                  </label>
-                  <select
-                    value={formData.form}
-                    onChange={(e) => setFormData(prev => ({ ...prev, form: e.target.value as 'jewellery' | 'coin' | 'bar' }))}
-                    className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
-                  >
-                    <option value="jewellery">Jewellery</option>
-                    <option value="coin">Coin</option>
-                    <option value="bar">Bar</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    Purity
-                  </label>
-                  <select
-                    value={formData.purity}
-                    onChange={(e) => setFormData(prev => ({ ...prev, purity: e.target.value }))}
-                    className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
-                  >
-                    <option value="24k">24k</option>
-                    <option value="22k">22k</option>
-                    <option value="18k">18k</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    Gross Weight (grams)
-                    <div className="group relative">
-                      <InfoIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] cursor-help" />
-                      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-[#0F172A] dark:bg-[#F8FAFC] text-white dark:text-[#0F172A] text-xs rounded-lg shadow-lg z-50">
-                        Total weight including stones, other metals, and impurities. This is the weight shown on your bill.
-                      </div>
-                    </div>
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.grossWeight || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, grossWeight: parseFloat(e.target.value) || null }))}
-                    className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
-                    placeholder="10"
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    Net Weight (grams)
-                    <div className="group relative">
-                      <InfoIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] cursor-help" />
-                      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-[#0F172A] dark:bg-[#F8FAFC] text-white dark:text-[#0F172A] text-xs rounded-lg shadow-lg z-50">
-                        Pure gold weight after removing stones and other materials. This is the weight used for valuation. Usually lower than gross weight.
-                      </div>
-                    </div>
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.netWeight || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, netWeight: parseFloat(e.target.value) || null }))}
-                    className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
-                    placeholder="8"
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                    Making Charges (₹)
-                    <div className="group relative">
-                      <InfoIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] cursor-help" />
-                      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-3 bg-[#0F172A] dark:bg-[#F8FAFC] text-white dark:text-[#0F172A] text-xs rounded-lg shadow-lg z-50">
-                        Labor and design charges paid to the jeweller. This is separate from the gold value and is not recovered when selling.
-                      </div>
-                    </div>
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.makingCharges || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, makingCharges: parseFloat(e.target.value) || null }))}
-                    className="w-full px-4 py-2 border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6]"
-                    placeholder="5000"
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-              </div>
-            )}
 
             {formData.goldType === 'etf' && (
               <div className="space-y-4 pt-4 border-t border-[#E5E7EB] dark:border-[#334155]">

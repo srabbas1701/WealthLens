@@ -23,6 +23,17 @@ export async function getRealEstatePropertyDetailData(
 ): Promise<RealEstatePropertyDetailData> {
   const { asset, loan, cashflow, ownershipAdjusted } = assetData;
 
+  const toISODate = (dateValue: string | null): string | null => {
+    if (!dateValue) {
+      return null;
+    }
+    const parsed = new Date(dateValue);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+    return parsed.toISOString().split('T')[0];
+  };
+
   // Compute analytics
   const analytics = await calculatePerAssetAnalytics(assetData);
 
@@ -63,16 +74,15 @@ export async function getRealEstatePropertyDetailData(
       : null;
 
   // Format purchase date
-  const purchaseDate = asset.purchase_date
-    ? new Date(asset.purchase_date).toISOString().split('T')[0]
-    : null;
+  const purchaseDate = toISODate(asset.purchase_date ?? null);
 
   return {
     // Basic Property Info
     propertyId: asset.id,
     propertyName: asset.property_nickname,
     city: asset.city,
-    propertyType: asset.property_type,
+    propertyType: asset.property_type ?? null,
+    propertyStatus: asset.property_status ?? null,
     ownershipPercentage,
 
     // KPI Fields

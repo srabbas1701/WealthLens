@@ -21,7 +21,7 @@ import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { RefreshIcon } from '@/components/icons';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import { useToast } from '@/components/Toast';
-import { useSubscription } from '@/hooks/useSubscription';
+import { useCapabilities, CAPABILITY_KEYS } from '@/lib/capabilities';
 import { generateStocksPDF } from '@/lib/pdf/generateStocksPDF';
 import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { Plus, Edit, Trash2, X, Search } from 'lucide-react';
@@ -51,7 +51,7 @@ export default function StocksHoldingsPage() {
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
-  const { isPremium, loading: subscriptionLoading } = useSubscription();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const fetchingRef = useRef(false);
   
   const [loading, setLoading] = useState(true);
@@ -519,35 +519,23 @@ export default function StocksHoldingsPage() {
     .filter((date): date is string => date !== null && date !== undefined)
     .sort((a, b) => b.localeCompare(a))[0] || null;
 
-  // Download handler with premium check
+  // Download handler: use hasCapability (never check plan === premium)
   const handleDownload = useCallback(async () => {
-    console.log('[Download] Handler called - starting download process');
-    alert('Download button clicked! Starting PDF generation...'); // Temporary test
-    
-    // TODO: Re-enable premium check once subscription logic is fully implemented
-    // For now, allow all authenticated users to download
-    
-    // Check if subscription status is still loading
-    // if (subscriptionLoading) {
-    //   showToast({
-    //     type: 'info',
-    //     title: 'Loading...',
-    //     message: 'Please wait while we check your subscription status.',
-    //     duration: 3000,
-    //   });
-    //   return;
-    // }
+    if (capabilitiesLoading) {
+      showToast({
+        type: 'info',
+        title: 'Loading...',
+        message: 'Please wait while we check your access.',
+        duration: 3000,
+      });
+      return;
+    }
+    if (!hasCapability(CAPABILITY_KEYS.PDF_REPORTS)) {
+      setShowPremiumModal(true);
+      return;
+    }
 
-    // Check if user is premium
-    // if (!isPremium) {
-    //   setShowPremiumModal(true);
-    //   return;
-    // }
-
-    // Generate PDF for all authenticated users (temporary - until premium logic is implemented)
     try {
-      console.log('[Download] Starting PDF generation...', { stocksCount: stocks.length, totalValue });
-      
       if (!stocks || stocks.length === 0) {
         showToast({
           type: 'warning',
@@ -572,7 +560,6 @@ export default function StocksHoldingsPage() {
         allocation: stock.allocation,
       }));
 
-      console.log('[Download] Calling generateStocksPDF with', pdfData.length, 'stocks');
       await generateStocksPDF({
         stocks: pdfData,
         totalValue,
@@ -582,7 +569,6 @@ export default function StocksHoldingsPage() {
         formatCurrency,
       });
 
-      console.log('[Download] PDF generation complete');
       showToast({
         type: 'success',
         title: 'PDF Downloaded',
@@ -598,8 +584,7 @@ export default function StocksHoldingsPage() {
         duration: 5000,
       });
     }
-    // TODO: Re-add isPremium and subscriptionLoading to dependencies when premium check is re-enabled
-  }, [stocks, totalValue, totalInvested, portfolioPercentage, mostRecentPriceDate, formatCurrency, showToast]);
+  }, [stocks, totalValue, totalInvested, portfolioPercentage, mostRecentPriceDate, formatCurrency, showToast, hasCapability, capabilitiesLoading]);
 
   // Group holdings
   const groupedStocks = (() => {
@@ -942,7 +927,6 @@ export default function StocksHoldingsPage() {
       <PremiumDownloadModal
         isOpen={showPremiumModal}
         onClose={() => setShowPremiumModal(false)}
-        featureName="Download Stocks Holdings PDF"
       />
 
     </div>

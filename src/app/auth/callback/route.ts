@@ -20,6 +20,8 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
 import type { Database } from '@/types/database';
+import { createAdminClient } from '@/lib/supabase/server';
+import { ensureUserSubscription } from '@/lib/ensure-user-subscription';
 
 export async function GET(request: NextRequest) {
   try {
@@ -145,6 +147,39 @@ export async function GET(request: NextRequest) {
 
     if (!authError && user) {
       console.log('[Auth Callback] Authentication successful, checking portfolio...');
+
+      // Ensure public.users row exists (trigger was removed; we create from app)
+      try {
+        const admin = createAdminClient();
+        const { data: existingProfile } = await admin
+          .from('users')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (!existingProfile) {
+          const { error: insertErr } = await admin.from('users').insert({
+            id: user.id,
+            email: user.email ?? null,
+            phone_number: user.phone ?? null,
+            primary_auth_method: user.phone ? 'mobile' : 'email',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          if (insertErr) {
+            console.warn('[Auth Callback] Could not create user profile (non-fatal):', insertErr.message);
+          } else {
+            console.log('[Auth Callback] Created user profile in public.users');
+          }
+        }
+      } catch (e) {
+        console.warn('[Auth Callback] Profile sync skipped:', e);
+      }
+
+      try {
+        await ensureUserSubscription(user.id);
+      } catch (e) {
+        console.warn('[Auth Callback] Subscription ensure skipped (non-fatal):', e);
+      }
       
       // MOBILE FIX: Ensure session is properly stored before redirect
       // Get session to verify it's stored

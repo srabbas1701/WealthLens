@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { AppHeader } from '@/components/AppHeader';
 import { LogoLockup } from '@/components/LogoLockup';
+import { usePlans } from '@/hooks/usePlans';
 
 /**
  * Terms of Service - LensOnWealth
@@ -12,6 +13,12 @@ import { LogoLockup } from '@/components/LogoLockup';
  */
 
 export default function TermsOfServicePage() {
+  const { plans, loading: plansLoading } = usePlans();
+  
+  // Find free and premium plans based on price (API returns id, name, monthly_price, annual_price)
+  const freePlan = plans.find(p => p.monthly_price === 0 || p.monthly_price === null);
+  const premiumPlan = plans.find(p => p.monthly_price != null && p.monthly_price > 0);
+  
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader />
@@ -201,7 +208,14 @@ export default function TermsOfServicePage() {
           </ul>
 
           <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            5.2 Premium Tier (₹499/month or ₹4,999/year)
+            5.2 {premiumPlan ? premiumPlan.name : 'Premium'} Tier
+            {premiumPlan && (premiumPlan.monthly_price != null || premiumPlan.annual_price != null) && (
+              <span className="text-lg font-normal text-[#6B7280] dark:text-[#94A3B8] ml-2">
+                ({premiumPlan.monthly_price != null && `₹${premiumPlan.monthly_price.toLocaleString('en-IN')}/month`}
+                {premiumPlan.monthly_price != null && premiumPlan.annual_price != null && ' or '}
+                {premiumPlan.annual_price != null && `₹${premiumPlan.annual_price.toLocaleString('en-IN')}/year`})
+              </span>
+            )}
           </h3>
           <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
             <li>• Everything in Free tier</li>

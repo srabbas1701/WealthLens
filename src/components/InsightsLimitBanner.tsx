@@ -1,19 +1,14 @@
 /**
- * Insights Limit Banner
- * 
- * Shows when user has more insights available than free tier limit.
- * Appears below the visible insights, non-blocking.
+ * Shows when more insights are available than free tier shows. All locked actions route through ShowPaywall.
  */
 
 'use client';
 
-import Link from 'next/link';
-import { InfoIcon, ArrowRightIcon } from '@/components/icons';
+import ShowPaywall from '@/components/ShowPaywall';
+import { CAPABILITY_KEYS } from '@/lib/capabilities';
 
 interface InsightsLimitBannerProps {
-  /** Total insights available */
   totalInsights: number;
-  /** Number of insights shown (free tier limit) */
   shownInsights: number;
 }
 
@@ -22,41 +17,16 @@ export default function InsightsLimitBanner({
   shownInsights,
 }: InsightsLimitBannerProps) {
   const remaining = totalInsights - shownInsights;
+  if (remaining <= 0) return null;
 
-  if (remaining <= 0) {
-    return null; // Don't show if no additional insights
-  }
+  const bannerDetail = `You have ${remaining} more insight${remaining !== 1 ? 's' : ''} available.`;
 
   return (
-    <div className="bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155] p-4 mt-2">
-      <div className="flex items-start gap-3">
-        <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 mt-0.5" />
-        <div className="flex-1">
-          <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-1">
-            You have {remaining} more insight{remaining !== 1 ? 's' : ''} available
-          </p>
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-3">
-            Upgrade to Premium to see all insights, including concentration risk analysis, 
-            diversification recommendations, and tax optimization insights.
-          </p>
-          <Link
-            href="/upgrade"
-            className="inline-flex items-center gap-2 text-sm font-medium text-[#2563EB] dark:text-[#3B82F6] hover:text-[#1E40AF] dark:hover:text-[#2563EB] transition-colors"
-          >
-            View All Insights
-            <ArrowRightIcon className="w-4 h-4" />
-          </Link>
-        </div>
-      </div>
-    </div>
+    <ShowPaywall
+      reason="insights_limit"
+      capability={CAPABILITY_KEYS.ADVANCED_INSIGHTS}
+      variant="banner"
+      bannerDetail={bannerDetail}
+    />
   );
 }
-
-
-
-
-
-
-
-
-
