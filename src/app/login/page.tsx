@@ -84,6 +84,8 @@ function LoginContent() {
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   // Guard: MSG91 widget may call error callback after success (e.g. on unmount) - ignore spurious errors
   const verificationSucceededRef = useRef(false);
+  // Track authMethod for MSG91 init guard (user may switch to Email while script is loading)
+  const authMethodRef = useRef(authMethod);
   
   // UI state
   const [isLoading, setIsLoading] = useState(false);
@@ -91,8 +93,9 @@ function LoginContent() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
-  // Get redirect URL from query params
+  // Get redirect URL and error from query params
   const redirectUrl = searchParams.get('redirect') || '/dashboard';
+  const urlError = searchParams.get('error');
   
   // Check for logout confirmation message
   useEffect(() => {
@@ -115,6 +118,18 @@ function LoginContent() {
       return () => clearTimeout(timer);
     }
   }, [searchParams, router]);
+
+  /**
+   * Handler for "Resend Login Link" button (from ?error= callback).
+   * Switches to email tab so user can request a new magic link.
+   */
+  const handleResendLoginLinkFromError = () => {
+    setAuthMethod('email');
+    setEmailStep('email');
+    setError(null);
+    setSuccess(null);
+    router.replace('/login', { scroll: false });
+  };
   
   // GUARD: Redirect if already authenticated
   // RULE: Never redirect while authStatus === 'loading'
@@ -198,10 +213,29 @@ function LoginContent() {
     }
   }, [otpStep]);
 
-  // Load MSG91 widget script and initialize ONCE, after script load
+  // Keep authMethodRef in sync for MSG91 onload guard (handles tab switch during script load)
   useEffect(() => {
+    authMethodRef.current = authMethod;
+  }, [authMethod]);
+
+  /**
+   * MSG91 widget: Initialize ONLY when Mobile tab is active.
+   * - Email tab active → no initialization (avoids loading MSG91 when user chose email)
+   * - Mobile tab active → initialize once (__msg91Initialized prevents duplicate registration)
+   * - Switch Email → Mobile → initializes
+   * - Switch Mobile → Email → no reinitialize; switching back uses existing widget
+   */
+  useEffect(() => {
+    // Only initialize when user has Mobile tab selected
+    if (authMethod !== "mobile") return;
+
+    // Already initialized (e.g. user switched Mobile → Email → Mobile) — no duplicate init
     // @ts-ignore
-    if (typeof window !== 'undefined' && window.__msg91Initialized) return;
+    if (typeof window !== "undefined" && window.__msg91Initialized) return;
+
+    // Script already in DOM (e.g. from previous init attempt) — wait for load or skip
+    const existingScript = document.getElementById("msg91-widget");
+    if (existingScript) return;
 
     const script = document.createElement("script");
     script.id = "msg91-widget";
@@ -209,6 +243,11 @@ function LoginContent() {
     script.async = true;
 
     script.onload = () => {
+      // Guard: user may have switched to Email while script was loading
+      if (authMethodRef.current !== "mobile") return;
+      // @ts-ignore
+      if (window.__msg91Initialized) return;
+
       // @ts-ignore
       window.initSendOTP({
         widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
@@ -224,7 +263,17 @@ function LoginContent() {
     };
 
     document.body.appendChild(script);
-  }, []);
+
+    // Cleanup: remove script element if user switches to Email BEFORE it loads.
+    // Prevents initSendOTP from running when onload fires (avoids init on wrong tab).
+    // Once __msg91Initialized is set, we leave script in DOM to avoid CustomElementRegistry errors.
+    return () => {
+      // @ts-ignore
+      if (typeof window === "undefined" || window.__msg91Initialized) return;
+      const scriptEl = document.getElementById("msg91-widget");
+      if (scriptEl) scriptEl.remove();
+    };
+  }, [authMethod]);
   
   /**
    * Guarded MSG91 sendOtp wrapper
@@ -724,6 +773,27 @@ function LoginContent() {
               </div>
             )}
             
+            {/* Query param error (expired/invalid magic link) */}
+            {urlError && (
+              <div className="mb-6 p-4 bg-[#FEF2F2] dark:bg-[#7F1D1D] border border-[#FEE2E2] dark:border-[#991B1B] rounded-lg">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] dark:text-[#EF4444] flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-[#991B1B] dark:text-[#FCA5A5]">
+                      Your login link expired or was opened in a different browser. Please request a new link.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResendLoginLinkFromError}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+                  >
+                    Resend Login Link
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Error Message */}
             {error && (
               <div className="mb-6 p-4 bg-[#FEF2F2] dark:bg-[#7F1D1D] border border-[#FEE2E2] dark:border-[#991B1B] rounded-lg">

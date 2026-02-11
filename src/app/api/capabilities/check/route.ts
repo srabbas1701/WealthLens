@@ -11,9 +11,9 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data: { user }, error } = await supabase.auth.getUser();
 
-    if (sessionError || !session?.user) {
+    if (error || !user) {
       return NextResponse.json(
         { error: 'Unauthorized', details: 'User not authenticated' },
         { status: 401 }
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const hasAccess = await hasCapability(session.user.id, capabilityKey, supabase);
+    const hasAccess = await hasCapability(user.id, capabilityKey, supabase);
     return NextResponse.json({ hasAccess });
   } catch (error) {
     console.error('[Capability Check API] Unexpected error:', error);

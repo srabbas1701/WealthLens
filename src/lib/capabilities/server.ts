@@ -43,9 +43,9 @@ export async function requireCapability(
   supabase?: SupabaseClient
 ): Promise<RequireCapabilityResult> {
   const db = supabase ?? (await createClient());
-  const { data: { session }, error: sessionError } = await db.auth.getSession();
+  const { data: { user }, error } = await db.auth.getUser();
 
-  if (sessionError || !session?.user) {
+  if (error || !user) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -55,7 +55,7 @@ export async function requireCapability(
     };
   }
 
-  const allowed = await hasCapability(session.user.id, capabilityKey, db);
+  const allowed = await hasCapability(user.id, capabilityKey, db);
   if (!allowed) {
     return {
       ok: false,
@@ -66,7 +66,7 @@ export async function requireCapability(
     };
   }
 
-  return { ok: true, userId: session.user.id, supabase: db };
+  return { ok: true, userId: user.id, supabase: db };
 }
 
 /** Capability keys that consume a per-period limit; value is the key in entitlements for remaining count. */
@@ -94,9 +94,9 @@ export async function requirePaidAction(
   supabase?: SupabaseClient
 ): Promise<RequirePaidActionResult> {
   const db = supabase ?? (await createClient());
-  const { data: { session }, error: sessionError } = await db.auth.getSession();
+  const { data: { user }, error } = await db.auth.getUser();
 
-  if (sessionError || !session?.user) {
+  if (error || !user) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -106,7 +106,7 @@ export async function requirePaidAction(
     };
   }
 
-  const entitlements = await getUserEntitlements(session.user.id, db);
+  const entitlements = await getUserEntitlements(user.id, db);
 
   if (entitlements[capabilityKey] !== true) {
     return {
@@ -135,7 +135,7 @@ export async function requirePaidAction(
 
   return {
     ok: true,
-    userId: session.user.id,
+    userId: user.id,
     supabase: db,
     entitlements,
   };

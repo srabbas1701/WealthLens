@@ -4,7 +4,7 @@
 **Project:** LensOnWealth (Investment Portfolio Management)  
 **Authentication Method:** Phone-only OTP using MSG91 Widget  
 **Backend:** Supabase Auth  
-**Last Updated:** January 2026
+**Last Updated:** January 2026 (Stability Patch Applied)
 
 ---
 
@@ -431,21 +431,18 @@ export async function POST(req: NextRequest) {
       await supabaseAdmin.auth.admin.listUsers();
     
     if (listError) {
-      console.error('❌ Error listing users:', listError);
-      return NextResponse.json(
-        { error: 'Failed to check existing users' },
-        { status: 500 }
-      );
+      throw listError;   
     }
 
     // Flexible phone matching (handles different formats)
+    // ⚠️ DO NOT replace with getUserByEmail unless upgrading SDK.
+    // Current stable implementation depends on listUsers().
     const normalizeForMatch = (p: string) => p.replace(/\D/g, '');
     const searchDigits = normalizeForMatch(phone);
     
     let user = usersData?.users?.find((u) => {
       if (!u.phone) return false;
-      const userDigits = normalizeForMatch(u.phone);
-      return userDigits === searchDigits;
+      return normalizeForMatch(u.phone) === searchDigits;
     });
 
     // 4. CREATE NEW USER IF NOT EXISTS
@@ -715,7 +712,43 @@ export default function LoginPage() {
   );
 }
 ```
+🟢 2️⃣ Add “STABILITY LOCK” Section After Architecture Overview
 
+Add this new section:
+
+🔒 Stability Lock (Important – Do Not Refactor Without Audit)
+
+After multiple implementation attempts, the following architecture is now locked and stable:
+
+Identity Resolution Method
+  Uses supabase.auth.admin.listUsers()
+  Finds user by matching phone digits only
+  DOES NOT use:
+    getUserByEmail
+    admin.createSession
+    generateLink
+  SDK Version: @supabase/supabase-js@2.88.0
+
+Internal Email Rule (Critical)
+const internalEmail = `${user.phone?.replace(/\D/g, '')}@lensonwealth.app`;
+
+Must always derive from digits only
+Must never depend on normalizePhone
+Must never change format
+Changing this breaks login for existing users
+
+Phone Storage Rule
+
+  Phone must be saved in E.164 format
+  +91XXXXXXXXXX
+  Handled via normalizePhone()
+
+Why We Avoid getUserByEmail()
+
+  Not available in current SDK version
+  Caused runtime error:
+    supabase.auth.admin.getUserByEmail is not a function
+  listUsers() is intentionally retained for compatibility
 ---
 
 ## 7. Testing Guide
@@ -1080,8 +1113,71 @@ This implementation successfully enables **phone-only authentication using MSG91
 **Result:** Working, secure, cost-effective phone authentication for Indian users without DLT registration requirements.
 
 ---
+11. Post-Stabilization Audit (January 2026)
 
-**Documentation Version:** 1.0  
+After debugging loops during MSG91 integration, the following conclusions were locked:
+
+What Caused Previous Failures
+
+Attempted use of admin.createSession() (not available)
+
+Attempted use of getUserByEmail() (not available in SDK 2.88.0)
+
+Changing internal email derivation logic
+
+Mixing normalized phone with email generation
+
+Final Stabilized Architecture
+
+Email = digits only
+
+Phone = E.164
+
+listUsers() lookup
+
+Password rotated per login
+
+No triggers on auth.users
+
+No database hooks affecting auth insert
+
+Known Trade-Off
+
+Using listUsers() is not the most scalable approach long-term.
+However:
+
+Current user base size is safe
+
+System is stable
+
+Avoid refactor unless SDK is upgraded intentionally
+
+🟢 5️⃣ Add This Safety Warning
+
+Under “Key Learnings”, append:
+
+**Lesson 5: Do Not Refactor Stable Identity Logic Mid-Flow**
+
+If the MSG91 bridge is working:
+- Avoid switching identity resolution methods
+- Avoid introducing new Supabase admin methods
+- Upgrade SDK only with controlled testing
+
+✅ Why I Chose To Update Now (Before Audit)
+
+Because:
+
+The architecture is now stable
+
+Identity mapping is locked
+
+No further experimentation planned
+
+Audit should build on stable baseline
+
+If we audited first, we'd risk documenting unstable logic.
+----
+**Documentation Version:** 1.1 (Stability Locked)
 **Last Updated:** January 2026  
 **Author:** Implementation completed after 30+ hours of debugging  
 **Status:** ✅ Production-ready

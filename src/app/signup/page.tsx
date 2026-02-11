@@ -829,7 +829,8 @@ export default function SignupPage() {
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="you@example.com"
                           required
-                          className="w-full pl-10 pr-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all"
+                          disabled={isLoading}
+                          className="w-full pl-10 pr-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                         />
                       </div>
                       <p className="mt-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
@@ -846,7 +847,8 @@ export default function SignupPage() {
                         <select
                           value={optionalPhoneCountryCode}
                           onChange={(e) => setOptionalPhoneCountryCode(e.target.value)}
-                          className="w-28 px-3 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all text-sm"
+                          disabled={isLoading}
+                          className="w-28 px-3 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all text-sm disabled:opacity-70 disabled:cursor-not-allowed"
                         >
                           {COUNTRY_CODES.map((cc) => (
                             <option key={cc.code} value={cc.code} className="bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC]">
@@ -865,7 +867,8 @@ export default function SignupPage() {
                             onChange={(e) => setOptionalPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                             placeholder="10-digit number"
                             maxLength={10}
-                            className="w-full pl-10 pr-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all"
+                            disabled={isLoading}
+                            className="w-full pl-10 pr-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                           />
                         </div>
                       </div>
@@ -921,9 +924,16 @@ export default function SignupPage() {
                           type="button"
                           onClick={handleResendMagicLink}
                           disabled={isLoading}
-                          className="text-[#2563EB] dark:text-[#3B82F6] font-medium hover:text-[#1E40AF] dark:hover:text-[#60A5FA] disabled:opacity-50"
+                          className="text-[#2563EB] dark:text-[#3B82F6] font-medium hover:text-[#1E40AF] dark:hover:text-[#60A5FA] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                         >
-                          Resend link
+                          {isLoading ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-[#2563EB]/30 dark:border-[#3B82F6]/30 border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
+                              Resending...
+                            </>
+                          ) : (
+                            'Resend link'
+                          )}
                         </button>
                       </p>
                       <p className="text-xs text-[#9CA3AF] dark:text-[#64748B] mt-2">

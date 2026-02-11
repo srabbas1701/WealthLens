@@ -12,16 +12,16 @@ import { getUserEntitlements } from '@/lib/entitlements';
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data: { user }, error } = await supabase.auth.getUser();
 
-    if (sessionError || !session?.user) {
+    if (error || !user) {
       return NextResponse.json(
         { error: 'Unauthorized', details: 'User not authenticated' },
         { status: 401 }
       );
     }
 
-    const entitlements = await getUserEntitlements(session.user.id, supabase);
+    const entitlements = await getUserEntitlements(user.id, supabase);
     return NextResponse.json(entitlements);
   } catch (error) {
     console.error('[Entitlements API] Error:', error);

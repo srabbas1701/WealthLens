@@ -24,16 +24,16 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data: { user }, error } = await supabase.auth.getUser();
 
-    if (sessionError || !session?.user) {
+    if (error || !user) {
       return NextResponse.json(
         { error: 'Unauthorized', details: 'User not authenticated' },
         { status: 401 }
       );
     }
 
-    const userId = session.user.id;
+    const userId = user.id;
 
     // 1. Check trial: is_active && ends_at > now() → grant all capabilities (limits handled separately)
     const { data: trialRow, error: trialError } = await supabase

@@ -22,18 +22,18 @@ export async function POST() {
   try {
     const supabase = await createClient();
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
 
-    if (sessionError || !session?.user) {
+    if (error || !user) {
       return NextResponse.json(
         { error: 'Unauthorized', details: 'User not authenticated' },
         { status: 401 }
       );
     }
 
-    const userId = session.user.id;
+    const userId = user.id;
     const now = new Date();
     const endsAt = new Date(now);
     endsAt.setDate(endsAt.getDate() + TRIAL_DAYS);
