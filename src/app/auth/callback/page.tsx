@@ -9,22 +9,22 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleAuth = async () => {
-      const supabase = createClient()
-      const { data, error } = await supabase.auth.getSession()
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase.auth.getSession()
 
-      if (error) {
-        router.push(
-          `/login?error=${encodeURIComponent(
-            "Your login link is invalid or expired. Please request a new one."
-          )}`
-        )
-        return
-      }
+        if (error) {
+          router.push('/login?error=magic_link_invalid')
+          return
+        }
 
-      if (data.session) {
-        router.push('/dashboard')
-      } else {
-        router.push('/login')
+        if (data.session) {
+          router.push('/dashboard')
+        } else {
+          router.push('/login?error=magic_link_invalid')
+        }
+      } catch {
+        router.push('/login?error=magic_link_invalid')
       }
     }
 

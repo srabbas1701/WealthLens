@@ -119,6 +119,14 @@ function LoginContent() {
     }
   }, [searchParams, router]);
 
+  // When magic_link_invalid, switch to email tab so user can request new link
+  useEffect(() => {
+    if (searchParams.get('error') === 'magic_link_invalid') {
+      setAuthMethod('email');
+      setEmailStep('email');
+    }
+  }, [searchParams]);
+
   /**
    * Handler for "Resend Login Link" button (from ?error= callback).
    * Switches to email tab so user can request a new magic link.
@@ -773,14 +781,15 @@ function LoginContent() {
               </div>
             )}
             
-            {/* Query param error (expired/invalid magic link) */}
-            {urlError && (
+            {/* Query param error (magic link invalid/expired) */}
+            {urlError === 'magic_link_invalid' && (
               <div className="mb-6 p-4 bg-[#FEF2F2] dark:bg-[#7F1D1D] border border-[#FEE2E2] dark:border-[#991B1B] rounded-lg">
                 <div className="flex flex-col gap-3">
                   <div className="flex items-start gap-3">
                     <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] dark:text-[#EF4444] flex-shrink-0 mt-0.5" />
                     <p className="text-sm text-[#991B1B] dark:text-[#FCA5A5]">
-                      Your login link expired or was opened in a different browser. Please request a new link.
+                      This login link is invalid or was opened in a different browser.
+                      Please request a new login link.
                     </p>
                   </div>
                   <button
