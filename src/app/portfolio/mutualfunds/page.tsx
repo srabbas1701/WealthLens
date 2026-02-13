@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { calculatePortfolioXIRR } from '@/lib/xirr-calculator';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import {
   ArrowLeftIcon,
@@ -54,6 +54,7 @@ interface MFHolding {
 
 export default function MutualFundsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
@@ -235,6 +236,15 @@ export default function MutualFundsPage() {
       router.replace('/login?redirect=/portfolio/mutualfunds');
     }
   }, [authStatus, router]);
+
+  // Open add modal when navigated with ?add=1 (e.g. from Add Holding or onboarding)
+  useEffect(() => {
+    if (searchParams?.get('add') === '1' && user?.id) {
+      setShowAddMFModal(true);
+      const fromOnboarding = searchParams?.get('from') === 'onboarding';
+      router.replace(`/portfolio/mutualfunds${fromOnboarding ? '?from=onboarding' : ''}`, { scroll: false });
+    }
+  }, [searchParams, user?.id, router]);
 
   useEffect(() => {
     if (user?.id) {
@@ -882,12 +892,14 @@ export default function MutualFundsPage() {
     );
   }
 
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
+
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref="/dashboard"
-        backLabel="Back to Dashboard"
+        backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
+        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
         onDownload={handleDownload}
       />
@@ -898,14 +910,22 @@ export default function MutualFundsPage() {
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Mutual Fund Holdings</h1>
             <div className="flex items-center gap-3">
-              {/* ADD MF BUTTON */}
-              <button 
-                onClick={handleAddMF}
+              {/* ADD MF - navigates to add page (redirects to ?add=1) */}
+              <Link
+                href="/portfolio/mutualfunds/add"
                 className="flex items-center gap-2 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
               >
                 <Plus className="w-5 h-5" />
                 <span>Add MF</span>
-              </button>
+              </Link>
+              {/* ADD HOLDING - hub for FD, bonds, stocks, etc. */}
+              <Link
+                href="/portfolio/holdings/add"
+                className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add Holding</span>
+              </Link>
               
               {/* Update NAVs button */}
               <button

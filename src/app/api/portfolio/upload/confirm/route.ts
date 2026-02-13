@@ -53,7 +53,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import { getStockPrice } from '@/lib/stock-prices';
+import { getStockPrice, getStockPrices, type StockPrice } from '@/lib/stock-prices';
 import type { 
   ConfirmUploadRequest, 
   ConfirmUploadResponse,
@@ -538,7 +538,8 @@ async function mergeHolding(
   portfolioId: string,
   assetId: string,
   holding: ParsedHolding,
-  source: 'csv' | 'manual' | 'sample' | 'api'
+  source: 'csv' | 'manual' | 'sample' | 'api',
+  priceMap?: Map<string, StockPrice | null>
 ): Promise<{ created: boolean; merged: boolean }> {
   // Check if holding already exists
   const { data: existingHolding } = await supabase
@@ -573,7 +574,8 @@ async function mergeHolding(
       .single();
     
     if (asset.data?.asset_type === 'equity' && asset.data?.symbol) {
-      const priceData = await getStockPrice(asset.data.symbol);
+      const symbolKey = asset.data.symbol.toUpperCase();
+      const priceData = priceMap?.get(symbolKey) ?? await getStockPrice(asset.data.symbol);
       if (priceData && priceData.price) {
         currentValue = mergedQty * priceData.price;
       } else {
@@ -619,7 +621,8 @@ async function mergeHolding(
       .single();
     
     if (asset.data?.asset_type === 'equity' && asset.data?.symbol) {
-      const priceData = await getStockPrice(asset.data.symbol);
+      const symbolKey = asset.data.symbol.toUpperCase();
+      const priceData = priceMap?.get(symbolKey) ?? await getStockPrice(asset.data.symbol);
       if (priceData && priceData.price) {
         currentValue = holding.quantity * priceData.price;
       } else {
@@ -944,6 +947,14 @@ export async function POST(request: NextRequest) {
       portfolio = newPortfolio;
     }
     
+    // Pre-fetch all equity stock prices in one batch (reduces N DB queries to 1)
+    const equitySymbols = [...new Set(
+      validHoldings
+        .filter(h => h.asset_type === 'equity' && h.symbol)
+        .map(h => h.symbol!.toUpperCase())
+    )];
+    const priceMap = equitySymbols.length > 0 ? await getStockPrices(equitySymbols) : undefined;
+    
     // Process each holding
     let holdingsCreated = 0;
     let holdingsMerged = 0;
@@ -993,7 +1004,8 @@ export async function POST(request: NextRequest) {
           portfolio.id, 
           asset.id, 
           holding, 
-          source === 'onboarding' || source === 'dashboard' ? 'csv' : 'csv'
+          source === 'onboarding' || source === 'dashboard' ? 'csv' : 'csv',
+          priceMap
         );
         
         if (result.created) {

@@ -1027,10 +1027,10 @@ function LoginContent() {
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="you@example.com"
                           required
-                          className="w-full pl-10 pr-4 py-3 rounded-lg border border-[#E5E7EB] text-[#0F172A] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                          className="w-full pl-10 pr-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all"
                         />
                       </div>
-                      <p className="mt-2 text-xs text-[#6B7280]">
+                      <p className="mt-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
                         We'll send a secure login link to your email
                       </p>
                     </div>

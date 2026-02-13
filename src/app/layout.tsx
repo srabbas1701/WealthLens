@@ -39,32 +39,34 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                try {
-                  // Apply theme immediately, before any extensions run
-                  const theme = localStorage.getItem('theme');
-                  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  const isDark = theme === 'dark' || (!theme && prefersDark);
-                  
-                  const html = document.documentElement;
-                  if (isDark) {
-                    html.classList.add('dark');
-                    html.style.colorScheme = 'dark';
-                  } else {
-                    html.classList.remove('dark');
-                    html.style.colorScheme = 'light';
+                function applyTheme() {
+                  try {
+                    const theme = localStorage.getItem('theme');
+                    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const isDark = theme === 'dark' || (!theme && prefersDark);
+                    
+                    const html = document.documentElement;
+                    if (isDark) {
+                      html.classList.add('dark');
+                      html.style.colorScheme = 'dark';
+                    } else {
+                      html.classList.remove('dark');
+                      html.style.colorScheme = 'light';
+                    }
+                    
+                    html.style.setProperty('background-color', isDark ? '#0F172A' : '#F6F8FB', 'important');
+                    if (document.body) {
+                      document.body.style.setProperty('background-color', isDark ? '#0F172A' : '#F6F8FB', 'important');
+                    }
+                    html.style.setProperty('--background', isDark ? '#0F172A' : '#F6F8FB', 'important');
+                  } catch (e) {
+                    console.error('Theme initialization error:', e);
                   }
-                  
-                  // Force background colors immediately via inline styles with !important
-                  html.style.setProperty('background-color', isDark ? '#0F172A' : '#F6F8FB', 'important');
-                  if (document.body) {
-                    document.body.style.setProperty('background-color', isDark ? '#0F172A' : '#F6F8FB', 'important');
-                  }
-                  
-                  // Also set CSS variable for immediate use
-                  html.style.setProperty('--background', isDark ? '#0F172A' : '#F6F8FB', 'important');
-                } catch (e) {
-                  console.error('Theme initialization error:', e);
                 }
+                applyTheme();
+                window.addEventListener('pageshow', function(e) {
+                  if (e.persisted) applyTheme();
+                });
               })();
             `,
           }}

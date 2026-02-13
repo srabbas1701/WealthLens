@@ -15,7 +15,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { RefreshIcon } from '@/components/icons';
@@ -48,6 +49,7 @@ type GroupBy = 'none' | 'company' | 'sector';
 
 export default function StocksHoldingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
@@ -216,6 +218,15 @@ export default function StocksHoldingsPage() {
       router.replace('/login?redirect=/portfolio/stocks');
     }
   }, [authStatus, router]);
+
+  // Open add modal when navigated with ?add=1 (e.g. from Add Holding or onboarding)
+  useEffect(() => {
+    if (searchParams?.get('add') === '1' && user?.id) {
+      setShowAddStockModal(true);
+      const fromOnboarding = searchParams?.get('from') === 'onboarding';
+      router.replace(`/portfolio/stocks${fromOnboarding ? '?from=onboarding' : ''}`, { scroll: false });
+    }
+  }, [searchParams, user?.id, router]);
 
   useEffect(() => {
     if (user?.id) {
@@ -649,13 +660,15 @@ export default function StocksHoldingsPage() {
     return null; // Redirect happens in useEffect
   }
 
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
         <AppHeader 
           showBackButton={true}
-          backHref="/dashboard"
-          backLabel="Back to Dashboard"
+          backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
+          backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         />
         <div className="flex items-center justify-center h-screen">
           <div className="text-center">
@@ -671,8 +684,8 @@ export default function StocksHoldingsPage() {
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref="/dashboard"
-        backLabel="Back to Dashboard"
+        backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
+        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
         onDownload={() => {
           console.log('[Stocks Page] Direct handler called');
@@ -687,14 +700,22 @@ export default function StocksHoldingsPage() {
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Stocks Holdings</h1>
             <div className="flex items-center gap-3">
-              {/* ADD STOCK BUTTON */}
-              <button 
-                onClick={handleAddStock}
+              {/* ADD STOCK - navigates to add page */}
+              <Link
+                href="/portfolio/stocks/add"
                 className="flex items-center gap-2 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
               >
                 <Plus className="w-5 h-5" />
                 <span>Add Stock</span>
-              </button>
+              </Link>
+              {/* ADD HOLDING - hub for FD, bonds, MF, etc. */}
+              <Link
+                href="/portfolio/holdings/add"
+                className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add Holding</span>
+              </Link>
               
               {/* Update Prices button */}
               <button

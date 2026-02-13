@@ -99,15 +99,24 @@ export async function POST(req: NextRequest) {
     });
 
     /**
-     * 5️⃣ Sync public.users table (same as before)
+     * 5️⃣ Sync public.users table
+     * Uses only columns that exist in schema (no phone_verified_at, primary_auth_method)
      */
-    await supabaseAdmin.from('users').upsert({
+    const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : null;
+    const optionalEmail = typeof body.optionalEmail === 'string' ? body.optionalEmail.trim() : null;
+
+    const upsertPayload: Record<string, unknown> = {
       id: user.id,
       phone_number: normalizedPhone,
-      primary_auth_method: 'mobile',
-      phone_verified_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    });
+    };
+    if (fullName) upsertPayload.full_name = fullName;
+    if (optionalEmail && optionalEmail.includes('@')) upsertPayload.email = optionalEmail;
+
+    const { error: upsertError } = await supabaseAdmin.from('users').upsert(upsertPayload);
+    if (upsertError) {
+      console.warn('[phone-login] public.users upsert failed:', upsertError.message);
+    }
 
     /**
      * 6️⃣ Return credentials for frontend login

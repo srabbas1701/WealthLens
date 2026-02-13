@@ -15,6 +15,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 
 type SaveContactPayload = {
   userId: string;
+  fullName?: string;
   phoneNumber?: string;
   email?: string;
 };
@@ -30,9 +31,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!body.phoneNumber && !body.email) {
+    if (!body.fullName && !body.phoneNumber && !body.email) {
       return NextResponse.json(
-        { error: 'At least one contact field is required' },
+        { error: 'At least one of fullName, phoneNumber, or email is required' },
         { status: 400 }
       );
     }
@@ -48,10 +49,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Build update object (only set fields that aren't already populated)
+    const authEmail = authUser.user.email;
+    const isInternalEmail = authEmail?.endsWith('@lensonwealth.app');
+
     const { data: existingProfile } = await supabaseAdmin
       .from('users')
-      .select('id, phone_number, email')
+      .select('id, full_name, phone_number, email')
       .eq('id', body.userId)
       .maybeSingle();
 
@@ -59,46 +62,30 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
-    // Only set phone if not already set
+    if (body.fullName?.trim() && !existingProfile?.full_name) {
+      updates.full_name = body.fullName.trim();
+      console.log('👤 Saving full name for user:', body.userId);
+    }
     if (body.phoneNumber && !existingProfile?.phone_number) {
       updates.phone_number = body.phoneNumber;
       console.log('📱 Saving optional phone for user:', body.userId);
     }
-
-    // Only set email if not already set (or if it's an internal @lensonwealth.app email)
-    if (body.email && (!existingProfile?.email || existingProfile.email.endsWith('@lensonwealth.app'))) {
+    if (body.email && (!existingProfile?.email || existingProfile.email?.endsWith('@lensonwealth.app'))) {
       updates.email = body.email;
       console.log('📧 Saving optional email for user:', body.userId);
     }
 
-    if (Object.keys(updates).length <= 1) {
-      // Only updated_at, nothing to change
-      return NextResponse.json({ success: true, message: 'No updates needed' });
-    }
-
-    if (existingProfile) {
-      const { error: updateError } = await supabaseAdmin
-        .from('users')
-        .update(updates)
-        .eq('id', body.userId);
-
-      if (updateError) {
-        console.error('❌ Error updating profile:', updateError);
-        return NextResponse.json(
-          { error: 'Failed to update profile' },
-          { status: 500 }
-        );
-      }
-    } else {
-      // Profile doesn't exist yet, create it
+    if (!existingProfile) {
+      const insertPayload: Record<string, unknown> = {
+        id: body.userId,
+        full_name: body.fullName?.trim() || null,
+        phone_number: body.phoneNumber || null,
+        email: body.email || (authEmail && !isInternalEmail ? authEmail : null),
+        updated_at: new Date().toISOString(),
+      };
       const { error: insertError } = await supabaseAdmin
         .from('users')
-        .insert({
-          id: body.userId,
-          phone_number: body.phoneNumber || null,
-          email: body.email || null,
-          ...updates,
-        });
+        .insert(insertPayload);
 
       if (insertError) {
         console.error('❌ Error creating profile:', insertError);
@@ -107,6 +94,24 @@ export async function POST(req: NextRequest) {
           { status: 500 }
         );
       }
+      return NextResponse.json({ success: true });
+    }
+
+    if (Object.keys(updates).length <= 1) {
+      return NextResponse.json({ success: true, message: 'No updates needed' });
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update(updates)
+      .eq('id', body.userId);
+
+    if (updateError) {
+      console.error('❌ Error updating profile:', updateError);
+      return NextResponse.json(
+        { error: 'Failed to update profile' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ success: true });

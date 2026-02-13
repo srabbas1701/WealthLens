@@ -30,7 +30,8 @@ import {
   PhoneIcon,
   SmartphoneIcon,
   ArrowLeftIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  UserIcon
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader } from '@/components/AppHeader';
@@ -71,6 +72,7 @@ export default function SignupPage() {
   // Optional cross-method fields (for progressive data collection)
   // When signing up with phone, user can optionally provide email (no email verification)
   // When signing up with email, user can optionally provide phone (no phone verification)
+  const [fullName, setFullName] = useState('');
   const [optionalEmail, setOptionalEmail] = useState('');
   const [optionalPhone, setOptionalPhone] = useState('');
   const [optionalPhoneCountryCode, setOptionalPhoneCountryCode] = useState('+91');
@@ -209,10 +211,30 @@ export default function SignupPage() {
         return;
       }
       
-      // 2. Store optional phone in localStorage (will be saved after auth callback)
+      // 2. Duplicate check for optional phone (if provided)
       const cleanOptionalPhone = optionalPhone.replace(/\D/g, '');
-      if (cleanOptionalPhone.length >= 10) {
-        const fullOptionalPhone = `${optionalPhoneCountryCode}${cleanOptionalPhone}`;
+      const fullOptionalPhone = cleanOptionalPhone.length >= 10
+        ? `${optionalPhoneCountryCode}${cleanOptionalPhone}`
+        : null;
+      if (fullOptionalPhone) {
+        const phoneCheckRes = await fetch('/api/auth/check-duplicate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'phone', value: fullOptionalPhone }),
+        });
+        const phoneCheckData = await phoneCheckRes.json();
+        if (phoneCheckData.exists) {
+          setError('An account with this phone number already exists. Please sign in instead.');
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // 3. Store full name and optional phone in localStorage (saved after auth callback)
+      const trimmedName = fullName.trim();
+      if (trimmedName) localStorage.setItem('signup_full_name', trimmedName);
+      else localStorage.removeItem('signup_full_name');
+      if (fullOptionalPhone) {
         localStorage.setItem('signup_optional_phone', fullOptionalPhone);
       } else {
         localStorage.removeItem('signup_optional_phone');
@@ -269,7 +291,23 @@ export default function SignupPage() {
         return;
       }
       
-      // 2. MSG91 widget must be initialized
+      // 2. Duplicate check for optional email (if provided)
+      const trimmedOptionalEmail = optionalEmail.trim();
+      if (trimmedOptionalEmail && trimmedOptionalEmail.includes('@')) {
+        const emailCheckRes = await fetch('/api/auth/check-duplicate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'email', value: trimmedOptionalEmail }),
+        });
+        const emailCheckData = await emailCheckRes.json();
+        if (emailCheckData.exists) {
+          setError('An account with this email already exists. Please sign in instead.');
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // 3. MSG91 widget must be initialized
       // @ts-ignore
       if (typeof window === 'undefined' || !window.__msg91Initialized) {
         setError('OTP service is initializing. Please wait a moment and try again.');
@@ -277,7 +315,7 @@ export default function SignupPage() {
         return;
       }
       
-      // 3. Send OTP via MSG91 widget
+      // 4. Send OTP via MSG91 widget
       sendPhoneOtp(
         fullPhone,
         () => {
@@ -334,6 +372,7 @@ export default function SignupPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
               phone: fullPhone,
+              fullName: fullName.trim() || undefined,
               optionalEmail: optionalEmail.trim() || undefined,
             }),
           });
@@ -653,6 +692,25 @@ export default function SignupPage() {
                   /* Phone Number Input */
                   <form onSubmit={handleSendOtp} className="space-y-5">
                     <div>
+                      <label htmlFor="full-name-mobile" className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                        Full Name <span className="text-[#9CA3AF] dark:text-[#64748B] font-normal">(optional)</span>
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <UserIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+                        </div>
+                        <input
+                          id="full-name-mobile"
+                          type="text"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          placeholder="Your name"
+                          autoComplete="name"
+                          className="w-full pl-10 pr-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div>
                       <label htmlFor="phone" className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                         Mobile Number
                       </label>
@@ -814,6 +872,26 @@ export default function SignupPage() {
                 {emailStep === 'email' ? (
                   /* Email Input */
                   <form onSubmit={handleEmailSubmit} className="space-y-5">
+                    <div>
+                      <label htmlFor="full-name-email" className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                        Full Name <span className="text-[#9CA3AF] dark:text-[#64748B] font-normal">(optional)</span>
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <UserIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+                        </div>
+                        <input
+                          id="full-name-email"
+                          type="text"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          placeholder="Your name"
+                          autoComplete="name"
+                          disabled={isLoading}
+                          className="w-full pl-10 pr-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] bg-white dark:bg-[#1E293B] focus:border-[#2563EB] dark:focus:border-[#3B82F6] focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/20 outline-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                        />
+                      </div>
+                    </div>
                     <div>
                       <label htmlFor="email" className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                         Email Address

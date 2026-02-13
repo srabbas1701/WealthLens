@@ -63,11 +63,6 @@ import {
 } from '@/components/icons';
 import FloatingCopilot from '@/components/FloatingCopilot';
 import PortfolioUploadModal from '@/components/PortfolioUploadModal';
-import ManualInvestmentModal from '@/components/ManualInvestmentModal';
-import PPFAddModal from '@/components/PPFAddModal';
-import NPSAddModal from '@/components/NPSAddModal';
-import EPFAddModal from '@/components/EPFAddModal';
-import GoldAddModal from '@/components/GoldAddModal';
 import AddLiabilityModal from '@/components/AddLiabilityModal';
 import VerificationBanner from '@/components/VerificationBanner';
 import InsightsLimitBanner from '@/components/InsightsLimitBanner';
@@ -77,6 +72,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CategoryInfoTooltip } from '@/components/CategoryInfoTooltip';
 import { useWebVitals } from '@/hooks/useWebVitals';
 import { useAuth, useAuthAppData } from '@/lib/auth';
+import { useCapabilities, CAPABILITY_KEYS } from '@/lib/capabilities';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { aggregatePortfolioData, validatePortfolioData } from '@/lib/portfolio-aggregation';
 import type { DailySummaryResponse, WeeklySummaryResponse, Status, RiskAlignmentStatus } from '@/types/copilot';
@@ -275,6 +271,7 @@ function DashboardContent() {
   // This MUST be called on dashboard route for hasPortfolio/portfolioCheckComplete to work
   const { profile, hasPortfolio, portfolioCheckComplete } = useAuthAppData();
   const { format, setFormat, formatCurrency } = useCurrency();
+  const { hasCapability } = useCapabilities();
   const redirectAttemptedRef = useRef(false);
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous portfolio fetches
   const fetchingAiSummaryRef = useRef(false); // Prevent duplicate AI summary fetches
@@ -304,24 +301,9 @@ function DashboardContent() {
   // Upload modal state
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   
-  // Manual investment modal state
-  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-  
   // Price update state
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
   const [priceUpdateSuccess, setPriceUpdateSuccess] = useState(false);
-  
-  // PPF Add modal state
-  const [isPPFModalOpen, setIsPPFModalOpen] = useState(false);
-  
-  // NPS Add modal state
-  const [isNPSModalOpen, setIsNPSModalOpen] = useState(false);
-  
-  // EPF Add modal state
-  const [isEPFModalOpen, setIsEPFModalOpen] = useState(false);
-  
-  // Gold Add modal state
-  const [isGoldModalOpen, setIsGoldModalOpen] = useState(false);
   
   // Add Liability modal state
   const [isAddLiabilityModalOpen, setIsAddLiabilityModalOpen] = useState(false);
@@ -525,7 +507,9 @@ function DashboardContent() {
       }));
       
       console.log('[Dashboard] Redirecting to onboarding - no portfolio found');
-      router.replace('/onboarding');
+      // Use hard redirect - router.replace can get stuck on slow loads (4+ sec TTFB)
+      window.location.href = '/onboarding';
+      return;
     } else if (hasPortfolio) {
       // Clear redirect data if portfolio exists
       redirectAttemptedRef.current = false;
@@ -1024,8 +1008,13 @@ function DashboardContent() {
 
   // Fetch Portfolio Health Score from API (same source as health score page)
   // OPTIMIZATION: Use cached health score for session - calculated once, reused until cache expires
+  // Skip fetch if user lacks capability - prevents 403 in console for free users
   useEffect(() => {
     if (!user?.id || !isDataConsistent) {
+      setPortfolioHealthScore(null);
+      return;
+    }
+    if (!hasCapability(CAPABILITY_KEYS.PORTFOLIO_HEALTH_SCORE)) {
       setPortfolioHealthScore(null);
       return;
     }
@@ -1078,7 +1067,7 @@ function DashboardContent() {
     };
 
     fetchHealthScore();
-  }, [user?.id, isDataConsistent]);
+  }, [user?.id, isDataConsistent, hasCapability]);
 
   // GUARD: Show loading while auth state is being determined
   // PERMANENT FIX: Simplified loading logic
@@ -1245,13 +1234,13 @@ function DashboardContent() {
                   <UploadIcon className="w-5 h-5 text-white" />
                   Upload Documents
                 </button>
-                <button
-                  onClick={() => setIsManualModalOpen(true)}
+                <Link
+                  href="/portfolio/holdings/add"
                   className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-[#1E293B] text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
                 >
                   <PlusIcon className="w-5 h-5" />
                   Add Investments
-                </button>
+                </Link>
                 <button
                   onClick={() => setIsAddLiabilityModalOpen(true)}
                   className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-[#1E293B] text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
@@ -1975,67 +1964,6 @@ function DashboardContent() {
         userId={user?.id || ''}
         source="dashboard"
         onSuccess={handleUploadSuccess}
-      />
-
-      {/* Manual Investment Modal */}
-      <ManualInvestmentModal
-        isOpen={isManualModalOpen}
-        onClose={() => setIsManualModalOpen(false)}
-        userId={user?.id || ''}
-        source="dashboard"
-        onSuccess={handleUploadSuccess}
-        onPPFSelected={() => {
-          setIsManualModalOpen(false);
-          setIsPPFModalOpen(true);
-        }}
-        onNPSSelected={() => {
-          setIsManualModalOpen(false);
-          setIsNPSModalOpen(true);
-        }}
-        onEPFSelected={() => {
-          setIsManualModalOpen(false);
-          setIsEPFModalOpen(true);
-        }}
-        onGoldSelected={() => {
-          setIsManualModalOpen(false);
-          setIsGoldModalOpen(true);
-        }}
-      />
-
-      {/* PPF Add Modal */}
-      <PPFAddModal
-        isOpen={isPPFModalOpen}
-        onClose={() => setIsPPFModalOpen(false)}
-        userId={user?.id || ''}
-        onSuccess={handleUploadSuccess}
-        existingHolding={null}
-      />
-
-      {/* NPS Add Modal */}
-      <NPSAddModal
-        isOpen={isNPSModalOpen}
-        onClose={() => setIsNPSModalOpen(false)}
-        userId={user?.id || ''}
-        onSuccess={handleUploadSuccess}
-        existingHolding={null}
-      />
-
-      {/* EPF Add Modal */}
-      <EPFAddModal
-        isOpen={isEPFModalOpen}
-        onClose={() => setIsEPFModalOpen(false)}
-        userId={user?.id || ''}
-        onSuccess={handleUploadSuccess}
-        existingHolding={null}
-      />
-
-      {/* Gold Add Modal */}
-      <GoldAddModal
-        isOpen={isGoldModalOpen}
-        onClose={() => setIsGoldModalOpen(false)}
-        userId={user?.id || ''}
-        onSuccess={handleUploadSuccess}
-        existingHolding={null}
       />
 
       {/* Add Liability Modal */}

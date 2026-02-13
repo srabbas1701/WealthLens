@@ -207,23 +207,25 @@ export const ADD_METHOD_METADATA: Record<AddMethod, AddMethodMetadata> = {
     id: 'upload_cas',
     label: 'Upload CAS statement',
     description: 'Consolidated Account Statement from CDSL/NSDL',
-    recommended: true,
+    recommended: true, // Upload is recommended for mutual funds
   },
   upload_amc: {
     id: 'upload_amc',
     label: 'Upload AMC / broker statements',
     description: 'Statements from fund houses or brokers',
+    recommended: true, // All upload options are recommended
   },
   upload_broker: {
     id: 'upload_broker',
     label: 'Upload broker statement',
     description: 'CSV/Excel from Zerodha, Groww, etc.',
+    recommended: true, // Upload is recommended for stocks and ETFs
   },
   manual: {
     id: 'manual',
     label: 'Enter manually',
     description: 'Add investments one by one',
-    recommended: true,
+    // Never recommended - Upload options are preferred for MF, stocks, ETFs
   },
   skip: {
     id: 'skip',

@@ -109,7 +109,14 @@ export default function PortfolioUploadModal({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ConfirmUploadResponse | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [importStatusIndex, setImportStatusIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const IMPORT_STATUS_MESSAGES = [
+    'Resolving your investments...',
+    'Looking up holdings...',
+    'Saving to your portfolio...',
+  ];
 
   // Reset state when modal opens/closes
   const resetState = useCallback(() => {
@@ -133,6 +140,16 @@ export default function PortfolioUploadModal({
       resetState();
     }
   }, [isOpen, resetState]);
+
+  // Cycle through status messages during import for better perceived progress
+  useEffect(() => {
+    if (step !== 'importing') return;
+    setImportStatusIndex(0);
+    const interval = setInterval(() => {
+      setImportStatusIndex(i => (i + 1) % IMPORT_STATUS_MESSAGES.length);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [step]);
 
   const handleClose = () => {
     resetState();
@@ -387,16 +404,16 @@ export default function PortfolioUploadModal({
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-4xl max-h-[90vh] mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-4xl max-h-[90vh] mx-4 bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-[#334155]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-              <UploadIcon className="w-5 h-5 text-emerald-600" />
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+              <UploadIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-              <h2 className="font-semibold text-gray-900">Upload Portfolio</h2>
-              <p className="text-sm text-gray-500">
+              <h2 className="font-semibold text-gray-900 dark:text-white">Upload Portfolio</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 {step === 'upload' && 'Import from CSV or Excel file'}
                 {step === 'mapping' && 'Review column mappings'}
                 {step === 'preview' && 'Review your holdings'}
@@ -408,30 +425,30 @@ export default function PortfolioUploadModal({
           </div>
           <button
             onClick={handleClose}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-[#334155] transition-colors"
           >
-            <XIcon className="w-5 h-5 text-gray-500" />
+            <XIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
         {/* Progress Steps */}
         {['upload', 'mapping', 'preview'].includes(step) && (
-          <div className="px-6 py-3 bg-gray-50 border-b border-gray-100">
+          <div className="px-6 py-3 bg-gray-50 dark:bg-[#0F172A]/50 border-b border-gray-100 dark:border-[#334155]">
             <div className="flex items-center gap-2">
               {['upload', 'mapping', 'preview'].map((s, i) => (
                 <div key={s} className="flex items-center">
                   <div className={`
                     w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium
                     ${step === s ? 'bg-emerald-600 text-white' : 
-                      ['upload', 'mapping', 'preview'].indexOf(step) > i ? 'bg-emerald-100 text-emerald-700' : 
-                      'bg-gray-200 text-gray-500'}
+                      ['upload', 'mapping', 'preview'].indexOf(step) > i ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 
+                      'bg-gray-200 dark:bg-[#334155] text-gray-500 dark:text-gray-400'}
                   `}>
                     {i + 1}
                   </div>
-                  <span className={`ml-2 text-sm ${step === s ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                  <span className={`ml-2 text-sm ${step === s ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
                     {s === 'upload' ? 'Upload' : s === 'mapping' ? 'Map Columns' : 'Preview'}
                   </span>
-                  {i < 2 && <div className="w-8 h-px bg-gray-300 mx-3" />}
+                  {i < 2 && <div className="w-8 h-px bg-gray-300 dark:bg-[#334155] mx-3" />}
                 </div>
               ))}
             </div>
@@ -451,8 +468,8 @@ export default function PortfolioUploadModal({
                 className={`
                   relative border-2 border-dashed rounded-xl p-12 text-center transition-all
                   ${isDragging 
-                    ? 'border-emerald-500 bg-emerald-50' 
-                    : 'border-gray-200 hover:border-emerald-300 hover:bg-gray-50'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' 
+                    : 'border-gray-200 dark:border-[#334155] hover:border-emerald-300 dark:hover:border-emerald-500 hover:bg-gray-50 dark:hover:bg-[#334155]'
                   }
                   ${isUploading ? 'pointer-events-none opacity-60' : ''}
                 `}
@@ -467,18 +484,18 @@ export default function PortfolioUploadModal({
 
                 {isUploading ? (
                   <div className="space-y-3">
-                    <div className="w-12 h-12 mx-auto border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
-                    <p className="text-gray-600">Processing your file...</p>
+                    <div className="w-12 h-12 mx-auto border-4 border-emerald-200 dark:border-emerald-800 border-t-emerald-600 dark:border-t-emerald-400 rounded-full animate-spin" />
+                    <p className="text-gray-600 dark:text-gray-300">Processing your file...</p>
                   </div>
                 ) : (
                   <>
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-100 flex items-center justify-center">
-                      <UploadIcon className="w-8 h-8 text-emerald-600" />
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                      <UploadIcon className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
                     </div>
-                    <p className="text-lg font-medium text-gray-900 mb-2">
+                    <p className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                       {isDragging ? 'Drop your file here' : 'Drag & drop your file'}
                     </p>
-                    <p className="text-sm text-gray-500 mb-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                       or
                     </p>
                     {/* Browse button - explicit click handler */}
@@ -490,7 +507,7 @@ export default function PortfolioUploadModal({
                       <UploadIcon className="w-4 h-4" />
                       Browse Files
                     </button>
-                    <p className="text-xs text-gray-400 mt-4">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-4">
                       Supports CSV, XLS, XLSX • Max 5MB
                     </p>
                   </>
@@ -498,34 +515,34 @@ export default function PortfolioUploadModal({
               </div>
 
               {/* Help text */}
-              <div className="bg-gray-50 rounded-xl p-4">
+              <div className="bg-gray-50 dark:bg-[#0F172A]/50 rounded-xl p-4 border border-gray-100 dark:border-[#334155]">
                 <div className="flex items-center gap-2 mb-2">
-                  <SparklesIcon className="w-4 h-4 text-emerald-600" />
-                  <h3 className="font-medium text-gray-900">Intelligent column detection</h3>
+                  <SparklesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <h3 className="font-medium text-gray-900 dark:text-white">Intelligent column detection</h3>
                 </div>
-                <p className="text-sm text-gray-600 mb-3">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                   Our system automatically detects columns from any broker export. We identify:
                 </p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <CheckCircleIcon className="w-4 h-4 text-emerald-500" />
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
                     <span>Symbol / ISIN</span>
                   </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <CheckCircleIcon className="w-4 h-4 text-emerald-500" />
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
                     <span>Quantity / Units</span>
                   </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <CheckCircleIcon className="w-4 h-4 text-emerald-500" />
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
                     <span>Buy / Average Price</span>
                   </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <CheckCircleIcon className="w-4 h-4 text-emerald-500" />
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
                     <span>Asset Type</span>
                   </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <p className="text-xs text-gray-500">
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-[#334155]">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     <strong>Note:</strong> We ignore calculated columns like Current Value, P&L, and Returns. 
                     We compute these ourselves from quantity × price.
                   </p>
@@ -533,11 +550,11 @@ export default function PortfolioUploadModal({
               </div>
 
               {/* Security note */}
-              <div className="flex items-start gap-3 p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                <CheckCircleIcon className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800/50">
+                <CheckCircleIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-emerald-800 text-sm">Your data is secure</p>
-                  <p className="text-sm text-emerald-700 mt-1">
+                  <p className="font-medium text-emerald-800 dark:text-emerald-300 text-sm">Your data is secure</p>
+                  <p className="text-sm text-emerald-700 dark:text-emerald-400/80 mt-1">
                     Files are processed in memory and never stored. We only save the investment data you approve.
                   </p>
                 </div>
@@ -548,12 +565,12 @@ export default function PortfolioUploadModal({
           {/* Step 2: Column Mapping */}
           {step === 'mapping' && (
             <div className="space-y-6">
-              <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800/50">
                 <div className="flex items-start gap-3">
-                  <InfoIcon className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <InfoIcon className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-medium text-blue-800 text-sm">Review column mappings</p>
-                    <p className="text-sm text-blue-700 mt-1">
+                    <p className="font-medium text-blue-800 dark:text-blue-300 text-sm">Review column mappings</p>
+                    <p className="text-sm text-blue-700 dark:text-blue-400/80 mt-1">
                       We've auto-detected your columns. Please verify and adjust if needed.
                     </p>
                   </div>
@@ -561,24 +578,24 @@ export default function PortfolioUploadModal({
               </div>
 
               {/* Column mapping table */}
-              <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="border border-gray-200 dark:border-[#334155] rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gray-50 dark:bg-[#0F172A]/50">
                     <tr>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Your Column</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Maps To</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Confidence</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Sample</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Your Column</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Maps To</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Confidence</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Sample</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
                     {columnMappings.map((mapping, index) => (
                       <tr 
                         key={mapping.header}
-                        className={mapping.isIgnored ? 'bg-gray-50' : 'bg-white'}
+                        className={mapping.isIgnored ? 'bg-gray-50 dark:bg-[#0F172A]/50' : 'bg-white dark:bg-[#1E293B]'}
                       >
                         <td className="px-4 py-3">
-                          <span className={`font-medium ${mapping.isIgnored ? 'text-gray-400' : 'text-gray-900'}`}>
+                          <span className={`font-medium ${mapping.isIgnored ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
                             {mapping.header}
                           </span>
                         </td>
@@ -589,8 +606,8 @@ export default function PortfolioUploadModal({
                             className={`
                               px-3 py-1.5 rounded-lg border text-sm
                               ${mapping.isIgnored 
-                                ? 'border-gray-200 bg-gray-100 text-gray-500' 
-                                : 'border-gray-200 bg-white text-gray-900'}
+                                ? 'border-gray-200 dark:border-[#334155] bg-gray-100 dark:bg-[#334155] text-gray-500 dark:text-gray-400' 
+                                : 'border-gray-200 dark:border-[#334155] bg-white dark:bg-[#0F172A] text-gray-900 dark:text-white'}
                             `}
                           >
                             <option value="ignore">Ignore</option>
@@ -604,16 +621,16 @@ export default function PortfolioUploadModal({
                         </td>
                         <td className="px-4 py-3">
                           {mapping.isIgnored ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-200 dark:bg-[#334155] text-gray-600 dark:text-gray-400 rounded text-xs">
                               Ignored
                             </span>
                           ) : (
                             <span className={`
                               inline-flex items-center gap-1 px-2 py-1 rounded text-xs
-                              ${mapping.confidence === 'high' ? 'bg-emerald-100 text-emerald-700' :
-                                mapping.confidence === 'medium' ? 'bg-amber-100 text-amber-700' :
-                                mapping.confidence === 'manual' ? 'bg-blue-100 text-blue-700' :
-                                'bg-gray-100 text-gray-600'}
+                              ${mapping.confidence === 'high' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' :
+                                mapping.confidence === 'medium' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' :
+                                mapping.confidence === 'manual' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' :
+                                'bg-gray-100 dark:bg-[#334155] text-gray-600 dark:text-gray-400'}
                             `}>
                               {mapping.confidence === 'high' ? 'High' :
                                mapping.confidence === 'medium' ? 'Medium' :
@@ -621,7 +638,7 @@ export default function PortfolioUploadModal({
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-32">
+                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs truncate max-w-32">
                           {mapping.ignoreReason || '—'}
                         </td>
                       </tr>
@@ -631,12 +648,12 @@ export default function PortfolioUploadModal({
               </div>
 
               {/* Ignored columns explanation */}
-              <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-100 dark:border-amber-800/50">
                 <div className="flex items-start gap-3">
-                  <AlertTriangleIcon className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <AlertTriangleIcon className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-medium text-amber-800 text-sm">Why some columns are ignored</p>
-                    <p className="text-sm text-amber-700 mt-1">
+                    <p className="font-medium text-amber-800 dark:text-amber-300 text-sm">Why some columns are ignored</p>
+                    <p className="text-sm text-amber-700 dark:text-amber-400/80 mt-1">
                       We don't import calculated values like Current Value, P&L, or Returns. 
                       We compute these ourselves to ensure accuracy and consistency.
                     </p>
@@ -645,10 +662,10 @@ export default function PortfolioUploadModal({
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-[#334155]">
                 <button
                   onClick={() => setStep('upload')}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-900 font-medium"
+                  className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium"
                 >
                   ← Back
                 </button>
@@ -666,28 +683,28 @@ export default function PortfolioUploadModal({
           {step === 'preview' && preview && (
             <div className="space-y-6">
               {/* Summary */}
-              <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+              <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 border border-emerald-100 dark:border-emerald-800/50">
                 <div className="flex items-center gap-3 mb-3">
-                  <CheckCircleIcon className="w-5 h-5 text-emerald-600" />
-                  <span className="font-medium text-emerald-800">
+                  <CheckCircleIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="font-medium text-emerald-800 dark:text-emerald-300">
                     Ready to import {preview.summary.validRows} investment{preview.summary.validRows !== 1 ? 's' : ''}
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
-                    <p className="text-emerald-600">Total Invested</p>
-                    <p className="font-semibold text-emerald-900">
+                    <p className="text-emerald-600 dark:text-emerald-400">Total Invested</p>
+                    <p className="font-semibold text-emerald-900 dark:text-emerald-200">
                       {formatCurrency(preview.summary.totalInvestedValue)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-emerald-600">Valid Rows</p>
-                    <p className="font-semibold text-emerald-900">{preview.summary.validRows}</p>
+                    <p className="text-emerald-600 dark:text-emerald-400">Valid Rows</p>
+                    <p className="font-semibold text-emerald-900 dark:text-emerald-200">{preview.summary.validRows}</p>
                   </div>
                   {preview.summary.skippedRows > 0 && (
                     <div>
-                      <p className="text-amber-600">Skipped</p>
-                      <p className="font-semibold text-amber-700">{preview.summary.skippedRows}</p>
+                      <p className="text-amber-600 dark:text-amber-400">Skipped</p>
+                      <p className="font-semibold text-amber-700 dark:text-amber-300">{preview.summary.skippedRows}</p>
                     </div>
                   )}
                 </div>
@@ -695,39 +712,39 @@ export default function PortfolioUploadModal({
 
               {/* Detected Columns - Show what was auto-mapped */}
               {preview.detectedColumns && (
-                <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800/50">
                   <div className="flex items-start gap-3">
-                    <SparklesIcon className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <SparklesIcon className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <p className="font-medium text-blue-800 text-sm mb-2">Auto-detected columns</p>
+                      <p className="font-medium text-blue-800 dark:text-blue-300 text-sm mb-2">Auto-detected columns</p>
                       <div className="flex flex-wrap gap-2">
                         {preview.detectedColumns.name && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 rounded text-xs text-blue-700">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-xs text-blue-700 dark:text-blue-300">
                             Name: <span className="font-medium">{preview.detectedColumns.name}</span>
                           </span>
                         )}
                         {preview.detectedColumns.symbol && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 rounded text-xs text-blue-700">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-xs text-blue-700 dark:text-blue-300">
                             Symbol: <span className="font-medium">{preview.detectedColumns.symbol}</span>
                           </span>
                         )}
                         {preview.detectedColumns.isin && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 rounded text-xs text-blue-700">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-xs text-blue-700 dark:text-blue-300">
                             ISIN: <span className="font-medium">{preview.detectedColumns.isin}</span>
                           </span>
                         )}
                         {preview.detectedColumns.quantity && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 rounded text-xs text-blue-700">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-xs text-blue-700 dark:text-blue-300">
                             Qty: <span className="font-medium">{preview.detectedColumns.quantity}</span>
                           </span>
                         )}
                         {preview.detectedColumns.average_price && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 rounded text-xs text-blue-700">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded text-xs text-blue-700 dark:text-blue-300">
                             Price: <span className="font-medium">{preview.detectedColumns.average_price}</span>
                           </span>
                         )}
                         {/* Show that Value is computed */}
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 rounded text-xs text-emerald-700">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 rounded text-xs text-emerald-700 dark:text-emerald-400">
                           Value: <span className="font-medium">Qty × Price</span>
                         </span>
                       </div>
@@ -738,14 +755,14 @@ export default function PortfolioUploadModal({
 
               {/* Warnings */}
               {preview.warnings.length > 0 && (
-                <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
+                <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-100 dark:border-amber-800/50">
                   <div className="flex items-start gap-3">
-                    <AlertTriangleIcon className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <AlertTriangleIcon className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-medium text-amber-800 text-sm">Please note</p>
+                      <p className="font-medium text-amber-800 dark:text-amber-300 text-sm">Please note</p>
                       <ul className="mt-1 space-y-1">
                         {preview.warnings.map((warning, i) => (
-                          <li key={i} className="text-sm text-amber-700">• {warning}</li>
+                          <li key={i} className="text-sm text-amber-700 dark:text-amber-400/80">• {warning}</li>
                         ))}
                       </ul>
                     </div>
@@ -754,58 +771,58 @@ export default function PortfolioUploadModal({
               )}
 
               {/* Preview table */}
-              <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="border border-gray-200 dark:border-[#334155] rounded-xl overflow-hidden">
                 <div className="overflow-x-auto max-h-80">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 sticky top-0">
+                    <thead className="bg-gray-50 dark:bg-[#0F172A]/50 sticky top-0">
                       <tr>
-                        <th className="px-4 py-3 text-left font-medium text-gray-600">Name</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-600">Type</th>
-                        <th className="px-4 py-3 text-right font-medium text-gray-600">Qty</th>
-                        <th className="px-4 py-3 text-right font-medium text-gray-600">Avg Price</th>
-                        <th className="px-4 py-3 text-right font-medium text-gray-600">Invested</th>
-                        <th className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Name</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Type</th>
+                        <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Qty</th>
+                        <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Avg Price</th>
+                        <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Invested</th>
+                        <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-400">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
                       {preview.holdings.map((holding, index) => (
                         <tr 
                           key={index}
-                          className={holding.isValid ? 'bg-white' : 'bg-amber-50/50'}
+                          className={holding.isValid ? 'bg-white dark:bg-[#1E293B]' : 'bg-amber-50/50 dark:bg-amber-900/20'}
                         >
                           <td className="px-4 py-3">
                             <div>
-                              <p className="font-medium text-gray-900 truncate max-w-48">
+                              <p className="font-medium text-gray-900 dark:text-white truncate max-w-48">
                                 {holding.name}
                               </p>
                               {(holding.symbol || holding.isin) && (
-                                <p className="text-xs text-gray-500">
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
                                   {holding.symbol || holding.isin}
                                 </p>
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-gray-600">
+                          <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
                             {formatAssetType(holding.asset_type)}
                           </td>
-                          <td className="px-4 py-3 text-right text-gray-900">
+                          <td className="px-4 py-3 text-right text-gray-900 dark:text-white">
                             {holding.quantity.toLocaleString('en-IN')}
                           </td>
-                          <td className="px-4 py-3 text-right text-gray-900">
+                          <td className="px-4 py-3 text-right text-gray-900 dark:text-white">
                             ₹{holding.average_price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                           </td>
-                          <td className="px-4 py-3 text-right font-medium text-gray-900">
+                          <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
                             {formatCurrency(holding.invested_value)}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {holding.isValid ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-xs">
                                 <CheckCircleIcon className="w-3 h-3" />
                                 Ready
                               </span>
                             ) : (
                               <span 
-                                className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs"
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full text-xs"
                                 title={holding.validationNote}
                               >
                                 <AlertTriangleIcon className="w-3 h-3" />
@@ -821,12 +838,12 @@ export default function PortfolioUploadModal({
               </div>
 
               {/* Duplicate handling note */}
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+              <div className="bg-gray-50 dark:bg-[#0F172A]/50 rounded-xl p-4 border border-gray-100 dark:border-[#334155]">
                 <div className="flex items-start gap-3">
-                  <InfoIcon className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" />
+                  <InfoIcon className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-medium text-gray-700 text-sm">How we handle duplicates</p>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="font-medium text-gray-700 dark:text-gray-300 text-sm">How we handle duplicates</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                       If you upload the same investment again, we'll update the existing holding instead of creating a duplicate.
                       Assets are matched by ISIN first, then by Symbol.
                     </p>
@@ -835,13 +852,13 @@ export default function PortfolioUploadModal({
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-[#334155]">
                 <button
                   onClick={() => {
                     setStep('upload');
                     setPreview(null);
                   }}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-900 font-medium"
+                  className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium"
                 >
                   ← Choose different file
                 </button>
@@ -859,12 +876,14 @@ export default function PortfolioUploadModal({
           {/* Step 4: Importing */}
           {step === 'importing' && (
             <div className="py-12 text-center">
-              <div className="w-16 h-16 mx-auto mb-6 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
-              <p className="text-lg font-medium text-gray-900 mb-2">
-                Importing your portfolio...
+              <div className="w-16 h-16 mx-auto mb-6 border-4 border-emerald-200 dark:border-emerald-800 border-t-emerald-600 dark:border-t-emerald-400 rounded-full animate-spin" />
+              <p className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                {preview?.holdings?.filter(h => h.isValid).length
+                  ? `Importing ${preview.holdings.filter(h => h.isValid).length} holdings...`
+                  : 'Importing your portfolio...'}
               </p>
-              <p className="text-sm text-gray-500">
-                This will only take a moment
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {IMPORT_STATUS_MESSAGES[importStatusIndex]}
               </p>
             </div>
           )}
@@ -872,24 +891,24 @@ export default function PortfolioUploadModal({
           {/* Step 5: Success */}
           {step === 'success' && result && (
             <div className="py-8 text-center">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-emerald-100 flex items-center justify-center">
-                <CheckCircleIcon className="w-10 h-10 text-emerald-600" />
+              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                <CheckCircleIcon className="w-10 h-10 text-emerald-600 dark:text-emerald-400" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                 Portfolio updated successfully!
               </h3>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
                 {result.holdingsCreated > 0 && `${result.holdingsCreated} new investment${result.holdingsCreated !== 1 ? 's' : ''} added`}
                 {result.holdingsCreated > 0 && result.holdingsUpdated > 0 && ' • '}
                 {result.holdingsUpdated > 0 && `${result.holdingsUpdated} existing updated`}
               </p>
 
               {/* Portfolio Insights hint */}
-              <div className="inline-flex items-start gap-3 p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-left max-w-md mx-auto mb-8">
-                <SparklesIcon className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <div className="inline-flex items-start gap-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800/50 text-left max-w-md mx-auto mb-8">
+                <SparklesIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-emerald-800 text-sm">Portfolio insights are ready</p>
-                  <p className="text-sm text-emerald-700 mt-1">
+                  <p className="font-medium text-emerald-800 dark:text-emerald-300 text-sm">Portfolio insights are ready</p>
+                  <p className="text-sm text-emerald-700 dark:text-emerald-400/80 mt-1">
                     You can now ask questions about your portfolio and get personalized insights.
                   </p>
                 </div>
@@ -907,20 +926,20 @@ export default function PortfolioUploadModal({
           {/* Step 6: Error */}
           {step === 'error' && (
             <div className="py-8 text-center">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-amber-100 flex items-center justify-center">
-                <AlertTriangleIcon className="w-10 h-10 text-amber-600" />
+              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <AlertTriangleIcon className="w-10 h-10 text-amber-600 dark:text-amber-400" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                 Something didn't work
               </h3>
-              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
                 {error || 'We couldn\'t process your file. Please check the format and try again.'}
               </p>
 
               <div className="flex items-center justify-center gap-3">
                 <button
                   onClick={handleClose}
-                  className="px-6 py-2.5 text-gray-600 hover:text-gray-900 font-medium"
+                  className="px-6 py-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium"
                 >
                   Cancel
                 </button>

@@ -384,28 +384,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
         
-        // Save optional phone from localStorage (set during email signup)
-        // This handles the case where user signed up via email and provided an optional phone
+        // Save signup data from localStorage (set during email signup)
         if (event === 'SIGNED_IN' && session.user) {
           try {
+            const pendingName = localStorage.getItem('signup_full_name');
             const pendingPhone = localStorage.getItem('signup_optional_phone');
-            if (pendingPhone) {
-              localStorage.removeItem('signup_optional_phone');
-              console.log('[Auth] Saving optional phone from email signup:', pendingPhone);
-              // Save to user profile via API (fire-and-forget, non-blocking)
+            if (pendingName || pendingPhone) {
+              if (pendingName) localStorage.removeItem('signup_full_name');
+              if (pendingPhone) localStorage.removeItem('signup_optional_phone');
+              const payload: { userId: string; fullName?: string; phoneNumber?: string } = {
+                userId: session.user.id,
+              };
+              if (pendingName) payload.fullName = pendingName;
+              if (pendingPhone) payload.phoneNumber = pendingPhone;
               fetch('/api/auth/save-optional-contact', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  userId: session.user.id, 
-                  phoneNumber: pendingPhone 
-                }),
+                body: JSON.stringify(payload),
               }).catch((err) => {
-                console.error('[Auth] Failed to save optional phone:', err);
+                console.error('[Auth] Failed to save signup profile:', err);
               });
             }
           } catch {
-            // localStorage may not be available (SSR, private browsing)
+            // localStorage may not be available
           }
         }
       } else {

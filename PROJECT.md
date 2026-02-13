@@ -380,7 +380,9 @@ All API routes live under `src/app/api/`; use middleware and RLS for auth.
 
 ## 10. Documentation Index
 
-Below is a grouped index of existing `.md` files for quick reference. Use this master doc as the entry point; then open the specific doc when needed.
+Below is a grouped index of current `.md` files for quick reference. Use this master doc as the entry point; then open the specific doc when needed.
+
+**Note:** Older implementation summaries and fix docs have been moved to `archive/` for reference.
 
 ### Core product & design
 
@@ -388,28 +390,19 @@ Below is a grouped index of existing `.md` files for quick reference. Use this m
 |----------|-------------|
 | `PROJECT.md` | **This file** — master project doc |
 | `README.md` | Quick start and link to PROJECT.md |
-| `DESIGN_SYSTEM.md` | Design system (colors, typography, components) |
-| `WIREFRAME_LAYOUT.md` | Dashboard zones and layout |
-| `DATA_SCREENS_SPECIFICATION.md` | Data-heavy holdings screens spec |
-| `DATA_SCREENS_QUICK_REFERENCE.md` | Data screens quick ref |
-| `DATA_HOLDINGS_QUICK_REFERENCE.md` | Holdings implementation ref |
 | `WEALTHLENS_REBRANDING_COMPLETE.md` | Rebrand to WealthLens |
+| `EQUITY_HOLDINGS_DESIGN.md` | Equity holdings design |
 
 ### Analytics
 
 | Document | Description |
 |----------|-------------|
-| `ADVANCED_ANALYTICS_SPECIFICATION.md` | Exposure analytics design |
-| `ADVANCED_ANALYTICS_QUICK_REFERENCE.md` | Analytics quick ref |
 | `ADVANCED_ANALYTICS_IMPLEMENTATION_COMPLETE.md` | Implementation summary |
-| `ADVANCED_ANALYTICS_SUMMARY.md` | Summary of analytics |
 
 ### AI Copilot
 
 | Document | Description |
 |----------|-------------|
-| `AI_COPILOT_SETUP.md` | OpenAI and env setup |
-| `AI_COPILOT_IMPLEMENTATION_COMPLETE.md` | Copilot implementation |
 | `AI_EXPERIENCE_LAYER_SPECIFICATION.md` | AI UX spec |
 | `AI_EXPERIENCE_LAYER_QUICK_REFERENCE.md` | Quick ref |
 | `AI_EXPERIENCE_LAYER_VISUAL_GUIDE.md` | Visual guide |
@@ -421,7 +414,6 @@ Below is a grouped index of existing `.md` files for quick reference. Use this m
 | `REAL_ESTATE_QUICK_START.md` | Quick start |
 | `REAL_ESTATE_IMPLEMENTATION_GUIDE.md` | Implementation guide |
 | `REAL_ESTATE_API_REFERENCE.md` | API reference |
-| `REAL_ESTATE_*.md` (multiple) | Schema, valuation, onboarding, analytics, etc. |
 | `PROPERTY_VALUATION_EXPLAINED.md` | Valuation explained |
 | `REAL_ESTATE_XIRR_EXPLANATION.md` | XIRR for real estate |
 | `QUICK_PROPERTY_VALUE_GUIDE.md` | Property value guide |
@@ -431,54 +423,36 @@ Below is a grouped index of existing `.md` files for quick reference. Use this m
 | Document | Description |
 |----------|-------------|
 | `supabase/SETUP.md` | Supabase project and schema setup |
-| `AUTH_FIX_GUIDE.md`, `AUTH_FIX_SUMMARY.md` | Auth fixes |
-| `AUTHENTICATION_TABLES_EXPLAINED.md` | Auth tables |
 | `MSG91_PHONE_AUTH_DOCUMENTATION.md` | Phone/SMS auth (MSG91) |
-| `SUPABASE_*.md` | Supabase config, types, errors |
 
 ### Holdings & asset-specific
 
 | Document | Description |
 |----------|-------------|
-| `EQUITY_HOLDINGS_DESIGN.md`, `EQUITY_STOCKS_FIX.md` | Equity/stocks |
-| `ETF_HOLDINGS_*.md` | ETF holdings and fixes |
-| `BONDS_*.md` | Bonds |
-| `CASH_HOLDINGS_PAGE_COMPLETE.md` | Cash |
-| `FD_CRUD_IMPLEMENTATION.md`, `FIXED_DEPOSIT_*.md` | Fixed deposits |
-| `NPS_*.md` | NPS |
-| `PPF_*.md` | PPF |
-| `INSURANCE_*.md` | Insurance |
-| `MANUAL_INVESTMENTS_*.md` | Manual investments |
+| `NPS_QUICK_REFERENCE.md` | NPS quick reference |
+| `INSURANCE_IMPLEMENTATION_SUMMARY.md`, `INSURANCE_QUICK_REFERENCE.md`, `INSURANCE_USER_FLOW_GUIDE.md` | Insurance |
+| `MANUAL_INVESTMENTS_GUIDE.md`, `MANUAL_INVESTMENTS_QUICK_REFERENCE.md` | Manual investments |
 
 ### UI, UX & errors
 
 | Document | Description |
 |----------|-------------|
 | `DARK_MODE_STANDARDS.md`, `DARK_MODE_COLOR_MAPPING.md` | Dark mode |
-| `ERROR_STATES_AND_FALLBACKS_SPECIFICATION.md` | Error states |
+| `ERROR_STATES_AND_FALLBACKS_SPECIFICATION.md` | Error states spec |
 | `ERROR_STATES_QUICK_REFERENCE.md`, `ERROR_STATES_VISUAL_GUIDE.md` | Error refs |
-| `DELETE_MODAL_IMPLEMENTATION.md` | Delete modals |
-| `UPSELL_MOMENTS_*.md` | Upsell and premium |
-
-### Performance & fixes
-
-| Document | Description |
-|----------|-------------|
-| `DASHBOARD_PERFORMANCE_FIX.md`, `PERFORMANCE_*.md` | Performance |
-| `DUPLICATE_API_CALLS_FIX.md`, `ALL_PAGES_DUPLICATE_CALLS_FIXED.md` | Duplicate calls |
-| `PORTFOLIO_*.md` (various) | Portfolio header, XIRR, pie chart, etc. |
+| `UPSELL_MOMENTS_GUIDE.md` | Upsell and premium |
 
 ### Other
 
 | Document | Description |
 |----------|-------------|
-| `ASSET_CLASSIFICATION_*.md` | Asset classification |
-| `BACKFILL_CLASSIFICATION.md` | Backfill |
+| `CAPABILITY_BASED_ACCESS_CONTROL.md` | Capability-based access |
+| `ASSET_CLASSIFICATION_QUICK_REFERENCE.md`, `ASSET_CLASSIFICATION_IMPLEMENTATION.md` | Asset classification |
 | `NOTIFICATION_SYSTEM.md` | Notifications |
 | `PRICING_STRATEGY.md`, `PRICING_IMPLEMENTATION_GUIDE.md` | Pricing |
 | `NET_WORTH_AGGREGATOR_USAGE.md` | Net worth aggregation |
-| `GITHUB_COMMIT_CHECKLIST.md` | Commit checklist |
 | `MF_ISIN_BACKFILL_README.md` | MF ISIN backfill |
+| `archive/` | Archived implementation docs and fix summaries |
 
 ---
 

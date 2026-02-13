@@ -30,7 +30,7 @@ interface ManualInvestmentModalProps {
   onClose: () => void;
   userId: string;
   portfolioId?: string;
-  source?: 'onboarding' | 'dashboard';
+  source?: 'onboarding' | 'dashboard' | 'mutualfunds' | 'stocks' | 'etfs';
   onSuccess?: () => void;
   editingHoldingId?: string;
   editingData?: any;
@@ -39,9 +39,12 @@ interface ManualInvestmentModalProps {
   onNPSSelected?: () => void; // Callback when NPS is selected
   onEPFSelected?: () => void; // Callback when EPF is selected
   onGoldSelected?: () => void; // Callback when Gold is selected
+  onMutualFundSelected?: () => void; // Callback when MF selected - use to stay on same screen
+  onStocksSelected?: () => void; // Callback when Stocks selected - use to stay on same screen
+  onETFSelected?: () => void; // Callback when ETF selected - use to stay on same screen
 }
 
-type AssetTypeOption = 'fd' | 'bond' | 'gold' | 'cash' | 'epf' | 'ppf' | 'nps' | 'real_estate';
+type AssetTypeOption = 'fd' | 'bond' | 'gold' | 'cash' | 'epf' | 'ppf' | 'nps' | 'real_estate' | 'mutual_fund' | 'stocks' | 'etf';
 type Step = 'select' | 'form' | 'review' | 'saving' | 'success' | 'error';
 
 interface FormData {
@@ -118,6 +121,9 @@ export default function ManualInvestmentModal({
   onNPSSelected,
   onEPFSelected,
   onGoldSelected,
+  onMutualFundSelected,
+  onStocksSelected,
+  onETFSelected,
 }: ManualInvestmentModalProps) {
   const router = useRouter();
   const { formatCurrency } = useCurrency();
@@ -192,6 +198,38 @@ export default function ManualInvestmentModal({
   };
 
   const handleAssetTypeSelect = (type: AssetTypeOption) => {
+    // Mutual Funds, Stocks, ETFs - use callback to stay on same screen when available, else navigate
+    if (type === 'mutual_fund') {
+      if (onMutualFundSelected) {
+        onMutualFundSelected();
+        handleClose();
+      } else {
+        handleClose();
+        router.push('/portfolio/mutualfunds?add=1');
+      }
+      return;
+    }
+    if (type === 'stocks') {
+      if (onStocksSelected) {
+        onStocksSelected();
+        handleClose();
+      } else {
+        handleClose();
+        router.push('/portfolio/stocks?add=1');
+      }
+      return;
+    }
+    if (type === 'etf') {
+      if (onETFSelected) {
+        onETFSelected();
+        handleClose();
+      } else {
+        handleClose();
+        router.push('/portfolio/etfs?add=1');
+      }
+      return;
+    }
+    
     // Special handling for PPF - redirect to comprehensive PPF modal
     if (type === 'ppf' && onPPFSelected) {
       onPPFSelected();
@@ -390,6 +428,9 @@ export default function ManualInvestmentModal({
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   {[
+                    { id: 'mutual_fund' as AssetTypeOption, label: 'Mutual Funds', description: 'Funds, SIPs, folios' },
+                    { id: 'stocks' as AssetTypeOption, label: 'Stocks / Shares', description: 'Equity, direct stocks' },
+                    { id: 'etf' as AssetTypeOption, label: 'ETFs', description: 'Exchange traded funds' },
                     { id: 'fd' as AssetTypeOption, label: 'Fixed Deposit', description: 'Bank FD, corporate FD' },
                     { id: 'bond' as AssetTypeOption, label: 'Bond', description: 'Government, corporate bonds' },
                     { id: 'gold' as AssetTypeOption, label: 'Gold', description: 'SGB, physical, ETF' },

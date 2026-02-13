@@ -32,6 +32,11 @@ const PUBLIC_ROUTES = ['/', '/login', '/signup', '/auth/callback'];
 const PROTECTED_ROUTES = ['/dashboard', '/onboarding'];
 
 export async function middleware(request: NextRequest) {
+  // GUARD: Skip prefetch/RSC requests - prevents redundant runs and potential loops (Next.js 16)
+  if (request.headers.get('Next-Router-Prefetch') === '1' || request.headers.get('RSC') === '1') {
+    return NextResponse.next();
+  }
+
   // GUARD: Skip Supabase client creation during build or if env vars are missing
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -121,9 +126,15 @@ export async function middleware(request: NextRequest) {
   }
 
   const pathname = request.nextUrl.pathname;
-  
+  const searchParams = request.nextUrl.searchParams;
+
   // Skip API routes - they handle their own auth
   if (pathname.startsWith('/api/')) {
+    return response;
+  }
+
+  // Skip RSC payload requests (Next.js 16 - reduces redundant auth checks)
+  if (searchParams.get('_rsc') || searchParams.has('__next_router_data')) {
     return response;
   }
   
