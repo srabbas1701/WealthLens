@@ -45,7 +45,7 @@ function AddHoldingHubContent() {
         backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
       />
 
-      <main className="max-w-2xl mx-auto px-6 py-8 pt-24">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
             Add Holding
@@ -55,7 +55,7 @@ function AddHoldingHubContent() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {ASSET_OPTIONS.map((option) => (
             <Link
               key={option.id}

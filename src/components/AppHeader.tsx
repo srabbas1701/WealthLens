@@ -3,7 +3,7 @@
 import { createContext, useState, useEffect, ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, SparklesIcon, XIcon } from '@/components/icons';
+import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, SparklesIcon, XIcon, ArrowLeftIcon } from '@/components/icons';
 import { useAuthSession, useAuthAppData } from '@/lib/auth';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
 import { type CurrencyFormat } from '@/lib/currency/formatCurrency';
@@ -352,20 +352,49 @@ export function AppHeader({
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]" style={{ pointerEvents: 'auto' }}>
-      {/* Mobile header: minimal layout (Logo + single action icon) */}
+      {/* Mobile header: Back (when applicable) + Logo + Download (when applicable) + Menu */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between md:hidden" style={{ pointerEvents: 'auto' }}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {showBackButton && (
+            <Link
+              href={backHref}
+              className="flex items-center justify-center w-9 h-9 min-w-[36px] min-h-[36px] rounded-full text-[#6B7280] dark:text-[#94A3B8] hover:bg-[#F3F4F6] dark:hover:bg-[#334155] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors shrink-0"
+              aria-label={backLabel}
+            >
+              <ArrowLeftIcon className="w-5 h-5" />
+            </Link>
+          )}
           <LogoLockup />
         </div>
-        <button
-          type="button"
-          onClick={() => setIsMobileMenuOpen(true)}
-          className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2563EB]"
-          aria-label="Open navigation menu"
-          data-testid="mobile-menu-button"
-        >
-          <UserIcon className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {showDownload && onDownload && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (onDownload && typeof onDownload === 'function') {
+                  try {
+                    await onDownload();
+                  } catch (error) {
+                    console.error('[AppHeader] Mobile download error:', error);
+                  }
+                }
+              }}
+              className="inline-flex items-center justify-center w-9 h-9 min-w-[36px] min-h-[36px] rounded-full bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
+              aria-label="Download holdings"
+            >
+              <FileIcon className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2563EB]"
+            aria-label="Open navigation menu"
+            data-testid="mobile-menu-button"
+          >
+            <UserIcon className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Desktop / tablet header */}

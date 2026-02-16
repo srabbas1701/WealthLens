@@ -1150,7 +1150,7 @@ function DashboardContent() {
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
         <AppHeader />
 
-        <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24 bg-[#F6F8FB] dark:bg-[#0F172A]">
+        <main className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24 bg-[#F6F8FB] dark:bg-[#0F172A]">
         {/* Verification Banner (non-blocking) */}
         <VerificationBanner className="mb-8" />
         
@@ -1446,7 +1446,7 @@ function DashboardContent() {
                 {/* Expand/Collapse button */}
                 <button
                   onClick={() => setHealthScoreExpanded(!healthScoreExpanded)}
-                  className="ml-4 p-2 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
+                  className="ml-4 min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors rounded-lg"
                   aria-label={healthScoreExpanded ? 'Hide score breakdown' : 'Show score breakdown'}
                 >
                   {healthScoreExpanded ? (
@@ -1584,7 +1584,7 @@ function DashboardContent() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
               {/* Left: Interactive Pie Chart (5 cols) */}
               <div className="lg:col-span-5 flex items-center justify-center">
-                <div className="relative w-[331px] h-[331px]">
+                <div className="relative w-full max-w-[331px] aspect-square">
                   <svg viewBox="0 0 200 200" className="w-full h-full">
                     {(() => {
                       const centerX = 100;

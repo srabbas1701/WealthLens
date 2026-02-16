@@ -716,7 +716,7 @@ function LoginContent() {
       <AppHeader />
       
       {/* Main Content */}
-      <main className="flex items-center justify-center px-6 py-12 pt-24">
+      <main className="flex items-center justify-center px-4 sm:px-6 py-10 sm:py-12 pt-20 sm:pt-24">
         <div className="w-full max-w-md">
           {/* Card */}
           <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-8">

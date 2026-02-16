@@ -446,7 +446,7 @@ export default function GoldHoldingsPage() {
         backLabel="Back to Dashboard"
       />
 
-      <main className="max-w-[1200px] mx-auto px-6 py-8 pt-24">
+      <main className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>

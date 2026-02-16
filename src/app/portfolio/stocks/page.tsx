@@ -693,27 +693,27 @@ export default function StocksHoldingsPage() {
         }}
       />
 
-      <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
+      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         
         {/* Page Title */}
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Stocks Holdings</h1>
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Stocks Holdings</h1>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {/* ADD STOCK - navigates to add page */}
               <Link
                 href="/portfolio/stocks/add"
-                className="flex items-center gap-2 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
+                className="inline-flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm sm:text-base min-h-[44px]"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Add Stock</span>
               </Link>
               {/* ADD HOLDING - hub for FD, bonds, MF, etc. */}
               <Link
                 href="/portfolio/holdings/add"
-                className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium"
+                className="inline-flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium text-sm sm:text-base min-h-[44px]"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Add Holding</span>
               </Link>
               
@@ -721,7 +721,7 @@ export default function StocksHoldingsPage() {
               <button
                 onClick={handlePriceUpdate}
                 disabled={priceUpdateLoading || priceUpdateDisabled}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium text-sm transition-colors min-h-[44px] ${
                   priceUpdateLoading || priceUpdateDisabled
                     ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
                     : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
@@ -739,10 +739,10 @@ export default function StocksHoldingsPage() {
               </button>
             </div>
           </div>
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] break-words">
             {stocks.length} holding{stocks.length !== 1 ? 's' : ''} • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
             {mostRecentPriceDate && (
-              <span className="ml-2 text-[#475569] dark:text-[#CBD5E1] font-medium">
+              <span className="ml-0 sm:ml-2 block sm:inline text-[#475569] dark:text-[#CBD5E1] font-medium">
                 • Price as of {formatPriceDate(mostRecentPriceDate)}
               </span>
             )}
@@ -751,10 +751,10 @@ export default function StocksHoldingsPage() {
 
         {/* Group By Filters */}
         <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4 mb-6">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-6">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <span className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]">Group by:</span>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {[
                   { value: 'none', label: 'None' },
                   { value: 'company', label: 'Company' },
@@ -777,9 +777,73 @@ export default function StocksHoldingsPage() {
           </div>
         </div>
 
-        {/* Stocks Table */}
+        {/* Stocks - Mobile Card Layout */}
         {groupedStocks.map((group) => (
-          <div key={group.key} className="mb-6">
+          <div key={`mobile-${group.key}`} className="mb-6 md:hidden">
+            {groupBy !== 'none' && (
+              <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
+                {group.label}
+              </h2>
+            )}
+            <div className="space-y-3">
+              {group.stocks.map((stock) => (
+                <div
+                  key={stock.id}
+                  className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] truncate">{stock.name}</div>
+                      <div className="text-sm text-[#6B7280] dark:text-[#94A3B8]">NSE: {stock.symbol}</div>
+                    </div>
+                    <div className={`font-semibold ${stock.pl >= 0 ? 'text-[#10b981] dark:text-[#10b981]' : 'text-[#DC2626] dark:text-red-400'}`}>
+                      {stock.pl >= 0 ? '+' : ''}{formatCurrency(stock.pl)}
+                      <span className="text-sm font-medium ml-1">({stock.pl >= 0 ? '+' : ''}{stock.plPercentage.toFixed(1)}%)</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                    <div>
+                      <span className="text-[#6B7280] dark:text-[#94A3B8]">Qty</span>
+                      <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{stock.quantity.toLocaleString('en-IN')}</div>
+                    </div>
+                    <div>
+                      <span className="text-[#6B7280] dark:text-[#94A3B8]">Invested</span>
+                      <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(stock.investedValue)}</div>
+                    </div>
+                    <div>
+                      <span className="text-[#6B7280] dark:text-[#94A3B8]">Current</span>
+                      <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(stock.currentValue)}</div>
+                    </div>
+                    <div>
+                      <span className="text-[#6B7280] dark:text-[#94A3B8]">Allocation</span>
+                      <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{stock.allocation.toFixed(1)}%</div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-[#E5E7EB] dark:border-[#334155]">
+                    <button
+                      onClick={() => handleEditStock(stock)}
+                      className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                      title="Edit holding"
+                    >
+                      <Edit className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteStock(stock)}
+                      className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                      title="Delete holding"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* Stocks Table - Desktop */}
+        {groupedStocks.map((group) => (
+          <div key={group.key} className="mb-6 hidden md:block">
             {groupBy !== 'none' && (
               <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
                 {group.label}
@@ -863,19 +927,16 @@ export default function StocksHoldingsPage() {
                         {/* ACTIONS COLUMN - visible on mobile, hover-only on desktop */}
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-2 opacity-100 transition-opacity">
-                            {/* Edit Button */}
                             <button 
                               onClick={() => handleEditStock(stock)}
-                              className="p-2 hover:bg-primary/10 text-primary rounded-lg transition-colors"
+                              className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center hover:bg-primary/10 text-primary rounded-lg transition-colors"
                               title="Edit holding"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
-                            
-                            {/* Delete Button */}
                             <button 
                               onClick={() => handleDeleteStock(stock)}
-                              className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
+                              className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
                               title="Delete holding"
                             >
                               <Trash2 className="w-4 h-4" />

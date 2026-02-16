@@ -904,36 +904,32 @@ export default function MutualFundsPage() {
         onDownload={handleDownload}
       />
 
-      <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
+      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Page Title */}
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Mutual Fund Holdings</h1>
-            <div className="flex items-center gap-3">
-              {/* ADD MF - navigates to add page (redirects to ?add=1) */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
+            <h1 className="text-xl sm:text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Mutual Fund Holdings</h1>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <Link
                 href="/portfolio/mutualfunds/add"
-                className="flex items-center gap-2 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
+                className="inline-flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm sm:text-base min-h-[44px]"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Add MF</span>
               </Link>
-              {/* ADD HOLDING - hub for FD, bonds, stocks, etc. */}
               <Link
                 href="/portfolio/holdings/add"
-                className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium"
+                className="inline-flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium text-sm sm:text-base min-h-[44px]"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Add Holding</span>
               </Link>
-              
-              {/* Update NAVs button */}
               <button
                 onClick={handleNavUpdate}
                 disabled={navUpdateLoading || disableForRecentRun}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium text-sm transition-colors min-h-[44px] ${
                   navUpdateLoading || disableForRecentRun
-                    ? 'bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed'
+                    ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
                     : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
                 }`}
                 title={updateButtonTooltip}
@@ -941,17 +937,15 @@ export default function MutualFundsPage() {
                 <RefreshIcon 
                   className={`w-4 h-4 ${navUpdateLoading ? 'animate-spin' : ''}`} 
                 />
-                {navUpdateLoading 
-                  ? 'Updating...' 
-                  : 'Update NAVs'}
+                {navUpdateLoading ? 'Updating...' : 'Update NAVs'}
               </button>
             </div>
           </div>
           
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] break-words">
             {holdings.length} holdings • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
           </p>
-          <p className="mt-1 text-sm text-[#6B7280] dark:text-[#94A3B8]">
+          <p className="mt-1 text-sm text-[#6B7280] dark:text-[#94A3B8] break-words">
             {marketDataStatusLoading ? (
               'Loading market update status…'
             ) : lastRun ? (
@@ -974,10 +968,10 @@ export default function MutualFundsPage() {
 
         {/* Controls */}
         <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4 mb-6">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-[#6B7280]">Group by:</span>
-              <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-6">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <span className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]">Group by:</span>
+              <div className="flex flex-wrap gap-2">
                 {[
                   { value: 'none', label: 'None' },
                   { value: 'amc', label: 'AMC' },
@@ -1000,8 +994,74 @@ export default function MutualFundsPage() {
           </div>
         </div>
 
-        {/* Holdings Table */}
-        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden">
+        {/* Mobile Card Layout */}
+        <div className="md:hidden space-y-6 mb-6">
+          {groupedHoldings().map((group) => (
+            <div key={`mobile-${group.key}`}>
+              {groupBy !== 'none' && (
+                <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
+                  {group.label}
+                </h2>
+              )}
+              <div className="space-y-3">
+                {group.holdings.map((holding) => (
+                  <div
+                    key={holding.id}
+                    className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-sm line-clamp-2">{holding.name}</div>
+                        <div className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">{holding.amc} • {holding.plan}</div>
+                      </div>
+                      <div className={`font-semibold shrink-0 ${holding.gainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                        {holding.gainLoss >= 0 ? '+' : ''}{formatCurrency(holding.gainLoss)}
+                        <span className="text-sm font-medium ml-1">({holding.gainLoss >= 0 ? '+' : ''}{holding.gainLossPercent.toFixed(1)}%)</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Invested</span>
+                        <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(holding.investedValue)}</div>
+                      </div>
+                      <div>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Current</span>
+                        <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(holding.currentValue)}</div>
+                      </div>
+                      <div>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Units</span>
+                        <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.units.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                      </div>
+                      <div>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">XIRR</span>
+                        <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.xirr !== null ? `${holding.xirr.toFixed(1)}%` : '—'}</div>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-[#E5E7EB] dark:border-[#334155]">
+                      <button
+                        onClick={() => handleEditMF(holding)}
+                        className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                        title="Edit holding"
+                      >
+                        <Edit className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMF(holding)}
+                        className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                        title="Delete holding"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Holdings Table - Desktop */}
+        <div className="hidden md:block bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -1155,19 +1215,16 @@ export default function MutualFundsPage() {
                         {/* ACTIONS COLUMN */}
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-2 opacity-100 transition-opacity">
-                            {/* Edit Button */}
                             <button 
                               onClick={() => handleEditMF(holding)}
-                              className="p-2 hover:bg-primary/10 text-primary rounded-lg transition-colors"
+                              className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center hover:bg-primary/10 text-primary rounded-lg transition-colors"
                               title="Edit holding"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
-                            
-                            {/* Delete Button */}
                             <button 
                               onClick={() => handleDeleteMF(holding)}
-                              className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
+                              className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
                               title="Delete holding"
                             >
                               <Trash2 className="w-4 h-4" />

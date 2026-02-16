@@ -200,7 +200,7 @@ export default function LiabilitiesPage() {
         backLabel="Back to Dashboard"
       />
 
-      <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
+      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Header with + Add Liability */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>

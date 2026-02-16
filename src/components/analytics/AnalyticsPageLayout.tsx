@@ -36,7 +36,7 @@ export function AnalyticsPageLayout({
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader showBackButton={true} backHref={backHref} backLabel={backLabel} />
 
-      <main className="max-w-[1280px] mx-auto px-6 py-8 pt-24">
+      <main className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Page Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
