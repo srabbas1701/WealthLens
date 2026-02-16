@@ -259,6 +259,58 @@
     padding-left: 1.5rem;
     padding-right: 1.5rem;
   }
+
+  /* Visible horizontal scrollbar - blue thumb for clear visibility */
+  .scrollbar-horizontal-visible {
+    scrollbar-width: thin;
+    scrollbar-color: #2563EB #E5E7EB;
+  }
+
+  .dark .scrollbar-horizontal-visible {
+    scrollbar-color: #3B82F6 #334155;
+  }
+
+  /* Hide scrollbar when using arrow navigation */
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* WebKit scrollbar (Chrome, Safari, Edge) - must be outside @layer for pseudo-elements */
+.scrollbar-horizontal-visible::-webkit-scrollbar {
+  height: 8px;
+}
+
+.scrollbar-horizontal-visible::-webkit-scrollbar-track {
+  background: #E5E7EB;
+  border-radius: 4px;
+}
+
+.dark .scrollbar-horizontal-visible::-webkit-scrollbar-track {
+  background: #334155;
+  border-radius: 4px;
+}
+
+.scrollbar-horizontal-visible::-webkit-scrollbar-thumb {
+  background: #2563EB;
+  border-radius: 4px;
+}
+
+.scrollbar-horizontal-visible::-webkit-scrollbar-thumb:hover {
+  background: #1D4ED8;
+}
+
+.dark .scrollbar-horizontal-visible::-webkit-scrollbar-thumb {
+  background: #3B82F6;
+}
+
+.dark .scrollbar-horizontal-visible::-webkit-scrollbar-thumb:hover {
+  background: #60A5FA;
 }
 
 /* Asset category card hover animation */

@@ -453,30 +453,31 @@ export default function GoldHoldingsPage() {
             <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Gold Holdings</h1>
             <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Track all your gold investments in one place</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             {/* Update Prices button */}
             <button
               onClick={handlePriceUpdate}
               disabled={priceUpdateLoading || priceUpdateDisabled}
-              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors font-medium ${
+              className={`inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2.5 min-w-[44px] min-h-[44px] rounded-lg transition-colors font-medium ${
                 priceUpdateLoading || priceUpdateDisabled
                   ? 'bg-[#9CA3AF] dark:bg-[#475569] text-white cursor-not-allowed'
                   : 'bg-[#10B981] dark:bg-[#059669] text-white hover:bg-[#059669] dark:hover:bg-[#047857]'
               }`}
               title={priceUpdateDisabled ? 'Prices already updated recently' : 'Update gold prices from IBJA (India Bullion & Jewellers Association)'}
             >
-              <RefreshIcon className={`w-5 h-5 ${priceUpdateLoading ? 'animate-spin' : ''}`} />
-              {priceUpdateLoading ? 'Updating...' : 'Update Prices'}
+              <RefreshIcon className={`w-5 h-5 shrink-0 ${priceUpdateLoading ? 'animate-spin' : ''}`} />
+              <span className="hidden md:inline">{priceUpdateLoading ? 'Updating...' : 'Update Prices'}</span>
             </button>
             <button
               onClick={() => {
                 setEditingHolding(null);
                 setShowAddModal(true);
               }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium"
+              className="inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2.5 min-w-[44px] min-h-[44px] bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium"
+              title="Add Gold Holding"
             >
-              <PlusIcon className="w-5 h-5" />
-              Add Gold Holding
+              <PlusIcon className="w-5 h-5 shrink-0" />
+              <span className="hidden md:inline">Add Gold Holding</span>
             </button>
           </div>
         </div>
@@ -610,8 +611,70 @@ export default function GoldHoldingsPage() {
                   </div>
                 </div>
 
-                {/* Holdings Table */}
-                <div className="overflow-x-auto">
+                {/* Mobile Card Layout */}
+                <div className="md:hidden space-y-3 p-4">
+                  {group.holdings.map((holding) => (
+                    <div
+                      key={holding.id}
+                      className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] truncate">{holding.name}</div>
+                          {holding.seriesName && (
+                            <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{holding.seriesName}</div>
+                          )}
+                        </div>
+                        <div className={`font-semibold shrink-0 ${holding.gainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                          {holding.gainLoss >= 0 ? '+' : ''}{formatCurrency(holding.gainLoss)}
+                          <span className="text-sm font-medium ml-1">({holding.gainLossPct >= 0 ? '+' : ''}{holding.gainLossPct.toFixed(1)}%)</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-[#6B7280] dark:text-[#94A3B8]">Qty</span>
+                          <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.quantity} {holding.goldType === 'etf' ? 'units' : (holding.unitType === 'gram' ? 'g' : 'units')}</div>
+                        </div>
+                        <div>
+                          <span className="text-[#6B7280] dark:text-[#94A3B8]">Invested</span>
+                          <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(holding.investedValue)}</div>
+                        </div>
+                        <div>
+                          <span className="text-[#6B7280] dark:text-[#94A3B8]">Current</span>
+                          <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(holding.currentValue)}</div>
+                        </div>
+                        <div>
+                          <span className="text-[#6B7280] dark:text-[#94A3B8]">Allocation</span>
+                          <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.allocationPct.toFixed(1)}%</div>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-[#E5E7EB] dark:border-[#334155]">
+                        <button
+                          onClick={() => handleEdit(holding)}
+                          className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-[#2563EB] dark:text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A8A] transition-colors"
+                          title="Edit holding"
+                        >
+                          <EditIcon className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(holding)}
+                          disabled={deletingHoldingId === holding.id}
+                          className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-[#DC2626] dark:text-[#EF4444] hover:bg-[#FEE2E2] dark:hover:bg-[#7F1D1D] transition-colors disabled:opacity-50"
+                          title="Delete holding"
+                        >
+                          {deletingHoldingId === holding.id ? (
+                            <div className="w-5 h-5 border-2 border-[#DC2626] dark:border-[#EF4444] border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <TrashIcon className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Holdings Table - Desktop */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-[#F6F8FB] dark:bg-[#334155] border-b border-[#E5E7EB] dark:border-[#334155]">
                       <tr>

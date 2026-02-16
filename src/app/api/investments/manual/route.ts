@@ -459,6 +459,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate amounts and rates before processing
+    const investedValue = form_data.fdPrincipal ?? form_data.bondAmount ?? form_data.goldAmount ?? form_data.cashAmount ?? form_data.epfBalance ?? form_data.ppfBalance ?? form_data.npsBalance ?? 0;
+    if (investedValue <= 0) {
+      return NextResponse.json<ManualInvestmentResponse>(
+        { success: false, error: 'Amount must be greater than 0' },
+        { status: 400 }
+      );
+    }
+    if (form_data.assetType === 'fd' && form_data.fdRate !== undefined && form_data.fdRate < 0) {
+      return NextResponse.json<ManualInvestmentResponse>(
+        { success: false, error: 'Interest rate cannot be negative' },
+        { status: 400 }
+      );
+    }
+    if (form_data.assetType === 'bond') {
+      if (form_data.bondCouponRate !== undefined && form_data.bondCouponRate < 0) {
+        return NextResponse.json<ManualInvestmentResponse>(
+          { success: false, error: 'Coupon rate cannot be negative' },
+          { status: 400 }
+        );
+      }
+      if (form_data.bondYieldToMaturity !== undefined && form_data.bondYieldToMaturity < 0) {
+        return NextResponse.json<ManualInvestmentResponse>(
+          { success: false, error: 'Yield to maturity cannot be negative' },
+          { status: 400 }
+        );
+      }
+    }
+
     const adminClient = createAdminClient();
 
     // Get or create portfolio

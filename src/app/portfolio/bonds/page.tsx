@@ -900,10 +900,11 @@ export default function BondsHoldingsPage() {
               });
               setShowAddModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-colors font-semibold"
+            className="inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-colors font-semibold"
+            title="Add Bond"
           >
-            <Plus className="w-4 h-4" />
-            Add Bond
+            <Plus className="w-5 h-5 shrink-0" />
+            <span className="hidden md:inline">Add Bond</span>
           </button>
         </div>
 
@@ -925,8 +926,105 @@ export default function BondsHoldingsPage() {
           </div>
         )}
 
-        {/* Holdings Table */}
-        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
+        {/* Mobile Card Layout */}
+        <div className="md:hidden space-y-3 mb-6">
+          {sortedHoldings.map((holding) => (
+            <div
+              key={holding.id}
+              className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4"
+            >
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{holding.issuer || holding.name}</div>
+                  <div className="mt-1">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
+                      holding.type?.includes('Government') || holding.type?.includes('G-Sec') ? 'bg-[#E0F2FE] dark:bg-[#1E3A8A] text-[#0369A1] dark:text-[#93C5FD]' :
+                      holding.type?.includes('PSU') ? 'bg-[#F0FDF4] dark:bg-[#14532D] text-[#166534] dark:text-[#86EFAC]' :
+                      holding.type?.includes('Corporate') ? 'bg-[#FEF3C7] dark:bg-[#78350F] text-[#92400E] dark:text-[#FDE68A]' :
+                      'bg-[#F3F4F6] dark:bg-[#334155] text-[#4B5563] dark:text-[#CBD5E1]'
+                    }`}>
+                      {holding.type || '—'}
+                    </span>
+                  </div>
+                </div>
+                <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] shrink-0">
+                  {formatCurrency(holding.currentValue)}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Invested</span>
+                  <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(holding.investedValue)}</div>
+                </div>
+                <div>
+                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Coupon</span>
+                  <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.couponRate !== null ? `${holding.couponRate.toFixed(2)}%` : '—'}</div>
+                </div>
+                <div>
+                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Maturity</span>
+                  <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatDate(holding.maturityDate)}</div>
+                </div>
+                <div>
+                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Status</span>
+                  <div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${
+                      holding.status === 'Active' ? 'bg-[#D1FAE5] dark:bg-[#14532D] text-[#065F46] dark:text-[#86EFAC]' :
+                      holding.status === 'Matured' ? 'bg-[#FEE2E2] dark:bg-[#7F1D1D] text-[#991B1B] dark:text-[#FCA5A5]' :
+                      'bg-[#F3F4F6] dark:bg-[#334155] text-[#4B5563] dark:text-[#CBD5E1]'
+                    }`}>
+                      {holding.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-[#E5E7EB] dark:border-[#334155]">
+                <button
+                  onClick={() => {
+                    setSelectedBond(holding);
+                    setFormData({
+                      issuer: holding.issuer || '',
+                      amount: holding.investedValue.toString(),
+                      bondType: holding.type || '',
+                      rating: holding.rating || '',
+                      couponRate: holding.couponRate?.toString() || '',
+                      yieldToMaturity: holding.yieldToMaturity?.toString() || '',
+                      interestPayoutFrequency: holding.interestPayoutFrequency || '',
+                      principalPayout: holding.principalPayout || '',
+                      taxStatus: holding.taxStatus || '',
+                      collateralSecurity: holding.collateralSecurity || '',
+                      tenureYears: holding.tenureYears?.toString() || '',
+                      tenureMonths: holding.tenureMonths?.toString() || '',
+                      orderId: holding.orderId || '',
+                      orderDate: holding.orderDate || '',
+                      settlementDate: holding.settlementDate || '',
+                      maturityDate: holding.maturityDate || '',
+                      faceValuePerUnit: holding.faceValuePerUnit?.toString() || '',
+                      units: holding.units?.toString() || ''
+                    });
+                    setShowEditModal(true);
+                  }}
+                  className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-[#2563EB] dark:text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A8A] transition-colors"
+                  title="Edit Bond"
+                >
+                  <Edit className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => {
+                    setBondToDelete(holding);
+                    setShowDeleteConfirm(true);
+                  }}
+                  className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-[#DC2626] dark:text-[#EF4444] hover:bg-[#FEF2F2] dark:hover:bg-[#7F1D1D] transition-colors"
+                  title="Delete Bond"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Holdings Table - Desktop */}
+        <div className="hidden md:block bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
           <div className="overflow-x-auto">
             <div className="inline-block min-w-full align-middle">
               <table className="w-full">
@@ -1373,15 +1471,31 @@ function AddBondModal({
   isLoading: boolean;
   formatCurrency: (value: number) => string;
 }) {
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
 
     if (!formData.issuer || !formData.amount) {
+      setSubmitError('Issuer and amount are required');
       return;
     }
 
     const amount = parseFloat(formData.amount);
     if (amount <= 0) {
+      setSubmitError('Amount must be greater than 0');
+      return;
+    }
+
+    const couponRate = formData.couponRate ? parseFloat(formData.couponRate) : undefined;
+    const yieldToMaturity = formData.yieldToMaturity ? parseFloat(formData.yieldToMaturity) : undefined;
+    if (couponRate !== undefined && couponRate < 0) {
+      setSubmitError('Coupon rate cannot be negative');
+      return;
+    }
+    if (yieldToMaturity !== undefined && yieldToMaturity < 0) {
+      setSubmitError('Yield to maturity cannot be negative');
       return;
     }
 
@@ -1390,8 +1504,8 @@ function AddBondModal({
       amount: amount,
       bondType: formData.bondType || undefined,
       rating: formData.rating || undefined,
-      couponRate: formData.couponRate ? parseFloat(formData.couponRate) : undefined,
-      yieldToMaturity: formData.yieldToMaturity ? parseFloat(formData.yieldToMaturity) : undefined,
+      couponRate,
+      yieldToMaturity,
       interestPayoutFrequency: formData.interestPayoutFrequency || undefined,
       principalPayout: formData.principalPayout || undefined,
       taxStatus: formData.taxStatus || undefined,
@@ -1705,6 +1819,10 @@ function AddBondModal({
             </div>
           )}
 
+          {submitError && (
+            <p className="text-sm text-[#DC2626] dark:text-[#EF4444]">{submitError}</p>
+          )}
+
           <div className="flex gap-3 pt-4">
             <button
               type="button"
@@ -1747,15 +1865,31 @@ function EditBondModal({
   isLoading: boolean;
   formatCurrency: (value: number) => string;
 }) {
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
 
     if (!formData.issuer || !formData.amount) {
+      setSubmitError('Issuer and amount are required');
       return;
     }
 
     const amount = parseFloat(formData.amount);
     if (amount <= 0) {
+      setSubmitError('Amount must be greater than 0');
+      return;
+    }
+
+    const couponRate = formData.couponRate ? parseFloat(formData.couponRate) : undefined;
+    const yieldToMaturity = formData.yieldToMaturity ? parseFloat(formData.yieldToMaturity) : undefined;
+    if (couponRate !== undefined && couponRate < 0) {
+      setSubmitError('Coupon rate cannot be negative');
+      return;
+    }
+    if (yieldToMaturity !== undefined && yieldToMaturity < 0) {
+      setSubmitError('Yield to maturity cannot be negative');
       return;
     }
 
@@ -1764,8 +1898,8 @@ function EditBondModal({
       amount: amount,
       bondType: formData.bondType || undefined,
       rating: formData.rating || undefined,
-      couponRate: formData.couponRate ? parseFloat(formData.couponRate) : undefined,
-      yieldToMaturity: formData.yieldToMaturity ? parseFloat(formData.yieldToMaturity) : undefined,
+      couponRate,
+      yieldToMaturity,
       interestPayoutFrequency: formData.interestPayoutFrequency || undefined,
       principalPayout: formData.principalPayout || undefined,
       taxStatus: formData.taxStatus || undefined,
@@ -2084,6 +2218,10 @@ function EditBondModal({
                 Previous: {formatCurrency(bond.investedValue)}
               </div>
             </div>
+          )}
+
+          {submitError && (
+            <p className="text-sm text-[#DC2626] dark:text-[#EF4444]">{submitError}</p>
           )}
 
           <div className="flex gap-3 pt-4">

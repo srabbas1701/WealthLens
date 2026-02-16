@@ -18,7 +18,7 @@
  * once property detail & edit flows are added.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,7 +34,7 @@ import RealEstateAddModal from '@/components/real-estate/RealEstateAddModal';
 import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
 import SimpleToast from '@/components/SimpleToast';
 import { useAuth } from '@/lib/auth';
-import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
+import { getCachedRealEstateData, setCachedRealEstateData, isRealEstateCacheStale } from '@/lib/portfolio-cache';
 import type { RealEstateDashboardData } from '@/types/realEstateDashboard.types';
 
 // ============================================================================
@@ -464,15 +464,15 @@ export default function RealEstateDashboard() {
       return;
     }
 
-    // Try cache first (unless skipCache is true)
+    // Try dedicated Real Estate cache first (not overwritten by other portfolio pages)
     if (!skipCache) {
-      const cached = getCachedPortfolioData<RealEstateDashboardData>(userId);
-      if (cached) {
+      const cached = getCachedRealEstateData<RealEstateDashboardData>(userId);
+      if (cached && cached.summary && Array.isArray(cached.propertyValueSeries)) {
         setDashboardData(cached);
         setLoading(false);
 
         // Refresh in background if stale
-        if (isCacheStale(userId)) {
+        if (isRealEstateCacheStale(userId)) {
           fetchData(userId, true).catch(err =>
             console.error('[RealEstate] Background refresh failed:', err)
           );
@@ -622,8 +622,8 @@ export default function RealEstateDashboard() {
 
           if (dashboard) {
             setDashboardData(dashboard);
-            // Cache the dashboard data
-            setCachedPortfolioData(userId, dashboard);
+            // Cache in dedicated Real Estate cache (persists across navigation to other pages)
+            setCachedRealEstateData(userId, dashboard);
           }
         } else {
           setToast({ message: 'Invalid data format received', type: 'error' });
@@ -642,7 +642,8 @@ export default function RealEstateDashboard() {
   }, []);
 
   // Fetch data on mount and when user changes
-  useEffect(() => {
+  // useLayoutEffect: apply cache before paint to avoid loading flash on back-navigation
+  useLayoutEffect(() => {
     if (authStatus === 'authenticated' && user?.id) {
       fetchData(user.id);
     }
@@ -752,25 +753,24 @@ export default function RealEstateDashboard() {
                 Overview of your property investments
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="lg"
-                className="gap-2"
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button
                 onClick={handleExport}
                 disabled={!dashboardData || !dashboardData.properties || dashboardData.properties.length === 0}
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] rounded-lg font-medium text-sm border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Export"
               >
-                <FileIcon className="w-4 h-4" />
-                Export
-              </Button>
-              <Button 
-                size="lg" 
-                className="gap-2 bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] text-white"
+                <FileIcon className="w-5 h-5 shrink-0" />
+                <span className="hidden md:inline">Export</span>
+              </button>
+              <button
                 onClick={() => setIsAddModalOpen(true)}
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg font-medium text-sm hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+                title="Add Property"
               >
-                <PlusIcon className="w-4 h-4" />
-                Add Property
-              </Button>
+                <PlusIcon className="w-5 h-5 shrink-0" />
+                <span className="hidden md:inline">Add Property</span>
+              </button>
             </div>
           </div>
         </div>
@@ -807,7 +807,9 @@ export default function RealEstateDashboard() {
               value={
                 loading
                   ? 'Loading...'
-                  : dashboardData && dashboardData.summary.averageNetRentalYield !== null
+                  : dashboardData &&
+                    dashboardData.summary &&
+                    typeof dashboardData.summary.averageNetRentalYield === 'number'
                     ? `${dashboardData.summary.averageNetRentalYield.toFixed(2)}%`
                     : '—'
               }
@@ -818,7 +820,9 @@ export default function RealEstateDashboard() {
               value={
                 loading
                   ? 'Loading...'
-                  : dashboardData
+                  : dashboardData &&
+                    dashboardData.summary &&
+                    typeof dashboardData.summary.portfolioAllocationPercent === 'number'
                     ? `${dashboardData.summary.portfolioAllocationPercent.toFixed(1)}%`
                     : '—'
               }
@@ -930,31 +934,29 @@ export default function RealEstateDashboard() {
                       {dashboardData.properties.map((property) => (
                         <div
                           key={property.propertyId}
-                          className="flex items-center justify-between p-4 border-b border-[#E5E7EB] dark:border-[#334155] last:border-b-0 hover:bg-[#F6F8FB] dark:hover:bg-[#1E293B] transition-colors"
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border-b border-[#E5E7EB] dark:border-[#334155] last:border-b-0 hover:bg-[#F6F8FB] dark:hover:bg-[#1E293B] transition-colors"
                         >
                           <div
-                            className="flex-1 min-w-0 cursor-pointer"
+                            className="flex-1 min-w-0 cursor-pointer order-1"
                             onClick={() => router.push(`/portfolio/real-estate/${property.propertyId}`)}
                           >
-                            <div className="flex items-center gap-3 mb-1">
-                              <h3 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] truncate">
-                                {property.propertyName}
-                              </h3>
-                            </div>
-                            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                            <h3 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] break-words">
+                              {property.propertyName}
+                            </h3>
+                            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
                               {property.city} • {property.propertyType}
                             </p>
                           </div>
-                          <div className="flex items-center gap-6 ml-4">
+                          <div className="flex items-center gap-4 sm:gap-6 sm:ml-4 shrink-0 order-2">
                             <div className="text-right">
                               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Value</p>
-                              <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                              <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-sm sm:text-base">
                                 {formatCurrency(property.estimatedValue)}
                               </p>
                             </div>
-                            <div className="text-right min-w-[100px]">
+                            <div className="text-right min-w-[60px] sm:min-w-[80px]">
                               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Rental Yield</p>
-                              {property.netRentalYield !== null ? (
+                              {typeof property.netRentalYield === 'number' ? (
                                 <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                                   {property.netRentalYield.toFixed(2)}%
                                 </p>

@@ -388,8 +388,12 @@ export default function FixedDepositsPage() {
     const errors: Partial<FDFormData> = {};
 
     if (!formData.bank.trim()) errors.bank = 'Bank name is required';
-    if (!formData.principal || parseFloat(formData.principal) <= 0) errors.principal = 'Valid principal amount is required';
-    if (!formData.rate || parseFloat(formData.rate) <= 0) errors.rate = 'Valid interest rate is required';
+    const principalNum = parseFloat(formData.principal);
+    if (!formData.principal || isNaN(principalNum)) errors.principal = 'Principal amount is required';
+    else if (principalNum <= 0) errors.principal = 'Amount must be greater than 0';
+    const rateNum = parseFloat(formData.rate);
+    if (!formData.rate || isNaN(rateNum)) errors.rate = 'Interest rate is required';
+    else if (rateNum < 0) errors.rate = 'Interest rate cannot be negative';
     if (!formData.startDate) errors.startDate = 'Start date is required';
 
     const today = new Date();
@@ -742,22 +746,23 @@ export default function FixedDepositsPage() {
                 {holdings.length} holdings • Total Value: {formatCurrency(totalValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-3">
               <button
                 onClick={handleRefreshValues}
                 disabled={refreshing}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium text-sm shadow-sm disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2.5 min-w-[44px] min-h-[44px] bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium text-sm shadow-sm disabled:opacity-50"
                 title="Refresh Current Values"
               >
-                <RefreshIcon className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-                Refresh
+                <RefreshIcon className={`w-5 h-5 shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden md:inline">Refresh</span>
               </button>
               <button
                 onClick={handleAddNew}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium text-sm shadow-sm"
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2.5 min-w-[44px] min-h-[44px] bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium text-sm shadow-sm"
+                title="Add New FD"
               >
-                <PlusIcon className="w-5 h-5" />
-                Add New FD
+                <PlusIcon className="w-5 h-5 shrink-0" />
+                <span className="hidden md:inline">Add New FD</span>
               </button>
             </div>
           </div>
@@ -781,10 +786,10 @@ export default function FixedDepositsPage() {
 
           {/* Controls */}
           <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4 mb-6">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]">Show:</span>
-                <div className="flex gap-2">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 min-w-0">
+                <span className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] shrink-0">Show:</span>
+                <div className="flex flex-wrap gap-2">
                   {[
                     { value: 'all', label: 'All FDs' },
                     { value: '30', label: 'Mat. in 30d' },
@@ -805,12 +810,12 @@ export default function FixedDepositsPage() {
                   ))}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]">Sort by:</span>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 min-w-0">
+                <span className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] shrink-0">Sort by:</span>
                 <select
                   value={sortField}
                   onChange={(e) => handleSort(e.target.value as SortField)}
-                  className="px-3 py-1.5 text-sm border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] font-medium"
+                  className="w-full min-w-0 sm:w-auto px-3 py-1.5 text-sm border border-[#E5E7EB] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] font-medium"
                 >
                   <option value="maturityDate">Maturity Date</option>
                   <option value="bank">Bank</option>
@@ -824,8 +829,71 @@ export default function FixedDepositsPage() {
             </div>
           </div>
 
-          {/* Holdings Table */}
-          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden">
+          {/* Mobile Card Layout */}
+          <div className="md:hidden space-y-3 mb-6">
+            {sortedHoldings.map((holding) => (
+              <div
+                key={holding.id}
+                className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4"
+              >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{holding.bank}</div>
+                    <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">FD No: {holding.fdNumber}</div>
+                  </div>
+                  <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] shrink-0">
+                    {formatCurrency(holding.currentValue)}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-[#6B7280] dark:text-[#94A3B8]">Principal</span>
+                    <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(holding.principal)}</div>
+                  </div>
+                  <div>
+                    <span className="text-[#6B7280] dark:text-[#94A3B8]">Rate</span>
+                    <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.rate.toFixed(2)}%</div>
+                  </div>
+                  <div>
+                    <span className="text-[#6B7280] dark:text-[#94A3B8]">Maturity</span>
+                    <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatDate(holding.maturityDate)}</div>
+                  </div>
+                  <div>
+                    <span className="text-[#6B7280] dark:text-[#94A3B8]">Days Left</span>
+                    <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.daysLeft < 0 ? 'Matured' : `${holding.daysLeft} days`}</div>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-[#E5E7EB] dark:border-[#334155]">
+                  {(holding.nomineeName || holding.nomineeRelationship) && (
+                    <button
+                      onClick={() => setShowNomination(holding)}
+                      className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-[#2563EB] dark:text-[#3B82F6] hover:bg-[#DBEAFE] dark:hover:bg-[#1E3A8A] transition-colors"
+                      title="View Nomination"
+                    >
+                      <InfoIcon className="w-5 h-5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleEdit(holding)}
+                    className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-[#2563EB] dark:text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A8A] transition-colors"
+                    title="Edit FD"
+                  >
+                    <EditIcon className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirmId(holding.id)}
+                    className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-[#DC2626] dark:text-[#EF4444] hover:bg-[#FEE2E2] dark:hover:bg-[#7F1D1D] transition-colors"
+                    title="Delete FD"
+                  >
+                    <TrashIcon className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Holdings Table - Desktop */}
+          <div className="hidden md:block bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>

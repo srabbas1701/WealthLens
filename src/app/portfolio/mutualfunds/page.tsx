@@ -912,22 +912,16 @@ export default function MutualFundsPage() {
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <Link
                 href="/portfolio/mutualfunds/add"
-                className="inline-flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm sm:text-base min-h-[44px]"
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-6 md:py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm md:text-base min-w-[44px] min-h-[44px]"
+                title="Add MF"
               >
-                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>Add MF</span>
-              </Link>
-              <Link
-                href="/portfolio/holdings/add"
-                className="inline-flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium text-sm sm:text-base min-h-[44px]"
-              >
-                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>Add Holding</span>
+                <Plus className="w-5 h-5 shrink-0" />
+                <span className="hidden md:inline">Add MF</span>
               </Link>
               <button
                 onClick={handleNavUpdate}
                 disabled={navUpdateLoading || disableForRecentRun}
-                className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium text-sm transition-colors min-h-[44px] ${
+                className={`inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] rounded-lg font-medium text-sm transition-colors ${
                   navUpdateLoading || disableForRecentRun
                     ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
                     : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
@@ -935,9 +929,11 @@ export default function MutualFundsPage() {
                 title={updateButtonTooltip}
               >
                 <RefreshIcon 
-                  className={`w-4 h-4 ${navUpdateLoading ? 'animate-spin' : ''}`} 
+                  className={`w-5 h-5 shrink-0 ${navUpdateLoading ? 'animate-spin' : ''}`} 
                 />
-                {navUpdateLoading ? 'Updating...' : 'Update NAVs'}
+                <span className="hidden md:inline">
+                  {navUpdateLoading ? 'Updating...' : 'Update NAVs'}
+                </span>
               </button>
             </div>
           </div>

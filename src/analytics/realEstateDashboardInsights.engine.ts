@@ -64,23 +64,13 @@ export function getRealEstateDashboardInsights(
     });
   }
 
-  // ========================================================================
-  // Rule 3: High Concentration Risk
-  // ========================================================================
-  if (portfolio.concentrationMap.length > 0) {
-    const topProperty = portfolio.concentrationMap[0];
-    if (topProperty.concentrationPercent > 40) {
-      insights.push({
-        id: 'high-concentration-risk',
-        title: 'High concentration risk',
-        description: `One property makes up ${topProperty.concentrationPercent.toFixed(1)}% of your real estate portfolio`,
-        severity: 'warning',
-      });
-    }
-  }
+  // NOTE: "High concentration risk" insight removed.
+  // Concentration rules from equity portfolios don't translate to real estate:
+  // properties are expensive and illiquid—owning 2–3 assets with one at 50%+ is
+  // normal. Diversifying across many properties is not practical for most investors.
 
   // ========================================================================
-  // Rule 4: Stale Valuation Summary
+  // Rule 3: Stale Valuation Summary
   // ========================================================================
   const now = new Date();
   const staleValuationProperties = assetsData.filter((assetData) => {

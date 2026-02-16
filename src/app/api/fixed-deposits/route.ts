@@ -154,6 +154,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const principalNum = parseFloat(principal);
+    const rateNum = parseFloat(rate);
+    if (principalNum <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'Principal amount must be greater than 0' },
+        { status: 400 }
+      );
+    }
+    if (rateNum < 0) {
+      return NextResponse.json(
+        { success: false, error: 'Interest rate cannot be negative' },
+        { status: 400 }
+      );
+    }
+
     const supabase = createAdminClient();
 
     // Get or create portfolio
@@ -229,6 +244,21 @@ export async function PUT(request: NextRequest) {
     if (!id || !bank || !principal || !rate || !startDate || !maturityDate) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    const principalNum = parseFloat(principal);
+    const rateNum = parseFloat(rate);
+    if (principalNum <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'Principal amount must be greater than 0' },
+        { status: 400 }
+      );
+    }
+    if (rateNum < 0) {
+      return NextResponse.json(
+        { success: false, error: 'Interest rate cannot be negative' },
         { status: 400 }
       );
     }

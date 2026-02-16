@@ -13,7 +13,6 @@ import { useRouter } from 'next/navigation';
 import React from 'react';
 import { 
   ArrowLeftIcon,
-  AlertTriangleIcon,
   InfoIcon,
   CheckCircleIcon,
   ChevronDownIcon,
@@ -276,16 +275,16 @@ export default function MFExposurePage() {
           </p>
         </div>
 
-        {/* Warning Banner */}
-        <div className="bg-[#FEF3C7] border border-[#F59E0B]/20 rounded-xl p-4 mb-6">
+        {/* Exposure Analysis Context - informational */}
+        <div className="bg-[#EFF6FF] dark:bg-[#1E3A8A]/20 border border-[#2563EB]/20 dark:border-[#3B82F6]/30 rounded-xl p-4 mb-6">
           <div className="flex items-start gap-3">
-            <AlertTriangleIcon className="w-5 h-5 text-[#F59E0B] flex-shrink-0 mt-0.5" />
+            <InfoIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-[#92400E] mb-1">
-                Analytics View - Exposure Analysis
+              <p className="text-sm font-semibold text-[#1E40AF] dark:text-[#93C5FD] mb-1">
+                Exposure Analysis
               </p>
-              <p className="text-xs text-[#92400E]">
-                This screen shows exposure analysis, not asset ownership. Values here may differ from 
+              <p className="text-sm text-[#1E40AF]/90 dark:text-[#93C5FD]/90">
+                This view shows exposure analysis, not asset ownership. Values here may differ from 
                 dashboard and holdings screens. Dashboard values remain authoritative.
               </p>
             </div>

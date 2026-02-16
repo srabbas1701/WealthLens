@@ -9,6 +9,10 @@
  * - Eliminates blank loading screens when navigating between portfolio pages
  * - Reduces API calls by 80-90% for typical navigation patterns
  * - Data refreshes in background if stale (> 5 min) while showing cached data
+ *
+ * Note: Real Estate uses a separate cache (realEstateCache) because it has
+ * a different data structure and would otherwise be overwritten when visiting
+ * other portfolio pages (Dashboard, Stocks, etc.).
  */
 
 const TTL_MS = 5 * 60 * 1000; // 5 minutes cache
@@ -21,6 +25,13 @@ interface CacheEntry {
 }
 
 let cache: CacheEntry = {
+  userId: null,
+  data: null,
+  timestamp: 0,
+};
+
+/** Dedicated cache for Real Estate dashboard - not overwritten by other pages */
+let realEstateCache: CacheEntry = {
   userId: null,
   data: null,
   timestamp: 0,
@@ -59,4 +70,28 @@ export function setCachedPortfolioData(userId: string, data: unknown) {
  */
 export function clearPortfolioCache() {
   cache = { userId: null, data: null, timestamp: 0 };
+  realEstateCache = { userId: null, data: null, timestamp: 0 };
+}
+
+// =============================================================================
+// REAL ESTATE DEDICATED CACHE
+// Real Estate dashboard has a different data shape. Using the shared cache
+// causes reloads on back-navigation because other pages overwrite it.
+// =============================================================================
+
+export function getCachedRealEstateData<T = unknown>(userId: string): T | null {
+  if (realEstateCache.userId !== userId) return null;
+  if (Date.now() - realEstateCache.timestamp > TTL_MS) return null;
+  return realEstateCache.data as T;
+}
+
+export function setCachedRealEstateData(userId: string, data: unknown) {
+  realEstateCache = { userId, data, timestamp: Date.now() };
+}
+
+export function isRealEstateCacheStale(userId: string): boolean {
+  if (realEstateCache.userId !== userId) return false;
+  if (!realEstateCache.data) return false;
+  const age = Date.now() - realEstateCache.timestamp;
+  return age > STALE_MS && age <= TTL_MS;
 }

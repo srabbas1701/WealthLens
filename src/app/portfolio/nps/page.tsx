@@ -483,26 +483,28 @@ export default function NPSHoldingsPage() {
             </p>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-2 md:gap-3">
             <button
               onClick={handleUpdateNAVs}
               disabled={navUpdateLoading || holdings.length === 0}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+              className={`inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] rounded-lg font-medium text-sm transition-colors ${
                 navUpdateLoading || holdings.length === 0
                   ? 'bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed dark:bg-[#334155] dark:text-[#64748B]'
                   : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
               }`}
+              title="Update NAVs"
             >
-              <RefreshIcon className={`w-4 h-4 ${navUpdateLoading ? 'animate-spin' : ''}`} />
-              Update NAVs
+              <RefreshIcon className={`w-5 h-5 shrink-0 ${navUpdateLoading ? 'animate-spin' : ''}`} />
+              <span className="hidden md:inline">Update NAVs</span>
             </button>
 
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg font-medium text-sm hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+              className="inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg font-medium text-sm hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+              title="Add NPS Account"
             >
-              <PlusIcon className="w-4 h-4" />
-              Add NPS Account
+              <PlusIcon className="w-5 h-5 shrink-0" />
+              <span className="hidden md:inline">Add NPS Account</span>
             </button>
           </div>
         </div>
@@ -513,24 +515,24 @@ export default function NPSHoldingsPage() {
             <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
               Overall Asset Allocation
             </h2>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {ASSET_CLASSES.map(assetClass => {
                 const allocation = allocationPercentages.find(a => a.assetClass === assetClass.id);
                 const percentage = allocation?.percentage || 0;
                 const value = allocation?.value || 0;
 
                 return (
-                  <div key={assetClass.id} className="p-4 bg-[#F9FAFB] dark:bg-[#334155] rounded-lg border border-[#E5E7EB] dark:border-[#334155]">
+                  <div key={assetClass.id} className="p-4 bg-[#F9FAFB] dark:bg-[#334155] rounded-lg border border-[#E5E7EB] dark:border-[#334155] min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       <div 
-                        className="w-3 h-3 rounded-full" 
+                        className="w-3 h-3 rounded-full shrink-0" 
                         style={{ backgroundColor: assetClass.color }}
                       />
                       <span className="text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase">
                         {assetClass.id}
                       </span>
                     </div>
-                    <p className="text-sm text-[#475569] dark:text-[#CBD5E1] mb-1">{assetClass.name}</p>
+                    <p className="text-sm text-[#475569] dark:text-[#CBD5E1] mb-1 break-words min-w-0">{assetClass.name}</p>
                     <p className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                       {percentage.toFixed(1)}%
                     </p>
@@ -673,7 +675,43 @@ export default function NPSHoldingsPage() {
                   {/* Tier I Schemes Table */}
                   {expandedTier[holding.id] === 'tier1' && (
                     <div className="px-6 py-4 bg-[#F9FAFB] dark:bg-[#334155]">
-                      <div className="overflow-x-auto">
+                      {/* Mobile: Scheme Cards */}
+                      <div className="md:hidden space-y-3">
+                        {holding.tier1.schemes.map((scheme, idx) => {
+                          const assetClassInfo = ASSET_CLASSES.find(a => a.id === scheme.assetClass);
+                          return (
+                            <div key={idx} className="p-3 bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155]">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: assetClassInfo?.color }} />
+                                <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{scheme.assetClass}</span>
+                                <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{scheme.fundManager}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Value</span>
+                                  <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(scheme.currentValue)}</div>
+                                </div>
+                                <div>
+                                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Returns</span>
+                                  <div className={`font-medium ${scheme.returns >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                                    {scheme.returns >= 0 ? '+' : ''}{formatCurrency(scheme.returns)} ({scheme.returnsPercentage >= 0 ? '+' : ''}{scheme.returnsPercentage.toFixed(2)}%)
+                                  </div>
+                                </div>
+                                <div>
+                                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Allocation</span>
+                                  <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{scheme.allocationPercentage.toFixed(1)}%</div>
+                                </div>
+                                <div>
+                                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Invested</span>
+                                  <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(scheme.investedAmount)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Desktop: Table */}
+                      <div className="hidden md:block overflow-x-auto">
                         <table className="w-full">
                           <thead className="border-b border-[#E5E7EB] dark:border-[#334155]">
                             <tr>
@@ -760,7 +798,7 @@ export default function NPSHoldingsPage() {
                   )}
                 </div>
 
-                {/* Tier II Details (if exists) */}
+                {/* Tier II Details (if exists) - mobile scheme cards + desktop table */}
                 {holding.tier2 && (
                   <div>
                     <button
@@ -802,7 +840,43 @@ export default function NPSHoldingsPage() {
                     {/* Tier II Schemes Table */}
                     {expandedTier[holding.id] === 'tier2' && (
                       <div className="px-6 py-4 bg-[#F9FAFB] dark:bg-[#334155]">
-                        <div className="overflow-x-auto">
+                        {/* Mobile: Scheme Cards */}
+                        <div className="md:hidden space-y-3">
+                          {holding.tier2.schemes.map((scheme, idx) => {
+                            const assetClassInfo = ASSET_CLASSES.find(a => a.id === scheme.assetClass);
+                            return (
+                              <div key={idx} className="p-3 bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155]">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: assetClassInfo?.color }} />
+                                  <span className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{scheme.assetClass}</span>
+                                  <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{scheme.fundManager}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                  <div>
+                                    <span className="text-[#6B7280] dark:text-[#94A3B8]">Value</span>
+                                    <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(scheme.currentValue)}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-[#6B7280] dark:text-[#94A3B8]">Returns</span>
+                                    <div className={`font-medium ${scheme.returns >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                                      {scheme.returns >= 0 ? '+' : ''}{formatCurrency(scheme.returns)} ({scheme.returnsPercentage >= 0 ? '+' : ''}{scheme.returnsPercentage.toFixed(2)}%)
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="text-[#6B7280] dark:text-[#94A3B8]">Allocation</span>
+                                    <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{scheme.allocationPercentage.toFixed(1)}%</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-[#6B7280] dark:text-[#94A3B8]">Invested</span>
+                                    <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(scheme.investedAmount)}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Desktop: Table */}
+                        <div className="hidden md:block overflow-x-auto">
                           <table className="w-full">
                             <thead className="border-b border-[#E5E7EB] dark:border-[#334155]">
                               <tr>

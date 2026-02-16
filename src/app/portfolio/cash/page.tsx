@@ -251,8 +251,42 @@ export default function CashHoldingsPage() {
           </p>
         </div>
 
-        {/* Holdings Table */}
-        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
+        {/* Mobile Card Layout */}
+        <div className="md:hidden space-y-3 mb-6">
+          {sortedHoldings.map((holding) => (
+            <div
+              key={holding.id}
+              className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4"
+            >
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{holding.name}</div>
+                  <div className="mt-1">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-[#F3F4F6] dark:bg-[#334155] text-[#4B5563] dark:text-[#CBD5E1]">
+                      {holding.accountType}
+                    </span>
+                  </div>
+                </div>
+                <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] shrink-0">
+                  {formatCurrency(holding.balance)}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Interest Rate</span>
+                  <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.interestRate !== null ? `${holding.interestRate.toFixed(2)}%` : '—'}</div>
+                </div>
+                <div>
+                  <span className="text-[#6B7280] dark:text-[#94A3B8]">Last Updated</span>
+                  <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatDateTime(holding.lastUpdated)}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Holdings Table - Desktop */}
+        <div className="hidden md:block bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
           <div className="overflow-x-auto">
             <div className="inline-block min-w-full align-middle">
               <table className="w-full">

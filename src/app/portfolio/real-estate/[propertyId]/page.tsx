@@ -38,7 +38,7 @@ import UpdateValuationModal from '@/components/real-estate/UpdateValuationModal'
 import EditPropertyModal from '@/components/real-estate/EditPropertyModal';
 import SellHoldSimulation from '@/components/real-estate/SellHoldSimulation';
 import { exportRealEstateProperty } from '@/exports/realEstate.export';
-import { FileIcon } from '@/components/icons';
+import { FileIcon, ArrowLeftIcon, ArrowRightIcon, PlusIcon } from '@/components/icons';
 
 // ============================================================================
 // TYPES
@@ -540,6 +540,46 @@ export default function PropertyDetailPage() {
   const [showValuationModal, setShowValuationModal] = useState(false);
   const [showEditPropertyModal, setShowEditPropertyModal] = useState(false);
 
+  // Tabs scroll state - arrows show when tabs overflow
+  const tabsScrollRef = useRef<HTMLDivElement>(null);
+  const [tabsScroll, setTabsScroll] = useState({
+    hasOverflow: false,
+    canScrollLeft: false,
+    canScrollRight: false,
+  });
+
+  const updateTabsScrollState = useCallback(() => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    const hasOverflow = scrollWidth > clientWidth;
+    setTabsScroll({
+      hasOverflow,
+      canScrollLeft: hasOverflow && scrollLeft > 0,
+      canScrollRight: hasOverflow && scrollLeft + clientWidth < scrollWidth,
+    });
+  }, []);
+
+  useEffect(() => {
+    updateTabsScrollState();
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(updateTabsScrollState);
+    ro.observe(el);
+    el.addEventListener('scroll', updateTabsScrollState);
+    return () => {
+      ro.disconnect();
+      el.removeEventListener('scroll', updateTabsScrollState);
+    };
+  }, [updateTabsScrollState, data]);
+
+  const scrollTabs = (direction: 'left' | 'right') => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    const step = Math.min(200, el.clientWidth * 0.6);
+    el.scrollBy({ left: direction === 'left' ? -step : step, behavior: 'smooth' });
+  };
+
   const fetchData = useCallback(async (userId: string, assetId: string) => {
     // Prevent duplicate simultaneous fetches
     if (fetchingRef.current) {
@@ -694,7 +734,7 @@ export default function PropertyDetailPage() {
                 {data.city} • {formatPropertyType(data.propertyType)} • {formatPropertyStatus(data.propertyStatus)}
               </p>
             </div>
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0 w-full sm:w-auto">
               <Button
                 variant="outline"
                 size="lg"
@@ -708,10 +748,10 @@ export default function PropertyDetailPage() {
                     alert('Failed to export property. Please try again.');
                   }
                 }}
-                className="gap-2"
+                className="gap-2 sm:gap-2"
               >
-                <FileIcon className="w-4 h-4" />
-                Export Property
+                <FileIcon className="w-4 h-4 shrink-0" />
+                <span className="truncate">Export Property</span>
               </Button>
               <Button 
                 variant="outline" 
@@ -843,11 +883,30 @@ export default function PropertyDetailPage() {
         <section>
           <Card className="bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
             <CardHeader>
-              {/* Tabs Navigation */}
-              <div className="flex gap-1 border-b border-[#E5E7EB] dark:border-[#334155] overflow-x-auto">
+              {/* Tabs Navigation - scrollable with arrow buttons when tabs overflow */}
+              <div className="flex items-center gap-1 border-b border-[#E5E7EB] dark:border-[#334155] min-w-0">
+                {tabsScroll.hasOverflow && (
+                  <button
+                    type="button"
+                    onClick={() => scrollTabs('left')}
+                    aria-label="Scroll tabs left"
+                    disabled={!tabsScroll.canScrollLeft}
+                    className={`shrink-0 p-2 -mb-px rounded-t transition-colors touch-target ${
+                      tabsScroll.canScrollLeft
+                        ? 'text-[#2563EB] dark:text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A8A]/30'
+                        : 'text-[#D1D5DB] dark:text-[#475569] cursor-not-allowed'
+                    }`}
+                  >
+                    <ArrowLeftIcon className="w-5 h-5" />
+                  </button>
+                )}
+                <div
+                  ref={tabsScrollRef}
+                  className="scrollbar-hide flex gap-1 overflow-x-auto overflow-y-hidden -mx-1 px-1 pb-px min-w-0"
+                >
                 <button
                   onClick={() => setActiveTab('performance')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                  className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0 ${
                     activeTab === 'performance'
                       ? 'border-[#2563EB] dark:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]'
                       : 'border-transparent text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
@@ -857,7 +916,7 @@ export default function PropertyDetailPage() {
                 </button>
                 <button
                   onClick={() => setActiveTab('cashflow')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                  className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0 ${
                     activeTab === 'cashflow'
                       ? 'border-[#2563EB] dark:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]'
                       : 'border-transparent text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
@@ -867,7 +926,7 @@ export default function PropertyDetailPage() {
                 </button>
                 <button
                   onClick={() => setActiveTab('loan')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                  className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0 ${
                     activeTab === 'loan'
                       ? 'border-[#2563EB] dark:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]'
                       : 'border-transparent text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
@@ -877,14 +936,30 @@ export default function PropertyDetailPage() {
                 </button>
                 <button
                   onClick={() => setActiveTab('details')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                  className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0 ${
                     activeTab === 'details'
                       ? 'border-[#2563EB] dark:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]'
                       : 'border-transparent text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
                   }`}
                 >
-                  Property Details
+                  <span className="hidden sm:inline">Property </span>Details
                 </button>
+                </div>
+                {tabsScroll.hasOverflow && (
+                  <button
+                    type="button"
+                    onClick={() => scrollTabs('right')}
+                    aria-label="Scroll tabs right"
+                    disabled={!tabsScroll.canScrollRight}
+                    className={`shrink-0 p-2 -mb-px rounded-t transition-colors touch-target ${
+                      tabsScroll.canScrollRight
+                        ? 'text-[#2563EB] dark:text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A8A]/30'
+                        : 'text-[#D1D5DB] dark:text-[#475569] cursor-not-allowed'
+                    }`}
+                  >
+                    <ArrowRightIcon className="w-5 h-5" />
+                  </button>
+                )}
               </div>
             </CardHeader>
 
@@ -951,13 +1026,14 @@ export default function PropertyDetailPage() {
                         Income and expenses for this property
                       </p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <button
                       onClick={() => setShowRentalModal(true)}
+                      className="inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] rounded-lg font-medium text-sm border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
+                      title="Update Rent"
                     >
-                      Update Rent
-                    </Button>
+                      <PlusIcon className="w-5 h-5 shrink-0" />
+                      <span className="hidden md:inline">Update Rent</span>
+                    </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Card className="bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
@@ -1067,13 +1143,16 @@ export default function PropertyDetailPage() {
                         Mortgage and loan information
                       </p>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <button
                       onClick={() => setShowLoanDetailsModal(true)}
+                      className="inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg font-medium text-sm hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+                      title={data.loanId ? 'Update Loan Details' : 'Add Loan'}
                     >
-                      {data.loanId ? 'Update Loan Details' : 'Add Loan'}
-                    </Button>
+                      <PlusIcon className="w-5 h-5 shrink-0" />
+                      <span className="hidden md:inline">
+                        {data.loanId ? 'Update Loan Details' : 'Add Loan'}
+                      </span>
+                    </button>
                   </div>
                   <Card className="bg-white dark:bg-[#1E293B] border-[#E5E7EB] dark:border-[#334155]">
                     <CardContent className="pt-6">

@@ -826,21 +826,22 @@ export default function EquityHoldingsPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Stocks Holdings</h1>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-3">
               {/* ADD STOCK BUTTON */}
               <button 
                 onClick={handleAddStock}
-                className="flex items-center gap-2 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold"
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-6 md:py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold min-w-[44px] min-h-[44px]"
+                title="Add Stock"
               >
-                <Plus className="w-5 h-5" />
-                <span>Add Stock</span>
+                <Plus className="w-5 h-5 shrink-0" />
+                <span className="hidden md:inline">Add Stock</span>
               </button>
               
               {/* Update Prices button */}
               <button
                 onClick={handlePriceUpdate}
                 disabled={priceUpdateLoading || priceUpdateDisabled || disableForRecentRun}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                className={`inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] rounded-lg font-medium text-sm transition-colors ${
                   priceUpdateLoading || priceUpdateDisabled || disableForRecentRun
                     ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
                     : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
@@ -848,13 +849,15 @@ export default function EquityHoldingsPage() {
                 title={updateButtonTooltip}
               >
                 <RefreshIcon 
-                  className={`w-4 h-4 ${priceUpdateLoading ? 'animate-spin' : ''}`} 
+                  className={`w-5 h-5 shrink-0 ${priceUpdateLoading ? 'animate-spin' : ''}`} 
                 />
-                {priceUpdateLoading 
-                  ? 'Updating...' 
-                  : priceUpdateDisabled 
-                    ? 'Updated Today' 
-                    : 'Update Prices'}
+                <span className="hidden md:inline">
+                  {priceUpdateLoading 
+                    ? 'Updating...' 
+                    : priceUpdateDisabled 
+                      ? 'Updated Today' 
+                      : 'Update Prices'}
+                </span>
               </button>
             </div>
           </div>
@@ -914,8 +917,76 @@ export default function EquityHoldingsPage() {
           </div>
         </div>
 
-        {/* Holdings Table */}
-        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
+        {/* Mobile Card Layout */}
+        <div className="md:hidden space-y-6 mb-6">
+          {groupedHoldings.map((group) => (
+            <div key={`mobile-${group.key}`}>
+              {groupBy !== 'none' && (
+                <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
+                  {group.label}
+                </h2>
+              )}
+              <div className="space-y-3">
+                {group.holdings.map((holding) => (
+                  <div
+                    key={holding.id}
+                    className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] truncate">{holding.name}</div>
+                        {holding.symbol && (
+                          <div className="text-sm text-[#6B7280] dark:text-[#94A3B8]">NSE: {holding.symbol}</div>
+                        )}
+                      </div>
+                      <div className={`font-semibold shrink-0 ${holding.gainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                        {holding.gainLoss >= 0 ? '+' : ''}{formatCurrency(holding.gainLoss)}
+                        <span className="text-sm font-medium ml-1">({holding.gainLoss >= 0 ? '+' : ''}{holding.gainLossPercent.toFixed(1)}%)</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                      <div>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Qty</span>
+                        <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                      </div>
+                      <div>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Invested</span>
+                        <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(holding.investedValue)}</div>
+                      </div>
+                      <div>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Current</span>
+                        <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(holding.currentValue)}</div>
+                      </div>
+                      <div>
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Allocation</span>
+                        <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.allocationPct.toFixed(1)}%</div>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-[#E5E7EB] dark:border-[#334155]">
+                      <button
+                        onClick={() => handleEditStock(holding)}
+                        className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                        title="Edit holding"
+                      >
+                        <Edit className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteStock(holding)}
+                        className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                        title="Delete holding"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Holdings Table - Desktop */}
+        <div className="hidden md:block bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
           <div className="overflow-x-auto">
             <div className="inline-block min-w-full align-middle">
               <table className="w-full">

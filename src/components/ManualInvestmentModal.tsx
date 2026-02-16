@@ -271,10 +271,25 @@ export default function ManualInvestmentModal({
     setError(null);
   };
 
+  const hasInvalidAmount = !formData.invested_value || formData.invested_value <= 0;
+  const hasInvalidFDInterest = formData.assetType === 'fd' && formData.interest_rate !== undefined && formData.interest_rate < 0;
+  const hasInvalidBondCoupon = formData.assetType === 'bond' && (
+    (formData.coupon_rate !== undefined && formData.coupon_rate < 0) ||
+    (formData.yield_to_maturity !== undefined && formData.yield_to_maturity < 0)
+  );
+  const canProceedToReview = !hasInvalidAmount && !hasInvalidFDInterest && !hasInvalidBondCoupon;
+
   const handleFormSubmit = () => {
-    // Minimal validation: only invested_value is required
-    if (!formData.invested_value || formData.invested_value <= 0) {
-      setError('Please enter the invested amount');
+    if (hasInvalidAmount) {
+      setError('Amount must be greater than 0');
+      return;
+    }
+    if (hasInvalidFDInterest) {
+      setError('Interest rate cannot be negative');
+      return;
+    }
+    if (hasInvalidBondCoupon) {
+      setError('Coupon rate and yield cannot be negative');
       return;
     }
     setError(null);
@@ -464,14 +479,23 @@ export default function ManualInvestmentModal({
                 </label>
                 <input
                   type="number"
-                  value={formData.invested_value || ''}
-                  onChange={(e) => setFormData({ ...formData, invested_value: parseFloat(e.target.value) || null })}
+                  value={formData.invested_value ?? ''}
+                  onChange={(e) => setFormData({ ...formData, invested_value: e.target.value === '' ? null : parseFloat(e.target.value) })}
                   placeholder="Enter amount"
-                  className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                  className={`w-full px-4 py-3 rounded-lg border bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all ${
+                    formData.invested_value !== null && formData.invested_value <= 0
+                      ? 'border-[#DC2626] dark:border-[#EF4444] focus:border-[#DC2626]'
+                      : 'border-[#E5E7EB] dark:border-[#374151] focus:border-[#2563EB]'
+                  }`}
                 />
                 <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                   This is the amount you invested in this holding
                 </p>
+                {formData.invested_value !== null && formData.invested_value <= 0 && (
+                  <p className="mt-1 text-xs text-[#DC2626] dark:text-[#EF4444]">
+                    Amount must be greater than 0
+                  </p>
+                )}
               </div>
 
               {/* Asset-Specific Fields */}
@@ -498,11 +522,20 @@ export default function ManualInvestmentModal({
                       <input
                         type="number"
                         step="0.01"
-                        value={formData.interest_rate || ''}
-                        onChange={(e) => setFormData({ ...formData, interest_rate: parseFloat(e.target.value) || undefined })}
+                        value={formData.interest_rate ?? ''}
+                        onChange={(e) => setFormData({ ...formData, interest_rate: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                         placeholder="6.5"
-                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                        className={`w-full px-4 py-3 rounded-lg border bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all ${
+                          formData.interest_rate !== undefined && formData.interest_rate < 0
+                            ? 'border-[#DC2626] dark:border-[#EF4444]'
+                            : 'border-[#E5E7EB] dark:border-[#374151]'
+                        }`}
                       />
+                      {formData.interest_rate !== undefined && formData.interest_rate < 0 && (
+                        <p className="mt-1 text-xs text-[#DC2626] dark:text-[#EF4444]">
+                          Interest rate cannot be negative
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
@@ -587,11 +620,20 @@ export default function ManualInvestmentModal({
                       <input
                         type="number"
                         step="0.01"
-                        value={formData.coupon_rate || ''}
-                        onChange={(e) => setFormData({ ...formData, coupon_rate: parseFloat(e.target.value) || undefined })}
+                        value={formData.coupon_rate ?? ''}
+                        onChange={(e) => setFormData({ ...formData, coupon_rate: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                         placeholder="7.5"
-                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                        className={`w-full px-4 py-3 rounded-lg border bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all ${
+                          formData.coupon_rate !== undefined && formData.coupon_rate < 0
+                            ? 'border-[#DC2626] dark:border-[#EF4444]'
+                            : 'border-[#E5E7EB] dark:border-[#374151]'
+                        }`}
                       />
+                      {formData.coupon_rate !== undefined && formData.coupon_rate < 0 && (
+                        <p className="mt-1 text-xs text-[#DC2626] dark:text-[#EF4444]">
+                          Coupon rate cannot be negative
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
@@ -600,11 +642,20 @@ export default function ManualInvestmentModal({
                       <input
                         type="number"
                         step="0.01"
-                        value={formData.yield_to_maturity || ''}
-                        onChange={(e) => setFormData({ ...formData, yield_to_maturity: parseFloat(e.target.value) || undefined })}
+                        value={formData.yield_to_maturity ?? ''}
+                        onChange={(e) => setFormData({ ...formData, yield_to_maturity: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                         placeholder="8.2"
-                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                        className={`w-full px-4 py-3 rounded-lg border bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all ${
+                          formData.yield_to_maturity !== undefined && formData.yield_to_maturity < 0
+                            ? 'border-[#DC2626] dark:border-[#EF4444]'
+                            : 'border-[#E5E7EB] dark:border-[#374151]'
+                        }`}
                       />
+                      {formData.yield_to_maturity !== undefined && formData.yield_to_maturity < 0 && (
+                        <p className="mt-1 text-xs text-[#DC2626] dark:text-[#EF4444]">
+                          Yield cannot be negative
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -1058,7 +1109,7 @@ export default function ManualInvestmentModal({
               </button>
               <button
                 onClick={handleFormSubmit}
-                disabled={!formData.invested_value || formData.invested_value <= 0}
+                disabled={!canProceedToReview}
                 className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Review

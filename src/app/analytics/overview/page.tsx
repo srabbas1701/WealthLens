@@ -13,7 +13,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   ArrowLeftIcon,
-  AlertTriangleIcon,
   InfoIcon,
   CheckCircleIcon,
   ArrowRightIcon,
@@ -204,16 +203,16 @@ export default function AnalyticsOverviewPage() {
           </p>
         </div>
 
-        {/* Warning Banner */}
-        <div className="bg-[#FEF3C7] dark:bg-[#78350F] border border-[#F59E0B]/20 dark:border-[#D97706]/30 rounded-xl p-4 mb-6">
+        {/* Exposure Analysis Context - informational (not a warning) */}
+        <div className="bg-[#EFF6FF] dark:bg-[#1E3A8A]/20 border border-[#2563EB]/20 dark:border-[#3B82F6]/30 rounded-xl p-4 mb-6">
           <div className="flex items-start gap-3">
-            <AlertTriangleIcon className="w-5 h-5 text-[#F59E0B] dark:text-[#FBBF24] flex-shrink-0 mt-0.5" />
+            <InfoIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-[#92400E] dark:text-[#FCD34D] mb-1">
-                Analytics View - Exposure Analysis
+              <p className="text-sm font-semibold text-[#1E40AF] dark:text-[#93C5FD] mb-1">
+                Exposure Analysis
               </p>
-              <p className="text-xs text-[#92400E] dark:text-[#FDE68A]">
-                This screen shows exposure analysis, not asset ownership. Values here may differ from 
+              <p className="text-sm text-[#1E40AF]/90 dark:text-[#93C5FD]/90">
+                This view shows exposure analysis, not asset ownership. Values here may differ from 
                 dashboard and holdings screens. Dashboard values remain authoritative for portfolio value, 
                 asset allocation, and P&L calculations.
               </p>

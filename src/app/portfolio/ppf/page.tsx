@@ -360,10 +360,11 @@ export default function PPFHoldingsPage() {
               setEditingHolding(null);
               setShowAddModal(true);
             }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium"
+            className="inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2.5 min-w-[44px] min-h-[44px] bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium"
+            title="Add PPF Account"
           >
-            <PlusIcon className="w-5 h-5" />
-            Add PPF Account
+            <PlusIcon className="w-5 h-5 shrink-0" />
+            <span className="hidden md:inline">Add PPF Account</span>
           </button>
         </div>
 
@@ -418,9 +419,78 @@ export default function PPFHoldingsPage() {
 
         {/* Holdings Table */}
         {hasData && (
-          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
-            <div className="overflow-x-auto">
-              <table className="w-full">
+          <>
+            {/* Mobile Card Layout */}
+            <div className="md:hidden space-y-3 mb-6">
+              {holdings.map((holding) => (
+                <div
+                  key={holding.id}
+                  className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{holding.accountHolderName}</div>
+                      <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{holding.bankOrPostOffice}</div>
+                    </div>
+                    <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] shrink-0">
+                      {formatCurrency(holding.currentBalance)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-[#6B7280] dark:text-[#94A3B8]">Interest</span>
+                      <div className="font-medium text-[#16A34A] dark:text-[#22C55E]">{formatCurrency(holding.interestEarned)}</div>
+                    </div>
+                    <div>
+                      <span className="text-[#6B7280] dark:text-[#94A3B8]">Rate</span>
+                      <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.interestRate.toFixed(2)}%</div>
+                    </div>
+                    <div>
+                      <span className="text-[#6B7280] dark:text-[#94A3B8]">Status</span>
+                      <div className="font-medium">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${
+                          holding.status === 'active' ? 'bg-[#DCFCE7] text-[#15803D] dark:bg-[#14532D] dark:text-[#86EFAC]' :
+                          holding.status === 'matured' ? 'bg-[#E0E7FF] text-[#3730A3] dark:bg-[#1E3A8A] dark:text-[#93C5FD]' :
+                          'bg-[#FEF3C7] text-[#92400E] dark:bg-[#78350F] dark:text-[#FCD34D]'
+                        }`}>
+                          {holding.status.charAt(0).toUpperCase() + holding.status.slice(1)}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-[#6B7280] dark:text-[#94A3B8]">Contributed</span>
+                      <div className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(holding.totalContributions)}</div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-[#E5E7EB] dark:border-[#334155]">
+                    <button
+                      onClick={() => handleEdit(holding)}
+                      className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-[#2563EB] dark:text-[#3B82F6] hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A8A] transition-colors"
+                      title="Edit PPF Account"
+                    >
+                      <EditIcon className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(holding)}
+                      disabled={deletingHoldingId === holding.id}
+                      className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center rounded-lg text-[#DC2626] dark:text-[#EF4444] hover:bg-[#FEF2F2] dark:hover:bg-[#7F1D1D] transition-colors disabled:opacity-50"
+                      title="Delete PPF Account"
+                    >
+                      {deletingHoldingId === holding.id ? (
+                        <div className="w-5 h-5 border-2 border-[#DC2626] dark:border-[#EF4444] border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <TrashIcon className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Holdings Table - Desktop */}
+            <div className="hidden md:block bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-6">
+              <div className="overflow-x-auto">
+                <table className="w-full">
                 <thead className="bg-[#F6F8FB] dark:bg-[#334155] border-b border-[#E5E7EB] dark:border-[#334155]">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider">
@@ -549,6 +619,7 @@ export default function PPFHoldingsPage() {
               </table>
             </div>
           </div>
+          </>
         )}
 
         {/* Contribution History (Collapsed by default) */}
