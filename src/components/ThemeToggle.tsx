@@ -4,18 +4,23 @@ import { useTheme } from '@/lib/theme/ThemeProvider';
 
 export function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
 
   return (
     <button
       onClick={toggleTheme}
-      className="flex items-center justify-center w-9 h-9 rounded-lg bg-white dark:bg-[#1F2937] border border-[#E5E7EB] dark:border-[#374151] hover:bg-[#F6F8FB] dark:hover:bg-[#374151] transition-colors"
+      className={`flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
+        isDark
+          ? 'bg-[#334155] border-[#475569] hover:bg-[#475569]'
+          : 'bg-white border-[#E5E7EB] hover:bg-[#F6F8FB]'
+      }`}
       aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
       title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
     >
       {theme === 'light' ? (
-        // Moon icon for dark mode
+        // Moon icon - shown when in light mode (click to go dark)
         <svg
-          className="w-5 h-5 text-[#6B7280] dark:text-[#9CA3AF]"
+          className={`w-5 h-5 ${isDark ? 'text-[#E2E8F0]' : 'text-[#6B7280]'}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -28,9 +33,9 @@ export function ThemeToggle() {
           />
         </svg>
       ) : (
-        // Sun icon for light mode
+        // Sun icon - shown when in dark mode (click to go light)
         <svg
-          className="w-5 h-5 text-[#6B7280] dark:text-[#9CA3AF]"
+          className="w-5 h-5 text-[#E2E8F0]"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"

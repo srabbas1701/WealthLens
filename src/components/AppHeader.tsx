@@ -138,20 +138,42 @@ export function AppHeader({
 
     return (
       <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]">
-        {/* Mobile header: Logo + single menu icon */}
+        {/* Mobile header: Logo + Sign In + menu icon */}
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between md:hidden">
           <div className="flex items-center gap-3">
             <LogoLockup iconSize="w-8 h-8" />
           </div>
-          <button
-            type="button"
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2563EB]"
-            aria-label="Open navigation menu"
-            data-testid="mobile-menu-button"
-          >
-            <UserIcon className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            {authStatus === 'authenticated' && user ? (
+              <Link
+                href="/dashboard"
+                onClick={() => {
+                  sessionStorage.setItem('navigation_source', 'header');
+                  sessionStorage.setItem('navigation_time', Date.now().toString());
+                }}
+                className="px-3 py-1.5 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-xs font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="px-3 py-1.5 rounded-lg text-[#0F172A] dark:text-[#F8FAFC] text-xs font-semibold hover:text-[#2563EB] dark:hover:text-[#60A5FA] transition-colors"
+              >
+                Sign In
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2563EB]"
+              aria-label="Open navigation menu"
+              data-testid="mobile-menu-button"
+            >
+              <UserIcon className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Desktop header: marketing navigation */}
@@ -242,13 +264,13 @@ export function AppHeader({
               <>
                 <Link
                   href="/login"
-                  className="px-3 py-1.5 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-xs font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
+                  className="px-4 py-2 rounded-lg text-[#0F172A] dark:text-[#F8FAFC] text-sm font-semibold hover:bg-[#F3F4F6] dark:hover:bg-[#334155] transition-colors"
                 >
                   Sign In
                 </Link>
                 <Link
                   href="/signup"
-                  className="px-4 py-1.5 rounded-lg bg-[#2563EB] dark:bg-[#EFF6FF] text-white dark:text-[#1E3A8A] text-xs font-medium hover:bg-[#1E40AF] dark:hover:bg-[#DBEAFE] transition-colors"
+                  className="px-4 py-2 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white text-sm font-semibold hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
                 >
                   Get Started
                 </Link>
