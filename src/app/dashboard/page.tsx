@@ -63,7 +63,6 @@ import {
 } from '@/components/icons';
 import FloatingCopilot from '@/components/FloatingCopilot';
 import PortfolioUploadModal from '@/components/PortfolioUploadModal';
-import AddLiabilityModal from '@/components/AddLiabilityModal';
 import VerificationBanner from '@/components/VerificationBanner';
 import InsightsLimitBanner from '@/components/InsightsLimitBanner';
 import OnboardingHint from '@/components/OnboardingHint';
@@ -72,7 +71,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CategoryInfoTooltip } from '@/components/CategoryInfoTooltip';
 import { useWebVitals } from '@/hooks/useWebVitals';
 import { useAuth, useAuthAppData } from '@/lib/auth';
-import { useCapabilities, CAPABILITY_KEYS } from '@/lib/capabilities';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { aggregatePortfolioData, validatePortfolioData } from '@/lib/portfolio-aggregation';
 import type { DailySummaryResponse, WeeklySummaryResponse, Status, RiskAlignmentStatus } from '@/types/copilot';
@@ -305,8 +305,6 @@ function DashboardContent() {
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
   const [priceUpdateSuccess, setPriceUpdateSuccess] = useState(false);
   
-  // Add Liability modal state
-  const [isAddLiabilityModalOpen, setIsAddLiabilityModalOpen] = useState(false);
   
   // User dropdown state
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -1014,7 +1012,7 @@ function DashboardContent() {
       setPortfolioHealthScore(null);
       return;
     }
-    if (!hasCapability(CAPABILITY_KEYS.PORTFOLIO_HEALTH_SCORE)) {
+    if (!hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
       setPortfolioHealthScore(null);
       return;
     }
@@ -1241,13 +1239,13 @@ function DashboardContent() {
                   <PlusIcon className="w-5 h-5" />
                   Add Investments
                 </Link>
-                <button
-                  onClick={() => setIsAddLiabilityModalOpen(true)}
+                <Link
+                  href="/liabilities"
                   className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-[#1E293B] text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
                 >
                   <PlusIcon className="w-5 h-5" />
                   Add Liability
-                </button>
+                </Link>
                 <button
                   onClick={handlePriceUpdate}
                   disabled={priceUpdateLoading}
@@ -1525,20 +1523,14 @@ function DashboardContent() {
               // Cash tile: asset-only (liquid cash/bank value). Liabilities live in Non-Investment Overview.
               const isCashBucket = bucket === 'Cash';
 
-              return (
-                <Link
-                  key={bucket}
-                  href={`/portfolio/summary?bucket=${bucket}`}
-                  className="relative bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] block card-hover"
-                >
+              const tileContent = (
+                <>
                   {/* Color Button - Top Right Corner (double size of legend button) */}
-                  {/* Legend uses w-3 h-3 (12px), so tiles use w-6 h-6 (24px) */}
                   <div 
                     className="absolute top-4 right-4 w-6 h-6 rounded-full border-2 border-white dark:border-[#1E293B] shadow-sm"
                     style={{ backgroundColor: color }}
                     aria-label={`${bucketName} color indicator`}
                   />
-                  
                   <div className="flex items-center gap-2 mb-6 pr-10">
                     <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap">
                       {isCashBucket ? 'Cash' : bucketName}
@@ -1557,6 +1549,14 @@ function DashboardContent() {
                       </p>
                     </>
                   )}
+                </>
+              );
+
+              const tileClassName = "relative bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] block card-hover";
+
+              return (
+                <Link key={bucket} href={`/portfolio/summary?bucket=${bucket}`} className={tileClassName}>
+                  {tileContent}
                 </Link>
               );
             })}
@@ -1945,17 +1945,19 @@ function DashboardContent() {
       </main>
       </div>
 
-      {/* Floating Copilot - Positioned top-right for better visibility (outside ErrorBoundary) */}
-      <FloatingCopilot 
-        source="dashboard" 
-        userId={user?.id || ''} 
-        initialMessage={copilotInitialMessage}
-        onInitialMessageSent={handleInitialMessageSent}
-        issueCount={0}
-        externalIsOpen={copilotIsOpen}
-        onStateChange={setCopilotIsOpen}
-        position="top-right"
-      />
+      {/* Floating Copilot - Only shown when user has ai_help capability (Premium) */}
+      {hasCapability(FEATURE_ACCESS.AI_HELP.capability) && (
+        <FloatingCopilot 
+          source="dashboard" 
+          userId={user?.id || ''} 
+          initialMessage={copilotInitialMessage}
+          onInitialMessageSent={handleInitialMessageSent}
+          issueCount={0}
+          externalIsOpen={copilotIsOpen}
+          onStateChange={setCopilotIsOpen}
+          position="top-right"
+        />
+      )}
 
       {/* Portfolio Upload Modal */}
       <PortfolioUploadModal
@@ -1966,13 +1968,6 @@ function DashboardContent() {
         onSuccess={handleUploadSuccess}
       />
 
-      {/* Add Liability Modal */}
-      <AddLiabilityModal
-        isOpen={isAddLiabilityModalOpen}
-        onClose={() => setIsAddLiabilityModalOpen(false)}
-        userId={user?.id || ''}
-        onSuccess={() => router.push('/liabilities')}
-      />
     </ErrorBoundary>
   );
 }

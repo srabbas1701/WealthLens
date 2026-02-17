@@ -183,7 +183,7 @@ export default function PricingSection({ plans, loading, error }: PricingSection
           </p>
         </div>
 
-        {/* Desktop ≥768px: single row, equal-width cards. Mobile <768px: stacked, order Pro → Free → Premium */}
+        {/* Desktop ≥768px: single row, equal-width cards. Mobile <768px: stacked, order Free → Pro → Premium */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto overflow-x-hidden">
           {tiers.map(({ tier, plan }) => {
             const config = TIER_CONFIG[tier];
@@ -193,9 +193,9 @@ export default function PricingSection({ plans, loading, error }: PricingSection
             const { primary: pricePrimary, secondary: priceSecondary } = formatPrice(plan, tier);
             const orderClass =
               tier === 'free'
-                ? 'order-2 md:order-1'
+                ? 'order-1 md:order-1'
                 : tier === 'pro'
-                  ? 'order-1 md:order-2'
+                  ? 'order-2 md:order-2'
                   : 'order-3 md:order-3';
 
             return (

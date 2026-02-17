@@ -10,7 +10,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
 import type { UserPlan } from '@/types/plans';
-import { CAPABILITY_KEYS } from '@/types/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 
 export function useSubscription() {
   const { user } = useAuth();
@@ -58,11 +58,9 @@ export function useSubscription() {
         if (entitlementsResponse.ok) {
           const entitlements = await entitlementsResponse.json();
           const hasPremiumCapability = [
-            CAPABILITY_KEYS.ADVANCED_ANALYTICS,
-            CAPABILITY_KEYS.UNLIMITED_ANALYST,
-            CAPABILITY_KEYS.ADVANCED_INSIGHTS,
-            CAPABILITY_KEYS.PDF_REPORTS,
-            CAPABILITY_KEYS.PORTFOLIO_HEALTH_SCORE,
+            FEATURE_ACCESS.ANALYTICS_HEALTH.capability,
+            FEATURE_ACCESS.DOWNLOAD.capability,
+            FEATURE_ACCESS.AI_HELP.capability,
           ].some((key) => entitlements[key] === true);
           setIsPremium(hasPremiumCapability);
         } else {

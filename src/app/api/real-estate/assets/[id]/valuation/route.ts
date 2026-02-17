@@ -3,10 +3,13 @@
  * 
  * Handles manual valuation updates for real estate assets.
  * User can set/update/clear override value.
+ * Requires real_assets capability (backend security).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { requireCapability } from '@/lib/capabilities/server';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 import type { Database } from '@/types/supabase';
 
 // ============================================================================
@@ -18,20 +21,12 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
+    const guard = await requireCapability(FEATURE_ACCESS.REAL_ESTATE.capability);
+    if (!guard.ok) return guard.response;
+    const supabase = guard.supabase;
+    const user = { id: guard.userId };
     
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-    
-    // Validate user.id exists
     if (!user.id) {
-      console.error('[Real Estate Valuation API] User ID is missing. User object:', JSON.stringify(user, null, 2));
       return NextResponse.json(
         { success: false, error: 'User ID not found. Please log in again.' },
         { status: 401 }

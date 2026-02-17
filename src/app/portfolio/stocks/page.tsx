@@ -22,7 +22,8 @@ import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { RefreshIcon } from '@/components/icons';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import { useToast } from '@/components/Toast';
-import { useCapabilities, CAPABILITY_KEYS } from '@/lib/capabilities';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 import { generateStocksPDF } from '@/lib/pdf/generateStocksPDF';
 import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { Plus, Edit, Trash2, X, Search } from 'lucide-react';
@@ -541,7 +542,7 @@ export default function StocksHoldingsPage() {
       });
       return;
     }
-    if (!hasCapability(CAPABILITY_KEYS.PDF_REPORTS)) {
+    if (!hasCapability(FEATURE_ACCESS.DOWNLOAD.capability)) {
       setShowPremiumModal(true);
       return;
     }

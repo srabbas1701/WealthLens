@@ -4,10 +4,12 @@
  * Handles CRUD operations for real estate assets.
  * Includes proper joins with loans and cashflows.
  * All queries are RLS-safe and ownership-aware.
+ * Requires real_assets capability (backend security – frontend guards are UX only).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { requireCapability } from '@/lib/capabilities/server';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 import type { Database } from '@/types/supabase';
 
 type RealEstateAsset = Database['public']['Tables']['real_estate_assets']['Row'];
@@ -19,16 +21,10 @@ type RealEstateAssetUpdate = Database['public']['Tables']['real_estate_assets'][
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const guard = await requireCapability(FEATURE_ACCESS.REAL_ESTATE.capability);
+    if (!guard.ok) return guard.response;
+    const supabase = guard.supabase;
+    const user = { id: guard.userId };
     
     // Use the helper function to get assets with ownership-adjusted values
     const { getUserRealEstateAssets } = await import('@/lib/real-estate/get-assets');
@@ -58,16 +54,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const guard = await requireCapability(FEATURE_ACCESS.REAL_ESTATE.capability);
+    if (!guard.ok) return guard.response;
+    const supabase = guard.supabase;
+    const user = { id: guard.userId };
     
     const body = await request.json();
     
@@ -138,16 +128,10 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const guard = await requireCapability(FEATURE_ACCESS.REAL_ESTATE.capability);
+    if (!guard.ok) return guard.response;
+    const supabase = guard.supabase;
+    const user = { id: guard.userId };
 
     const { searchParams } = new URL(request.url);
     const assetId = searchParams.get('id');

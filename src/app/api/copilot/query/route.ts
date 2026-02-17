@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCopilotContext, logCopilotSession } from '@/lib/db/copilot-context';
 import { requirePaidAction } from '@/lib/capabilities/server';
-import { CAPABILITY_KEYS } from '@/types/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 import { incrementTrialUsage } from '@/lib/entitlements';
 import type { 
   CopilotQueryRequest, 
@@ -702,7 +702,7 @@ function applyPostLLMGuardrails(response: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const guard = await requirePaidAction(CAPABILITY_KEYS.USE_AI_HELP);
+    const guard = await requirePaidAction(FEATURE_ACCESS.AI_HELP.capability);
     if (!guard.ok) return guard.response;
 
     const body: CopilotQueryRequest = await request.json();

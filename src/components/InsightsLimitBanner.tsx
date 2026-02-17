@@ -5,7 +5,7 @@
 'use client';
 
 import ShowPaywall from '@/components/ShowPaywall';
-import { CAPABILITY_KEYS } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 
 interface InsightsLimitBannerProps {
   totalInsights: number;
@@ -24,7 +24,7 @@ export default function InsightsLimitBanner({
   return (
     <ShowPaywall
       reason="insights_limit"
-      capability={CAPABILITY_KEYS.ADVANCED_INSIGHTS}
+      capability={FEATURE_ACCESS.ANALYTICS_HEALTH.capability}
       variant="banner"
       bannerDetail={bannerDetail}
     />

@@ -5,7 +5,7 @@
 'use client';
 
 import ShowPaywall from '@/components/ShowPaywall';
-import { CAPABILITY_KEYS } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 
 interface QueryLimitBannerProps {
   currentQueries: number;
@@ -28,7 +28,7 @@ export default function QueryLimitBanner({
   return (
     <ShowPaywall
       reason="limit_reached"
-      capability={CAPABILITY_KEYS.USE_AI_HELP}
+      capability={FEATURE_ACCESS.AI_HELP.capability}
       variant="banner"
       bannerDetail={bannerDetail}
     />

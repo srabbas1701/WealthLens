@@ -16,6 +16,9 @@ import {
   InfoIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 
 interface MarketCapExposure {
@@ -30,6 +33,7 @@ interface MarketCapExposure {
 export default function MarketCapExposurePage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const { formatCurrency } = useCurrency();
   
   const [loading, setLoading] = useState(true);
@@ -132,10 +136,10 @@ export default function MarketCapExposurePage() {
   }, [authStatus, router]);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchData(user.id);
-    }
-  }, [user?.id, fetchData]);
+    if (!user?.id) return;
+    if (!capabilitiesLoading && !hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) return;
+    fetchData(user.id);
+  }, [user?.id, fetchData, capabilitiesLoading, hasCapability]);
 
 
   // GUARD: Show loading while auth state is being determined
@@ -150,6 +154,16 @@ export default function MarketCapExposurePage() {
   // GUARD: Redirect if not authenticated (only after loading is complete)
   if (authStatus === 'unauthenticated') {
     return null; // Redirect happens in useEffect
+  }
+
+  // Capability guard: show locked page for free users
+  if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
+    return (
+      <LockedFeaturePage
+        title="Market Cap Exposure"
+        feature="ANALYTICS_HEALTH"
+      />
+    );
   }
 
   if (loading) {

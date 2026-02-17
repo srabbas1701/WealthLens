@@ -10,6 +10,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { PlusIcon, AlertTriangleIcon, CheckCircleIcon } from '@/components/icons';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -105,6 +108,7 @@ function AlertCard({ alert }: { alert: InsuranceAlert }) {
 export default function InsuranceDashboardPage() {
   const { authStatus, user } = useAuth();
   const router = useRouter();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const [policies, setPolicies] = useState<InsurancePolicy[]>([]);
   const [summary, setSummary] = useState<InsuranceSummary | null>(null);
   const [alerts, setAlerts] = useState<InsuranceAlert[]>([]);
@@ -113,12 +117,22 @@ export default function InsuranceDashboardPage() {
   const [groupBy, setGroupBy] = useState<'category' | 'status'>('category');
 
   useEffect(() => {
-    if (authStatus === 'authenticated' && user?.id) {
+    if (authStatus === 'authenticated' && user?.id && hasCapability(FEATURE_ACCESS.INSURANCE.capability)) {
       fetchInsurancePolicies(user.id);
     } else if (authStatus === 'unauthenticated') {
       router.push('/login');
     }
-  }, [authStatus, user?.id, router]);
+  }, [authStatus, user?.id, router, hasCapability]);
+
+  // Capability guard: show locked page BEFORE any API calls
+  if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability(FEATURE_ACCESS.INSURANCE.capability)) {
+    return (
+      <LockedFeaturePage
+        title="Insurance"
+        feature="INSURANCE"
+      />
+    );
+  }
 
   async function fetchInsurancePolicies(userId: string) {
     setLoading(true);

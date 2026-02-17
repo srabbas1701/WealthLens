@@ -3,10 +3,13 @@
  * 
  * Handles operations on a single real estate asset.
  * GET, PUT, DELETE operations with ownership verification.
+ * Requires real_assets capability (backend security – frontend guards are UX only).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { requireCapability } from '@/lib/capabilities/server';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 import type { Database } from '@/types/supabase';
 
 type RealEstateAssetUpdate = Database['public']['Tables']['real_estate_assets']['Update'];
@@ -20,20 +23,13 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
+    const guard = await requireCapability(FEATURE_ACCESS.REAL_ESTATE.capability);
+    if (!guard.ok) return guard.response;
+    const supabase = guard.supabase;
+    const userId = guard.userId;
     
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-    
-    // Validate user.id exists
-    if (!user.id) {
-      console.error('[Real Estate API] User ID is missing. User object:', JSON.stringify(user, null, 2));
+    // Validate userId exists
+    if (!userId) {
       return NextResponse.json(
         { success: false, error: 'User ID not found. Please log in again.' },
         { status: 401 }
@@ -67,7 +63,7 @@ export async function GET(
     // Use the helper function
     const { getRealEstateAssetById } = await import('@/lib/real-estate/get-assets');
     
-    const asset = await getRealEstateAssetById(supabase, assetId, user.id);
+    const asset = await getRealEstateAssetById(supabase, assetId, userId);
     
     return NextResponse.json({
       success: true,
@@ -106,20 +102,12 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
+    const guard = await requireCapability(FEATURE_ACCESS.REAL_ESTATE.capability);
+    if (!guard.ok) return guard.response;
+    const supabase = guard.supabase;
+    const userId = guard.userId;
     
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-    
-    // Validate user.id exists
-    if (!user.id) {
-      console.error('[Real Estate API] User ID is missing. User object:', JSON.stringify(user, null, 2));
+    if (!userId) {
       return NextResponse.json(
         { success: false, error: 'User ID not found. Please log in again.' },
         { status: 401 }
@@ -178,7 +166,7 @@ export async function PUT(
     const updatedAsset = await updateRealEstateAsset(
       supabase,
       assetId,
-      user.id,
+      userId,
       updates
     );
     
@@ -246,20 +234,12 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
+    const guard = await requireCapability(FEATURE_ACCESS.REAL_ESTATE.capability);
+    if (!guard.ok) return guard.response;
+    const supabase = guard.supabase;
+    const userId = guard.userId;
     
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-    
-    // Validate user.id exists
-    if (!user.id) {
-      console.error('[Real Estate API] User ID is missing. User object:', JSON.stringify(user, null, 2));
+    if (!userId) {
       return NextResponse.json(
         { success: false, error: 'User ID not found. Please log in again.' },
         { status: 401 }
@@ -295,7 +275,7 @@ export async function DELETE(
       .from('real_estate_assets')
       .select('id, user_id')
       .eq('id', assetId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
     
     if (fetchError || !existingAsset) {
@@ -310,7 +290,7 @@ export async function DELETE(
       .from('real_estate_assets')
       .delete()
       .eq('id', assetId)
-      .eq('user_id', user.id); // Defense in depth
+      .eq('user_id', userId); // Defense in depth
     
     if (deleteError) {
       console.error('[Real Estate API] Error deleting asset:', deleteError);

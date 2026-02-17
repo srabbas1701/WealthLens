@@ -9,6 +9,9 @@
 
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { ArrowLeftIcon, ArrowRightIcon, UploadIcon } from '@/components/icons';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -48,6 +51,7 @@ type StepType = 1 | 2 | 3 | 4 | 5;
 export default function AddInsurancePage() {
   const { user } = useAuth();
   const router = useRouter();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [currentStep, setCurrentStep] = useState<StepType>(1);
@@ -273,6 +277,15 @@ export default function AddInsurancePage() {
     'Nominee details and plan type',
     'Upload your policy document (optional)',
   ];
+
+  if (!capabilitiesLoading && !hasCapability(FEATURE_ACCESS.INSURANCE.capability)) {
+    return (
+      <LockedFeaturePage
+        title="Insurance"
+        feature="INSURANCE"
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">

@@ -22,6 +22,9 @@ import {
   RefreshIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
@@ -56,6 +59,8 @@ export default function EquityHoldingsPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
 
   const { data: marketDataStatus, loading: marketDataStatusLoading } = useMarketDataStatus();
@@ -481,6 +486,15 @@ export default function EquityHoldingsPage() {
 
   // Download handler
   const handleDownload = useCallback(async () => {
+    if (capabilitiesLoading) {
+      showToast({ type: 'info', title: 'Loading...', message: 'Please wait while we check your access.', duration: 3000 });
+      return;
+    }
+    if (!hasCapability(FEATURE_ACCESS.DOWNLOAD.capability)) {
+      setShowPremiumModal(true);
+      return;
+    }
+    
     console.log('[Equity Download] Handler called - starting download process');
     
     try {
@@ -668,7 +682,7 @@ export default function EquityHoldingsPage() {
         });
       }
     }
-  }, [holdings, sortField, sortDirection, groupBy, totalValue, totalInvested, portfolioPercentage, mostRecentPriceDate, formatCurrency, showToast]);
+  }, [holdings, sortField, sortDirection, groupBy, totalValue, totalInvested, portfolioPercentage, mostRecentPriceDate, formatCurrency, showToast, hasCapability, capabilitiesLoading]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -1309,6 +1323,7 @@ export default function EquityHoldingsPage() {
         />
       )}
 
+      <PremiumDownloadModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
     </div>
   );
 }

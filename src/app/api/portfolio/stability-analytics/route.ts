@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requirePaidAction } from '@/lib/capabilities/server';
-import { CAPABILITY_KEYS } from '@/types/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 import { incrementTrialUsage } from '@/lib/entitlements';
 import { normalizeHoldings } from '@/lib/portfolio-intelligence/asset-normalization';
 import {
@@ -35,7 +35,7 @@ interface StabilityAnalyticsResponse {
 
 export async function GET(request: NextRequest) {
   try {
-    const guard = await requirePaidAction(CAPABILITY_KEYS.SCENARIO_ANALYSIS);
+    const guard = await requirePaidAction(FEATURE_ACCESS.ANALYTICS_SCENARIOS.capability);
     if (!guard.ok) return guard.response;
 
     const { searchParams } = new URL(request.url);

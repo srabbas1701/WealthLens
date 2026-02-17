@@ -20,6 +20,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
 import {
@@ -109,6 +112,8 @@ export default function NPSHoldingsPage() {
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
 
   const [holdings, setHoldings] = useState<NPSHolding[]>([]);
   const [loading, setLoading] = useState(true);
@@ -281,6 +286,15 @@ export default function NPSHoldingsPage() {
 
   // Download handler for NPS
   const handleDownload = useCallback(async () => {
+    if (capabilitiesLoading) {
+      showToast({ type: 'info', title: 'Loading...', message: 'Please wait while we check your access.', duration: 3000 });
+      return;
+    }
+    if (!hasCapability(FEATURE_ACCESS.DOWNLOAD.capability)) {
+      setShowPremiumModal(true);
+      return;
+    }
+    
     console.log('[NPS Download] Handler called - starting download process');
     
     try {
@@ -415,7 +429,7 @@ export default function NPSHoldingsPage() {
         });
       }
     }
-  }, [holdings, totalCurrentValue, totalInvested, mostRecentNavDate, formatCurrency, showToast]);
+  }, [holdings, totalCurrentValue, totalInvested, mostRecentNavDate, formatCurrency, showToast, hasCapability, capabilitiesLoading]);
 
   // Aggregate asset allocation
   const aggregateAllocation = holdings.reduce((acc, holding) => {
@@ -1099,6 +1113,8 @@ export default function NPSHoldingsPage() {
           </div>
         </div>
       )}
+
+      <PremiumDownloadModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
     </div>
   );
 }

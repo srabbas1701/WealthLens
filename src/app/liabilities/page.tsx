@@ -11,6 +11,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import {
   ArrowLeftIcon,
   PlusIcon,
@@ -54,6 +57,7 @@ export default function LiabilitiesPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
 
   const [loading, setLoading] = useState(true);
   const [liabilities, setLiabilities] = useState<Liability[]>([]);
@@ -92,6 +96,7 @@ export default function LiabilitiesPage() {
   }, [user?.id, loadLiabilities]);
 
   // Fetch portfolio data for PDF (assets from /api/portfolio/data)
+  // NOTE: Must run before any conditional return to satisfy Rules of Hooks
   useEffect(() => {
     if (!user?.id) return;
     const fetchPortfolio = async () => {
@@ -116,6 +121,16 @@ export default function LiabilitiesPage() {
     };
     fetchPortfolio();
   }, [user?.id]);
+
+  // Capability guard: show locked page (AFTER all hooks to prevent "fewer hooks" error)
+  if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability(FEATURE_ACCESS.LIABILITIES.capability)) {
+    return (
+      <LockedFeaturePage
+        title="Liabilities"
+        feature="LIABILITIES"
+      />
+    );
+  }
 
   const handleAddSuccess = () => {
     loadLiabilities();

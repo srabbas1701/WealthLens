@@ -14,6 +14,9 @@ import {
   InfoIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 
 interface SectorExposure {
@@ -27,6 +30,7 @@ interface SectorExposure {
 export default function SectorExposurePage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const { formatCurrency } = useCurrency();
   
   const [loading, setLoading] = useState(true);
@@ -147,11 +151,10 @@ export default function SectorExposurePage() {
   }, [authStatus, router]);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchData(user.id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+    if (!user?.id) return;
+    if (!capabilitiesLoading && !hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) return;
+    fetchData(user.id);
+  }, [user?.id, fetchData, capabilitiesLoading, hasCapability]);
 
 
   const highestSector = sectors[0];
@@ -169,6 +172,16 @@ export default function SectorExposurePage() {
   // GUARD: Redirect if not authenticated (only after loading is complete)
   if (authStatus === 'unauthenticated') {
     return null; // Redirect happens in useEffect
+  }
+
+  // Capability guard: show locked page for free users
+  if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
+    return (
+      <LockedFeaturePage
+        title="Sector Exposure"
+        feature="ANALYTICS_HEALTH"
+      />
+    );
   }
 
   if (loading) {

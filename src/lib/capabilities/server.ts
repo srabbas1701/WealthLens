@@ -72,9 +72,7 @@ export async function requireCapability(
 /** Capability keys that consume a per-period limit; value is the key in entitlements for remaining count. */
 const LIMIT_BY_CAPABILITY: Record<string, 'ai_remaining' | 'scenario_remaining'> = {
   use_ai_help: 'ai_remaining',
-  analyst_queries: 'ai_remaining',
-  unlimited_analyst: 'ai_remaining',
-  scenario_analysis: 'scenario_remaining',
+  run_scenarios: 'scenario_remaining',
 };
 
 export type RequirePaidActionResult =

@@ -20,19 +20,15 @@ export interface PaywallCopy {
 }
 
 const CAPABILITY_LABELS: Record<string, string> = {
-  use_ai_help: 'AI Portfolio Analyst',
-  analyst_queries: 'Analyst Queries',
-  unlimited_analyst: 'Unlimited Analyst',
-  pdf_reports: 'Download Holdings (PDF)',
-  excel_exports: 'Excel Exports',
-  advanced_analytics: 'Advanced Analytics',
-  scenario_analysis: 'Scenario Analysis',
-  portfolio_health_score: 'Portfolio Health Score',
-  advanced_insights: 'Advanced Insights',
-  unlimited_insights: 'Unlimited Insights',
-  weekly_deep_dives: 'Weekly Deep Dives',
   view_holdings: 'View Holdings',
-  stability_analysis: 'Stability Analysis',
+  view_basic_analytics: 'Basic Analytics',
+  view_advanced_analytics: 'Advanced Analytics',
+  run_scenarios: 'Scenario Analysis',
+  manage_real_assets: 'Real Estate & Real Assets',
+  manage_liabilities: 'Liabilities',
+  manage_insurance: 'Insurance',
+  download_reports: 'Download Reports',
+  use_ai_help: 'AI Portfolio Analyst',
 };
 
 function featureName(capability: CapabilityKey | string): string {

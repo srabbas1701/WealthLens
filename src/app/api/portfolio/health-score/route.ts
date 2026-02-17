@@ -4,7 +4,7 @@
  *
  * GET /api/portfolio/health-score?user_id=xxx
  *
- * Requires PORTFOLIO_HEALTH_SCORE capability (use hasCapability; never check plan === premium).
+ * Requires view_advanced_analytics capability (use hasCapability; never check plan === premium).
  * Returns the Portfolio Health Score (0-100) with 7 weighted pillars.
  */
 
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requirePaidAction } from '@/lib/capabilities/server';
-import { CAPABILITY_KEYS } from '@/types/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 import {
   normalizeHoldings,
   NormalizedHolding,
@@ -35,7 +35,7 @@ interface HealthScoreResponse {
 
 export async function GET(request: NextRequest) {
   try {
-    const guard = await requirePaidAction(CAPABILITY_KEYS.PORTFOLIO_HEALTH_SCORE);
+    const guard = await requirePaidAction(FEATURE_ACCESS.ANALYTICS_HEALTH.capability);
     if (!guard.ok) return guard.response;
 
     const { searchParams } = new URL(request.url);

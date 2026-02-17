@@ -21,6 +21,9 @@ import {
   RefreshIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
 import { Plus, Edit, Trash2, X } from 'lucide-react';
@@ -65,6 +68,8 @@ export default function ETFHoldingsPage() {
   const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
 
   const { data: marketDataStatus, loading: marketDataStatusLoading } = useMarketDataStatus();
@@ -566,6 +571,15 @@ export default function ETFHoldingsPage() {
 
   // Download handler for ETFs
   const handleDownload = useCallback(async () => {
+    if (capabilitiesLoading) {
+      showToast({ type: 'info', title: 'Loading...', message: 'Please wait while we check your access.', duration: 3000 });
+      return;
+    }
+    if (!hasCapability(FEATURE_ACCESS.DOWNLOAD.capability)) {
+      setShowPremiumModal(true);
+      return;
+    }
+    
     console.log('[ETF Download] Handler called - starting download process');
     
     try {
@@ -655,7 +669,7 @@ export default function ETFHoldingsPage() {
         });
       }
     }
-  }, [holdings, sortField, sortDirection, totalValue, totalInvested, portfolioPercentage, mostRecentPriceDate, formatCurrency, showToast, sortedHoldings]);
+  }, [holdings, sortField, sortDirection, totalValue, totalInvested, portfolioPercentage, mostRecentPriceDate, formatCurrency, showToast, sortedHoldings, hasCapability, capabilitiesLoading]);
 
   if (loading) {
     return (
@@ -1125,6 +1139,7 @@ export default function ETFHoldingsPage() {
         />
       )}
 
+      <PremiumDownloadModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
     </div>
   );
 }

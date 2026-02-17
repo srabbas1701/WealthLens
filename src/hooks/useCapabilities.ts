@@ -16,9 +16,7 @@ const TRIAL_KEY = 'trial';
 /** Capability keys that have a "remaining" count in entitlements. */
 const REMAINING_BY_KEY: Record<string, 'ai_remaining' | 'scenario_remaining'> = {
   use_ai_help: 'ai_remaining',
-  analyst_queries: 'ai_remaining',
-  unlimited_analyst: 'ai_remaining',
-  scenario_analysis: 'scenario_remaining',
+  run_scenarios: 'scenario_remaining',
 };
 
 function capabilityKeysFromEntitlements(ent: UserEntitlements): string[] {

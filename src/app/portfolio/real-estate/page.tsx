@@ -34,6 +34,9 @@ import RealEstateAddModal from '@/components/real-estate/RealEstateAddModal';
 import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
 import SimpleToast from '@/components/SimpleToast';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { getCachedRealEstateData, setCachedRealEstateData, isRealEstateCacheStale } from '@/lib/portfolio-cache';
 import type { RealEstateDashboardData } from '@/types/realEstateDashboard.types';
 
@@ -436,6 +439,7 @@ export default function RealEstateDashboard() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const fetchingRef = useRef(false);
 
   const [activeTab, setActiveTab] = useState<TabValue>('properties');
@@ -641,13 +645,23 @@ export default function RealEstateDashboard() {
     }
   }, []);
 
-  // Fetch data on mount and when user changes
+  // Fetch data on mount and when user changes (only if user has real_assets capability)
   // useLayoutEffect: apply cache before paint to avoid loading flash on back-navigation
   useLayoutEffect(() => {
-    if (authStatus === 'authenticated' && user?.id) {
+    if (authStatus === 'authenticated' && user?.id && hasCapability(FEATURE_ACCESS.REAL_ESTATE.capability)) {
       fetchData(user.id);
     }
-  }, [authStatus, user?.id, fetchData]);
+  }, [authStatus, user?.id, fetchData, hasCapability]);
+
+  // Capability guard: show locked page BEFORE any API calls
+  if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability(FEATURE_ACCESS.REAL_ESTATE.capability)) {
+    return (
+      <LockedFeaturePage
+        title="Real Estate"
+        feature="REAL_ESTATE"
+      />
+    );
+  }
 
   const handleAddSuccess = () => {
     setIsAddModalOpen(false);

@@ -24,11 +24,33 @@ import {
   InfoIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
 import { generateFixedDepositsPDF } from '@/lib/pdf/generateHoldingsPDF';
 import { INDIAN_BANKS } from '@/constants/banks';
 import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
+
+/** Minimum year for FD start date - prevents absurd compound-interest calculations */
+const FD_MIN_START_YEAR = 1990;
+/** Maximum FD tenor in years from start date */
+const FD_MAX_TENOR_YEARS = 30;
+
+const NOMINEE_RELATIONSHIP_OPTIONS = [
+  { value: '', label: 'Select relationship' },
+  { value: 'Spouse', label: 'Spouse' },
+  { value: 'Parent', label: 'Parent' },
+  { value: 'Child', label: 'Child' },
+  { value: 'Sibling', label: 'Sibling' },
+  { value: 'Grandparent', label: 'Grandparent' },
+  { value: 'Grandchild', label: 'Grandchild' },
+  { value: 'Uncle/Aunt', label: 'Uncle/Aunt' },
+  { value: 'Cousin', label: 'Cousin' },
+  { value: 'Friend', label: 'Friend' },
+  { value: 'Other', label: 'Other' },
+];
 
 type SortField = 'bank' | 'principal' | 'rate' | 'startDate' | 'maturityDate' | 'currentValue' | 'daysLeft';
 type SortDirection = 'asc' | 'desc';
@@ -70,6 +92,8 @@ export default function FixedDepositsPage() {
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<FDHolding[]>([]);
@@ -164,7 +188,8 @@ export default function FixedDepositsPage() {
               
               let currentValue = principal;
               if (startDateStr && maturityDateStr) {
-                const years = Math.max(0, (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365));
+                const yearsRaw = Math.max(0, (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365));
+                const years = Math.min(yearsRaw, FD_MAX_TENOR_YEARS);
                 currentValue = principal * Math.pow(1 + rate / 100, years);
               }
               
@@ -254,7 +279,8 @@ export default function FixedDepositsPage() {
 
               let currentValue = principal;
               if (startDateStr && maturityDateStr) {
-                const years = Math.max(0, (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365));
+                const yearsRaw = Math.max(0, (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365));
+                const years = Math.min(yearsRaw, FD_MAX_TENOR_YEARS);
                 currentValue = principal * Math.pow(1 + rate / 100, years);
               }
 
@@ -347,6 +373,9 @@ export default function FixedDepositsPage() {
     const months = Math.floor(remainingDaysAfterYears / 30);
     const days = remainingDaysAfterYears % 30;
 
+    const validRelationship = holding.nomineeRelationship && NOMINEE_RELATIONSHIP_OPTIONS.some(o => o.value === holding.nomineeRelationship)
+      ? holding.nomineeRelationship
+      : '';
     setFormData({
       bank: holding.bank,
       fdNumber: holding.fdNumber,
@@ -360,7 +389,7 @@ export default function FixedDepositsPage() {
       interestType: holding.interestType as any,
       tdsApplicable: holding.tdsApplicable,
       nomineeName: holding.nomineeName || '',
-      nomineeRelationship: holding.nomineeRelationship || '',
+      nomineeRelationship: validRelationship,
     });
     setFormErrors({});
     setIsModalOpen(true);
@@ -401,15 +430,27 @@ export default function FixedDepositsPage() {
     const selectedStartDate = new Date(formData.startDate);
     selectedStartDate.setHours(0, 0, 0, 0);
 
-    if (selectedStartDate > today) {
-      errors.startDate = 'Start date cannot be in the future';
+    if (formData.startDate) {
+      const startYear = selectedStartDate.getFullYear();
+      if (startYear < FD_MIN_START_YEAR) {
+        errors.startDate = `Start date cannot be before ${FD_MIN_START_YEAR}. Please enter a valid date.`;
+      } else if (selectedStartDate > today) {
+        errors.startDate = 'Start date cannot be in the future';
+      }
     }
 
     if (!formData.maturityDate) errors.maturityDate = 'Maturity date is required';
 
     if (formData.startDate && formData.maturityDate) {
-      if (new Date(formData.maturityDate) <= new Date(formData.startDate)) {
+      const maturityDate = new Date(formData.maturityDate);
+      const startDate = new Date(formData.startDate);
+      if (maturityDate <= startDate) {
         errors.maturityDate = 'Maturity date must be after start date';
+      } else {
+        const tenorYears = (maturityDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
+        if (tenorYears > FD_MAX_TENOR_YEARS) {
+          errors.maturityDate = `Maturity date cannot be more than ${FD_MAX_TENOR_YEARS} years from start date.`;
+        }
       }
     }
 
@@ -580,6 +621,15 @@ export default function FixedDepositsPage() {
 
   // Download handler for Fixed Deposits
   const handleDownload = useCallback(async () => {
+    if (capabilitiesLoading) {
+      showToast({ type: 'info', title: 'Loading...', message: 'Please wait while we check your access.', duration: 3000 });
+      return;
+    }
+    if (!hasCapability(FEATURE_ACCESS.DOWNLOAD.capability)) {
+      setShowPremiumModal(true);
+      return;
+    }
+    
     console.log('[FD Download] Handler called - starting download process');
     
     try {
@@ -666,7 +716,7 @@ export default function FixedDepositsPage() {
         });
       }
     }
-  }, [holdings, maturityFilter, sortField, sortDirection, totalValue, totalPrincipal, portfolioPercentage, formatCurrency, showToast, sortedHoldings]);
+  }, [holdings, maturityFilter, sortField, sortDirection, totalValue, totalPrincipal, portfolioPercentage, formatCurrency, showToast, sortedHoldings, hasCapability, capabilitiesLoading]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-IN', {
@@ -1250,6 +1300,7 @@ export default function FixedDepositsPage() {
                   <input
                     type="date"
                     value={formData.startDate}
+                    min={`${FD_MIN_START_YEAR}-01-01`}
                     max={new Date().toISOString().split('T')[0]}
                     onChange={(e) => {
                       const newData = { ...formData, startDate: e.target.value };
@@ -1277,6 +1328,12 @@ export default function FixedDepositsPage() {
                   <input
                     type="date"
                     value={formData.maturityDate}
+                    min={formData.startDate || undefined}
+                    max={formData.startDate ? (() => {
+                      const d = new Date(formData.startDate);
+                      d.setFullYear(d.getFullYear() + FD_MAX_TENOR_YEARS);
+                      return d.toISOString().split('T')[0];
+                    })() : undefined}
                     onChange={(e) => setFormData({ ...formData, maturityDate: e.target.value })}
                     className={`w-full px-4 py-2.5 rounded-lg border ${
                       formErrors.maturityDate 
@@ -1332,14 +1389,16 @@ export default function FixedDepositsPage() {
                     <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                       Relationship
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={formData.nomineeRelationship}
                       onChange={(e) => setFormData({ ...formData, nomineeRelationship: e.target.value })}
                       className="w-full px-4 py-2.5 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#2563EB] dark:focus:ring-[#3B82F6] transition-colors"
-                      placeholder="e.g., Spouse, Parent, Child"
                       disabled={submitting}
-                    />
+                    >
+                      {NOMINEE_RELATIONSHIP_OPTIONS.map(opt => (
+                        <option key={opt.value || 'empty'} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>
@@ -1477,6 +1536,8 @@ export default function FixedDepositsPage() {
           </div>
         </div>
       )}
+
+      <PremiumDownloadModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
     </>
   );
 }

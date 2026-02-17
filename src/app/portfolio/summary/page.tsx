@@ -23,6 +23,9 @@ import {
   CheckCircleIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { getCachedPortfolioData } from '@/lib/portfolio-cache';
 
@@ -55,6 +58,7 @@ export default function PortfolioSummaryPage() {
   const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
   const lastFetchedRef = useRef<string | null>(null); // Prevent re-fetch when effect re-runs (userId:bucket)
   
@@ -350,10 +354,17 @@ export default function PortfolioSummaryPage() {
   }, [authStatus, router]);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchData(user.id);
+    if (!user?.id) return;
+    // Real Asset bucket: wait for capabilities before deciding — no fetch for free users
+    if (bucketFilter === 'RealAsset') {
+      if (capabilitiesLoading) return; // Don't fetch until we know capability
+      if (!hasCapability(FEATURE_ACCESS.REAL_ESTATE.capability)) {
+        setLoading(false);
+        return; // Show LockedFeaturePage, no API call
+      }
     }
-  }, [user?.id, fetchData]);
+    fetchData(user.id);
+  }, [user?.id, fetchData, bucketFilter, capabilitiesLoading, hasCapability]);
 
   const toggleAsset = (assetType: string) => {
     const newExpanded = new Set(expandedAssets);
@@ -415,6 +426,16 @@ export default function PortfolioSummaryPage() {
   // GUARD: Redirect if not authenticated (only after loading is complete)
   if (authStatus === 'unauthenticated') {
     return null; // Redirect happens in useEffect
+  }
+
+  // GUARD: Real Asset bucket requires MANAGE_REAL_ASSETS - show locked page for free users
+  if (bucketFilter === 'RealAsset' && authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability(FEATURE_ACCESS.REAL_ESTATE.capability)) {
+    return (
+      <LockedFeaturePage
+        title="Real Assets"
+        feature="REAL_ESTATE"
+      />
+    );
   }
 
   if (loading) {

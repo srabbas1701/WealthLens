@@ -6,19 +6,20 @@
 'use client';
 
 import ShowPaywall from '@/components/ShowPaywall';
-import { CAPABILITY_KEYS, type CapabilityKey } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import type { CapabilityKey } from '@/types/capabilities';
 
 interface PremiumDownloadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Capability that gates this download (default: PDF_REPORTS) */
+  /** Capability that gates this download (default: download_reports) */
   capability?: CapabilityKey | string;
 }
 
 export default function PremiumDownloadModal({
   isOpen,
   onClose,
-  capability = CAPABILITY_KEYS.PDF_REPORTS,
+  capability = FEATURE_ACCESS.DOWNLOAD.capability,
 }: PremiumDownloadModalProps) {
   return (
     <ShowPaywall

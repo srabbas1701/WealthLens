@@ -25,6 +25,9 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { useAuth } from '@/lib/auth/context';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { createClient } from '@/lib/supabase/client';
 import { getRealEstateAssetById, type OwnershipAdjustedAsset } from '@/lib/real-estate/get-assets';
@@ -525,6 +528,7 @@ export default function PropertyDetailPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const propertyId = params.propertyId as string;
   const fetchingRef = useRef(false);
 
@@ -606,13 +610,22 @@ export default function PropertyDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (authStatus === 'authenticated' && user?.id && propertyId) {
+    if (authStatus === 'authenticated' && user?.id && propertyId && hasCapability(FEATURE_ACCESS.REAL_ESTATE.capability)) {
       fetchData(user.id, propertyId);
     } else if (authStatus === 'unauthenticated') {
       setLoading(false);
       setError('Please log in to view property details');
     }
-  }, [authStatus, user?.id, propertyId, fetchData]);
+  }, [authStatus, user?.id, propertyId, fetchData, hasCapability]);
+
+  if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability(FEATURE_ACCESS.REAL_ESTATE.capability)) {
+    return (
+      <LockedFeaturePage
+        title="Real Estate"
+        feature="REAL_ESTATE"
+      />
+    );
+  }
 
   // Format currency helper
   const formatValue = (value: number | null): string => {

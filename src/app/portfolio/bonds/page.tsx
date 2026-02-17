@@ -22,6 +22,9 @@ import {
 } from '@/components/icons';
 import { Plus, Edit, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
 import { generateBondsPDF } from '@/lib/pdf/generateHoldingsPDF';
@@ -151,6 +154,8 @@ export default function BondsHoldingsPage() {
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<BondHolding[]>([]);
@@ -756,6 +761,15 @@ export default function BondsHoldingsPage() {
 
   // Download handler for Bonds
   const handleDownload = useCallback(async () => {
+    if (capabilitiesLoading) {
+      showToast({ type: 'info', title: 'Loading...', message: 'Please wait while we check your access.', duration: 3000 });
+      return;
+    }
+    if (!hasCapability(FEATURE_ACCESS.DOWNLOAD.capability)) {
+      setShowPremiumModal(true);
+      return;
+    }
+    
     console.log('[Bonds Download] Handler called - starting download process');
     
     try {
@@ -843,7 +857,7 @@ export default function BondsHoldingsPage() {
         });
       }
     }
-  }, [holdings, sortField, sortDirection, totalCurrentValue, totalInvested, portfolioPercentage, formatCurrency, showToast, sortedHoldings]);
+  }, [holdings, sortField, sortDirection, totalCurrentValue, totalInvested, portfolioPercentage, formatCurrency, showToast, sortedHoldings, hasCapability, capabilitiesLoading]);
 
   if (loading) {
     return (
@@ -1449,6 +1463,8 @@ export default function BondsHoldingsPage() {
           formatCurrency={formatCurrency}
         />
       )}
+
+      <PremiumDownloadModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
     </div>
   );
 }

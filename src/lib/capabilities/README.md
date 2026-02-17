@@ -10,10 +10,10 @@
 
 ## Shared helper
 
-- **Server (API, middleware):** `import { hasCapability, requireCapability, CAPABILITY_KEYS } from '@/lib/capabilities'`
-- **React (dashboard, buttons, gates):** `import { useCapabilities, CAPABILITY_KEYS } from '@/lib/capabilities'` then `const { hasCapability } = useCapabilities(); if (hasCapability(CAPABILITY_KEYS.PDF_REPORTS)) { ... }`
+- **Server (API, middleware):** `import { hasCapability, requireCapability } from '@/lib/capabilities/server'` and `import { FEATURE_ACCESS } from '@/config/feature-access'`
+- **React (dashboard, buttons, gates):** `import { useCapabilities } from '@/lib/capabilities'` and `import { FEATURE_ACCESS } from '@/config/feature-access'` then `const { hasCapability } = useCapabilities(); if (hasCapability(FEATURE_ACCESS.DOWNLOAD.capability)) { ... }`
 
-Use it everywhere: dashboard, buttons, API guards, PremiumFeatureGate. Never check plan or premium directly.
+Use it everywhere: dashboard, buttons, API guards, LockedFeaturePage (module routes). Never check plan or premium directly.
 
 ## Backend logic (canonical)
 
@@ -42,47 +42,58 @@ async function hasCapability(userId: string, capability: string): Promise<boolea
 | `GET /api/capabilities/user` | Legacy; prefer `/api/entitlements` for capability/trial data. |
 | `GET /api/capabilities/check?key=<key>` | Single check: `hasCapability(userId, key)` → `{ hasAccess: boolean }`. |
 
-## Paywall (single component, no inline copy)
+## Standardized Paywall UX
 
-**All locked actions must route through `ShowPaywall(reason, capability)`.** No inline hardcoded upgrade messages.
+**Module-level features** (Real Estate, Insurance, Liabilities, Analytics) use **LockedFeaturePage** — full-page, no modal. Navigate to the route → show locked page when user lacks capability. Same pattern as Notion, Figma, Stripe.
 
-- Copy is centralised in `@/lib/paywall-copy` (`getPaywallCopy(reason, capability)`).
-- Reasons: `feature_locked` | `download_locked` | `limit_reached` | `insights_limit` | `trial_exceeded`.
-- Variants: `inline` | `card` | `modal` | `banner`.
+**Modal gating ONLY for:**
+- Download attempts (PremiumDownloadModal)
+- AI query limit exceeded (QueryLimitBanner / ShowPaywall banner)
+
+**LockedFeaturePage** reads `upgradePlan` from `FEATURE_ACCESS` via the `feature` prop.
+
+### Routes using LockedFeaturePage
+| Route | Feature |
+|-------|---------|
+| `/portfolio/real-estate` | REAL_ESTATE |
+| `/portfolio/insurance` | INSURANCE |
+| `/liabilities` | LIABILITIES |
+| `/analytics/*` | ANALYTICS_HEALTH |
 
 ```tsx
-import ShowPaywall from '@/components/ShowPaywall';
-import { CAPABILITY_KEYS } from '@/lib/capabilities';
-
-// Gate a feature (card below preview)
-<ShowPaywall reason="feature_locked" capability={CAPABILITY_KEYS.PDF_REPORTS} variant="card" />
-
-// Modal (e.g. on download click when locked)
-<ShowPaywall reason="download_locked" capability={CAPABILITY_KEYS.PDF_REPORTS} variant="modal" isOpen={open} onClose={() => setOpen(false)} />
-
-// Banner (limit reached)
-<ShowPaywall reason="limit_reached" capability={CAPABILITY_KEYS.USE_AI_HELP} variant="banner" bannerDetail="You've used all 15 queries." />
+// In page component: guard BEFORE fetch
+if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability(FEATURE_ACCESS.REAL_ESTATE.capability)) {
+  return <LockedFeaturePage title="Real Estate" feature="REAL_ESTATE" />;
+}
 ```
 
-Use **PremiumFeatureGate** (wraps content + ShowPaywall card) or **PremiumDownloadModal** (ShowPaywall modal) where they fit; otherwise use **ShowPaywall** directly.
+## Paywall for inline / modal / banner
+
+**ShowPaywall** — for Download modal, AI limit banner, insights limit. Copy from `@/lib/paywall-copy`.
+
+```tsx
+// Modal (download click when locked) — KEEP
+<PremiumDownloadModal isOpen={open} onClose={() => setOpen(false)} />
+
+// Banner (AI query limit exceeded) — KEEP
+<QueryLimitBanner remaining={0} limit={15} />
+```
 
 ## Frontend usage
 
 ```tsx
-import { useCapabilities, CAPABILITY_KEYS } from '@/lib/capabilities';
+// Module page: LockedFeaturePage
+if (!hasCapability(FEATURE_ACCESS.REAL_ESTATE.capability)) {
+  return <LockedFeaturePage title="Real Estate" feature="REAL_ESTATE" />;
+}
 
-function MyComponent() {
-  const { hasCapability } = useCapabilities();
-
-  const canUseAI = hasCapability(CAPABILITY_KEYS.USE_AI_HELP);
-  if (canUseAI) {
-    return <AIAssistant />;
-  }
-  return <ShowPaywall reason="feature_locked" capability={CAPABILITY_KEYS.USE_AI_HELP} variant="card" />;
+// Action (e.g. download): modal
+if (!hasCapability(FEATURE_ACCESS.DOWNLOAD.capability)) {
+  setShowPremiumModal(true);
 }
 ```
 
-Pattern: **`hasCapability(key) ? showFeature() : ShowPaywall(reason, capability)`**
+Pattern: **`hasCapability(key) ? showFeature() : LockedFeaturePage | PremiumDownloadModal | QueryLimitBanner`**
 
 ## Paid action guards (never trust frontend)
 
@@ -97,21 +108,22 @@ For **paid actions** (AI help, downloads, scenarios), use **`requirePaidAction(c
 | Route | Capability | Limit |
 |-------|------------|-------|
 | `POST /api/copilot/query` | `use_ai_help` | `ai_remaining` |
-| `GET /api/portfolio/stability-analytics` | `scenario_analysis` | `scenario_remaining` |
-| `GET /api/portfolio/health-score` | `portfolio_health_score` | — |
+| `GET /api/portfolio/stability-analytics` | `run_scenarios` | `scenario_remaining` |
+| `GET /api/portfolio/health-score` | `view_advanced_analytics` | — |
 
-When adding a **download/export** API (PDF or Excel), guard it with `requirePaidAction(CAPABILITY_KEYS.PDF_REPORTS)` or `EXCEL_EXPORTS` at the start of the handler.
+When adding a **download/export** API (PDF or Excel), guard it with `requirePaidAction(FEATURE_ACCESS.DOWNLOAD.capability)` at the start of the handler.
 
 ## API guards (capability only)
 
 At the start of other protected routes, use `requireCapability`. Missing capability returns **403** with `{ error: 'Upgrade required' }`:
 
 ```ts
-import { requireCapability, hasCapability, CAPABILITY_KEYS } from '@/lib/capabilities';
+import { requireCapability, hasCapability } from '@/lib/capabilities/server';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 
 // Option 1: requireCapability (gets session, checks capability, returns 401/403)
 export async function GET(request: NextRequest) {
-  const guard = await requireCapability(CAPABILITY_KEYS.USE_AI_HELP);
+  const guard = await requireCapability(FEATURE_ACCESS.AI_HELP.capability);
   if (!guard.ok) return guard.response; // 401 Unauthorized or 403 { error: 'Upgrade required' }
   const { userId, supabase } = guard;
   // ... proceed
@@ -121,14 +133,14 @@ export async function GET(request: NextRequest) {
 const supabase = await createClient();
 const { data: { session } } = await supabase.auth.getSession();
 if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-if (!(await hasCapability(session.user.id, CAPABILITY_KEYS.USE_AI_HELP, supabase))) {
+if (!(await hasCapability(session.user.id, FEATURE_ACCESS.AI_HELP.capability, supabase))) {
   return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
 }
 ```
 
 ## Capability keys
 
-Defined in `@/types/capabilities` and re-exported from `@/lib/capabilities`. Use `CAPABILITY_KEYS.*` instead of raw strings.
+Use `FEATURE_ACCESS.<FEATURE>.capability` from `@/config/feature-access` for capability keys. `CAPABILITY_KEYS` in `@/types/capabilities` remains for type definitions.
 
 ## Trial limits
 

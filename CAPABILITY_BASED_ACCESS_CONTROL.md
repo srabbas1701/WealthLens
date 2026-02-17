@@ -308,6 +308,10 @@ INSERT INTO public.capabilities (key, name, description, category) VALUES
 
 ### 4. Assign Capabilities to Plans
 
+**Pricing model (PricingSection):** Pro = PDF & Excel; Premium = Pro + AI. Both Pro AND Premium must have `pdf_reports` and `excel_exports`.
+
+**Sanity check:** Run `supabase/verify_plan_capabilities.sql` to verify plan_capabilities matches PricingSection exactly.
+
 ```sql
 -- Free Plan Capabilities
 INSERT INTO public.plan_capabilities (plan_id, capability_id)
@@ -317,7 +321,30 @@ SELECT
 FROM public.capabilities
 WHERE key IN ('analyst_queries'); -- Only limited queries
 
--- Premium Plan Capabilities
+-- Pro Plan Capabilities (PDF & Excel from Pro tier onward)
+INSERT INTO public.plan_capabilities (plan_id, capability_id)
+SELECT 
+  (SELECT id FROM public.plans WHERE name = 'pro'),
+  id
+FROM public.capabilities
+WHERE key IN (
+  'advanced_analytics',
+  'sector_exposure',
+  'market_cap_exposure',
+  'geography_exposure',
+  'advanced_insights',
+  'unlimited_insights',
+  'pdf_reports',
+  'excel_exports',
+  'portfolio_health_score',
+  'stability_analysis',
+  'scenario_analysis',
+  'real_assets',
+  'manage_liabilities',
+  'insurance'
+);
+
+-- Premium Plan Capabilities (Pro + AI / unlimited)
 INSERT INTO public.plan_capabilities (plan_id, capability_id)
 SELECT 
   (SELECT id FROM public.plans WHERE name = 'premium'),
@@ -336,7 +363,11 @@ WHERE key IN (
   'portfolio_health_score',
   'stability_analysis',
   'scenario_analysis',
-  'weekly_deep_dives'
+  'weekly_deep_dives',
+  'use_ai_help',
+  'real_assets',
+  'manage_liabilities',
+  'insurance'
 );
 ```
 

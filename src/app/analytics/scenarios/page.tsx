@@ -11,6 +11,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { AnalyticsPageLayout } from '@/components/analytics/AnalyticsPageLayout';
 import { LoadingState } from '@/components/analytics/LoadingState';
 import { ErrorState } from '@/components/analytics/ErrorState';
@@ -38,6 +41,7 @@ type ScenarioType = 'marketDrawdown' | 'sectorShock' | 'rateShock' | 'marketReco
 
 export default function ScenarioAnalyticsPage() {
   const { user, authStatus } = useAuth();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const [loading, setLoading] = useState(true);
   const [stabilityData, setStabilityData] = useState<StabilityAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,14 +67,23 @@ export default function ScenarioAnalyticsPage() {
   }, []);
 
   useEffect(() => {
-    if (authStatus === 'authenticated' && user?.id) {
+    if (authStatus === 'authenticated' && user?.id && hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
       fetchData(user.id);
     }
-  }, [authStatus, user, fetchData]);
+  }, [authStatus, user, fetchData, hasCapability]);
 
   // Redirect if not authenticated
   if (authStatus === 'unauthenticated') {
     return null; // Will redirect via middleware
+  }
+
+  if (!capabilitiesLoading && !hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
+    return (
+      <LockedFeaturePage
+        title="Scenario Impact Analysis"
+        feature="ANALYTICS_HEALTH"
+      />
+    );
   }
 
   if (loading) {
@@ -82,6 +95,15 @@ export default function ScenarioAnalyticsPage() {
   }
 
   if (error && !stabilityData) {
+    // ONLY capability-based 403: exact backend message. Do NOT convert 500, network, timeout, DB errors.
+    if (error === 'Upgrade required') {
+      return (
+        <LockedFeaturePage
+          title="Scenario Impact Analysis"
+          feature="ANALYTICS_HEALTH"
+        />
+      );
+    }
     return (
       <AnalyticsPageLayout title={PAGE_TITLES.scenarioAnalytics}>
         <ErrorState error={error} onRetry={() => user?.id && fetchData(user.id)} />

@@ -1,6 +1,10 @@
 /**
- * Wraps premium features with a preview and paywall.
- * All locked actions route through ShowPaywall(reason, capability).
+ * PremiumFeatureGate
+ *
+ * Wraps premium content with a preview and ShowPaywall card when locked.
+ * For full-page module gating (Real Estate, Insurance, Liabilities, Analytics),
+ * use LockedFeaturePage instead — navigate to route, show locked page.
+ * Modal gating is reserved for: Download, AI query limit.
  */
 
 'use client';

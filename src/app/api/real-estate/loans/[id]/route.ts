@@ -3,10 +3,13 @@
  * 
  * Handles update operations for real estate loans.
  * Ownership is verified through asset ownership.
+ * Requires real_assets capability (backend security).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { requireCapability } from '@/lib/capabilities/server';
+import { FEATURE_ACCESS } from '@/config/feature-access';
 import type { Database } from '@/types/supabase';
 
 type RealEstateLoanUpdate = Database['public']['Tables']['real_estate_loans']['Update'];
@@ -20,16 +23,10 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
-    
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const guard = await requireCapability(FEATURE_ACCESS.REAL_ESTATE.capability);
+    if (!guard.ok) return guard.response;
+    const supabase = guard.supabase;
+    const user = { id: guard.userId };
     
     const loanId = params.id;
     const body = await request.json();
