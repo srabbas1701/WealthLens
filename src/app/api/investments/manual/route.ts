@@ -460,8 +460,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate amounts and rates before processing
-    const investedValue = form_data.fdPrincipal ?? form_data.bondAmount ?? form_data.goldAmount ?? form_data.cashAmount ?? form_data.epfBalance ?? form_data.ppfBalance ?? form_data.npsBalance ?? 0;
-    if (investedValue <= 0) {
+    const validatedAmount = form_data.fdPrincipal ?? form_data.bondAmount ?? form_data.goldAmount ?? form_data.cashAmount ?? form_data.epfBalance ?? form_data.ppfBalance ?? form_data.npsBalance ?? 0;
+    if (validatedAmount <= 0) {
       return NextResponse.json<ManualInvestmentResponse>(
         { success: false, error: 'Amount must be greater than 0' },
         { status: 400 }
