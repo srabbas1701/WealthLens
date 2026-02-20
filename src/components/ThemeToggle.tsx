@@ -1,8 +1,9 @@
 'use client';
 
+import { memo } from 'react';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 
-export function ThemeToggle() {
+function ThemeToggleInner() {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -51,3 +52,5 @@ export function ThemeToggle() {
     </button>
   );
 }
+
+export const ThemeToggle = memo(ThemeToggleInner);

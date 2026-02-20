@@ -777,7 +777,7 @@ export default function HomePage() {
               </p>
               <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs leading-tight">
                 <strong className="text-[#6B7280] dark:text-[#94A3B8]">Disclaimer:</strong> This is an educational portfolio tracking tool. 
-                We do not provide investment advice, recommendations, or tips. This is a read-only platform—we never execute trades or modify your data.
+                We do not provide investment advice, recommendations, or tips. We are not SEBI registered investment advisors.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center md:justify-end text-xs text-[#6B7280] dark:text-[#94A3B8]">

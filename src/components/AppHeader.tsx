@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useState, useEffect, ReactNode, useRef } from 'react';
+import { createContext, useState, useEffect, useMemo, useCallback, ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, SparklesIcon, XIcon, ArrowLeftIcon } from '@/components/icons';
@@ -45,8 +45,13 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('currencyFormat', format);
   }, [format]);
 
+  const contextValue = useMemo(
+    () => ({ format, setFormat }),
+    [format, setFormat]
+  );
+
   return (
-    <CurrencyContext.Provider value={{ format, setFormat }}>
+    <CurrencyContext.Provider value={contextValue}>
       {children}
     </CurrencyContext.Provider>
   );
@@ -123,19 +128,17 @@ export function AppHeader({
     };
   }, [showUserMenu]);
 
+  const handleCloseLogoutModal = useCallback(() => setShowLogoutModal(false), []);
+  const handleLogout = useCallback(() => {
+    setShowLogoutModal(false);
+    setShowUserMenu(false);
+    window.location.href = '/';
+    signOut({ reason: 'manual', skipRedirect: true }).catch(() => {});
+  }, [signOut]);
+
   // EARLY RETURN GUARD: Landing page and demo routes
   // Use marketing header that reuses the same mobile navigation pattern
   if (isLandingPage || isInDemoMode) {
-    const handleLogout = () => {
-      setShowLogoutModal(false);
-      setShowUserMenu(false);
-      // CRITICAL: Redirect IMMEDIATELY - never await signOut (it can hang on network)
-      // Full page navigation ensures we never get stuck on "Redirecting..."
-      window.location.href = '/';
-      // Fire signOut in background (clears server session; may not complete before nav)
-      signOut({ reason: 'manual', skipRedirect: true }).catch(() => {});
-    };
-
     return (
       <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]">
         {/* Mobile header: Logo + Sign In + menu icon */}
@@ -352,7 +355,7 @@ export function AppHeader({
         {/* Logout Confirmation Modal */}
         <LogoutConfirmationModal
           isOpen={showLogoutModal}
-          onClose={() => setShowLogoutModal(false)}
+          onClose={handleCloseLogoutModal}
           onConfirm={handleLogout}
         />
       </header>
@@ -361,16 +364,6 @@ export function AppHeader({
   
   // BELOW THIS POINT: App routes only (dashboard, portfolio, etc.)
   // These routes CAN use portfolio/onboarding state
-
-  const handleLogout = () => {
-    setShowLogoutModal(false);
-    setShowUserMenu(false);
-    // CRITICAL: Redirect IMMEDIATELY - never await signOut (it can hang on network)
-    // Full page navigation ensures we never get stuck on "Redirecting..."
-    window.location.href = '/';
-    // Fire signOut in background (clears server session; may not complete before nav)
-    signOut({ reason: 'manual', skipRedirect: true }).catch(() => {});
-  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155]" style={{ pointerEvents: 'auto' }}>
@@ -714,7 +707,7 @@ export function AppHeader({
       {/* Logout Confirmation Modal */}
       <LogoutConfirmationModal
         isOpen={showLogoutModal}
-        onClose={() => setShowLogoutModal(false)}
+        onClose={handleCloseLogoutModal}
         onConfirm={handleLogout}
       />
     </header>

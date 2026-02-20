@@ -273,9 +273,7 @@ function DashboardContent() {
   const { format, setFormat, formatCurrency } = useCurrency();
   const { hasCapability } = useCapabilities();
   const redirectAttemptedRef = useRef(false);
-  const fetchingRef = useRef(false); // Prevent duplicate simultaneous portfolio fetches
-  const fetchingAiSummaryRef = useRef(false); // Prevent duplicate AI summary fetches
-  const fetchingWeeklySummaryRef = useRef(false); // Prevent duplicate weekly summary fetches
+  const fetchingRef = useRef(false); // Prevent duplicate simultaneous dashboard fetches
   const lastFetchedUserIdRef = useRef<string | null>(null); // Prevent re-fetch when portfolioCheckComplete changes
   const fetchingHealthScoreRef = useRef(false); // Prevent duplicate health score fetches
   
@@ -293,6 +291,10 @@ function DashboardContent() {
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummaryResponse | null>(null);
   const [weeklyLoading, setWeeklyLoading] = useState(true);
   const [weeklyError, setWeeklyError] = useState(false);
+  
+  // Insurance and transactions (from optimized API)
+  const [insurance, setInsurance] = useState<unknown[]>([]);
+  const [transactions, setTransactions] = useState<unknown[]>([]);
   
   // Copilot state
   const [copilotInitialMessage, setCopilotInitialMessage] = useState<string | undefined>(undefined);
@@ -520,191 +522,91 @@ function DashboardContent() {
     }
   }, [authStatus, user, hasPortfolio, portfolioCheckComplete, router, pathname]);
 
-  // Fetch portfolio data
-  // OPTIMIZATION: Added timeout and better error handling to prevent hanging
-  const fetchPortfolioData = useCallback(async (userId: string) => {
-    // Guard: Prevent duplicate simultaneous fetches (React 18 dev mode causes double-calls)
+  // Fetch dashboard data via optimized API (single fetch replaces portfolio + daily + weekly)
+  const fetchDashboardData = useCallback(async (userId: string) => {
     if (fetchingRef.current) {
-      console.log('[Dashboard] Already loading portfolio, skipping...');
+      console.log('[Dashboard] Already loading dashboard data, skipping...');
       return;
     }
     
     fetchingRef.current = true;
     setPortfolioLoading(true);
-    console.log('[Dashboard] Starting portfolio data load');
+    setSummaryLoading(true);
+    setWeeklyLoading(true);
+    setSummaryError(false);
+    setWeeklyError(false);
+    console.log('[Dashboard] Starting dashboard data load (optimized API)');
     
-    // OPTIMIZATION: Add timeout to prevent hanging
     const timeoutId = setTimeout(() => {
       if (fetchingRef.current) {
-        console.warn('[Dashboard] Portfolio data fetch timeout after 10s');
+        console.warn('[Dashboard] Dashboard data fetch timeout after 10s');
         setPortfolioLoading(false);
+        setSummaryLoading(false);
+        setWeeklyLoading(false);
+        setSummaryError(true);
+        setWeeklyError(true);
         fetchingRef.current = false;
       }
     }, 10000);
     
     try {
-      const params = new URLSearchParams({ user_id: userId });
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout for fetch
+      const abortTimeout = setTimeout(() => controller.abort(), 8000);
       
-      const response = await fetch(`/api/portfolio/data?${params}`, {
+      const response = await fetch(`/api/dashboard-summary-optimized?user_id=${encodeURIComponent(userId)}`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' },
+        headers: { Accept: 'application/json' },
         signal: controller.signal,
       });
       
-      clearTimeout(timeout);
+      clearTimeout(abortTimeout);
       clearTimeout(timeoutId);
       
       if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data) {
-          setPortfolioData(result.data);
-          mergeDashboardCache(userId, { portfolioData: result.data });
-          setCachedPortfolioData(userId, result.data); // Shared cache for Summary page
-          console.log('[Dashboard] Portfolio data loaded successfully');
+        const json = await response.json();
+        if (json.success && json.data) {
+          const { portfolio: portfolioData, dailySummary: aiSummaryData, weeklySummary: weeklySummaryData, insurance: insuranceData, transactions: transactionsData } = json.data;
+          
+          setPortfolioData(portfolioData || EMPTY_PORTFOLIO);
+          setAiSummary(aiSummaryData ?? null);
+          setWeeklySummary(weeklySummaryData ?? null);
+          setInsurance(Array.isArray(insuranceData) ? insuranceData : []);
+          setTransactions(Array.isArray(transactionsData) ? transactionsData : []);
+          
+          mergeDashboardCache(userId, {
+            portfolioData: portfolioData || EMPTY_PORTFOLIO,
+            aiSummary: aiSummaryData ?? null,
+            weeklySummary: weeklySummaryData ?? null,
+          });
+          setCachedPortfolioData(userId, portfolioData); // Shared cache for Summary page
+          console.log('[Dashboard] Dashboard data loaded successfully');
         } else {
-          console.warn('[Dashboard] Portfolio data fetch returned success=false:', result);
-          // Set empty portfolio to prevent UI from hanging
+          console.warn('[Dashboard] Dashboard API returned success=false:', json);
           setPortfolioData(EMPTY_PORTFOLIO);
+          setSummaryError(true);
+          setWeeklyError(true);
         }
       } else {
-        console.error('[Dashboard] Portfolio data fetch failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          url: response.url
-        });
-        // Set empty portfolio on error to prevent hanging
+        console.error('[Dashboard] Dashboard data fetch failed:', { status: response.status, statusText: response.statusText, url: response.url });
         setPortfolioData(EMPTY_PORTFOLIO);
+        setSummaryError(true);
+        setWeeklyError(true);
       }
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
-        console.warn('[Dashboard] Portfolio data fetch aborted (timeout)');
+        console.warn('[Dashboard] Dashboard data fetch aborted (timeout)');
       } else {
-        console.error('[Dashboard] Failed to fetch portfolio data:', error);
+        console.error('[Dashboard] Failed to fetch dashboard data:', error);
       }
-      // Set empty portfolio on error to prevent hanging
       setPortfolioData(EMPTY_PORTFOLIO);
-    } finally {
-      setPortfolioLoading(false);
-      fetchingRef.current = false;
-    }
-  }, []);
-
-  // Fetch AI daily summary
-  // OPTIMIZATION: Added timeout to prevent hanging
-  const fetchAiSummary = useCallback(async (userId: string) => {
-    // Guard: Prevent duplicate simultaneous fetches
-    if (fetchingAiSummaryRef.current) {
-      console.log('[Dashboard] Already loading AI summary, skipping...');
-      return;
-    }
-    
-    fetchingAiSummaryRef.current = true;
-    console.log('[Dashboard] Starting AI daily summary load');
-    setSummaryLoading(true);
-    setSummaryError(false);
-    
-    // OPTIMIZATION: Add timeout
-    const timeoutId = setTimeout(() => {
-      if (fetchingAiSummaryRef.current) {
-        console.warn('[Dashboard] AI summary fetch timeout');
-        setSummaryLoading(false);
-        setSummaryError(true);
-        fetchingAiSummaryRef.current = false;
-      }
-    }, 8000);
-    
-    try {
-      const params = new URLSearchParams({ user_id: userId });
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 7000); // 7s timeout
-      
-      const response = await fetch(`/api/copilot/daily-summary?${params}`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeout);
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const data: DailySummaryResponse = await response.json();
-        setAiSummary(data);
-        mergeDashboardCache(userId, { aiSummary: data });
-        console.log('[Dashboard] AI daily summary loaded successfully');
-      } else {
-        setSummaryError(true);
-      }
-    } catch (error: any) {
-      clearTimeout(timeoutId);
-      if (error.name !== 'AbortError') {
-        console.error('[Dashboard] Error loading AI daily summary:', error);
-      }
       setSummaryError(true);
-    } finally {
-      setSummaryLoading(false);
-      fetchingAiSummaryRef.current = false;
-    }
-  }, []);
-
-  // Fetch AI weekly summary
-  // OPTIMIZATION: Added timeout to prevent hanging
-  const fetchWeeklySummary = useCallback(async (userId: string) => {
-    // Guard: Prevent duplicate simultaneous fetches
-    if (fetchingWeeklySummaryRef.current) {
-      console.log('[Dashboard] Already loading weekly summary, skipping...');
-      return;
-    }
-    
-    fetchingWeeklySummaryRef.current = true;
-    console.log('[Dashboard] Starting weekly summary load');
-    setWeeklyLoading(true);
-    setWeeklyError(false);
-    
-    // OPTIMIZATION: Add timeout
-    const timeoutId = setTimeout(() => {
-      if (fetchingWeeklySummaryRef.current) {
-        console.warn('[Dashboard] Weekly summary fetch timeout');
-        setWeeklyLoading(false);
-        setWeeklyError(true);
-        fetchingWeeklySummaryRef.current = false;
-      }
-    }, 8000);
-    
-    try {
-      const params = new URLSearchParams({ user_id: userId });
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 7000); // 7s timeout
-      
-      const response = await fetch(`/api/copilot/weekly-summary?${params}`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeout);
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const data: WeeklySummaryResponse = await response.json();
-        setWeeklySummary(data);
-        mergeDashboardCache(userId, { weeklySummary: data });
-        console.log('[Dashboard] Weekly summary loaded successfully');
-      } else {
-        setWeeklyError(true);
-      }
-    } catch (error: any) {
-      clearTimeout(timeoutId);
-      if (error.name !== 'AbortError') {
-        console.error('[Dashboard] Error loading AI weekly summary:', error);
-      }
       setWeeklyError(true);
     } finally {
+      setPortfolioLoading(false);
+      setSummaryLoading(false);
       setWeeklyLoading(false);
-      fetchingWeeklySummaryRef.current = false;
+      fetchingRef.current = false;
     }
   }, []);
 
@@ -727,8 +629,8 @@ function DashboardContent() {
         // Show success message
         setPriceUpdateSuccess(true);
         
-        // Refresh portfolio data to show updated values
-        await fetchPortfolioData(user.id);
+        // Refresh dashboard data to show updated values
+        await fetchDashboardData(user.id);
         
         // Hide success message after 3 seconds
         setTimeout(() => setPriceUpdateSuccess(false), 3000);
@@ -799,9 +701,7 @@ function DashboardContent() {
     
     lastFetchedUserIdRef.current = user.id;
     console.log('[Dashboard] Starting data fetch for user:', user.id);
-    fetchPortfolioData(user.id);
-    fetchAiSummary(user.id);
-    fetchWeeklySummary(user.id);
+    fetchDashboardData(user.id);
     
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, portfolioCheckComplete]);
@@ -844,9 +744,7 @@ function DashboardContent() {
       setPortfolioLoading(true);
       // Small delay to ensure database write is complete
       setTimeout(() => {
-        fetchPortfolioData(user.id);
-        fetchAiSummary(user.id);
-        fetchWeeklySummary(user.id);
+        fetchDashboardData(user.id);
       }, 500);
     }
   };

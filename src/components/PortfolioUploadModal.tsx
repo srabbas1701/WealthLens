@@ -27,7 +27,7 @@
 
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { 
   XIcon, 
   UploadIcon, 
@@ -92,7 +92,7 @@ const FIELD_LABELS: Record<TargetField, string> = {
   ignore: 'Ignore',
 };
 
-export default function PortfolioUploadModal({
+function PortfolioUploadModalInner({
   isOpen,
   onClose,
   userId,
@@ -151,10 +151,10 @@ export default function PortfolioUploadModal({
     return () => clearInterval(interval);
   }, [step]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     resetState();
     onClose();
-  };
+  }, [resetState, onClose]);
 
   /**
    * Check if a column should be ignored (calculated value)
@@ -961,3 +961,5 @@ export default function PortfolioUploadModal({
     </div>
   );
 }
+
+export default memo(PortfolioUploadModalInner);

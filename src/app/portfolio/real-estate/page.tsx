@@ -18,7 +18,7 @@
  * once property detail & edit flows are added.
  */
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -90,7 +90,7 @@ function KPICard({
  * Property Value Bar Chart Component
  * Displays property-wise value distribution as horizontal bars
  */
-function PropertyValueChart({
+const PropertyValueChart = memo(function PropertyValueChart({
   data,
   formatCurrency,
 }: {
@@ -144,14 +144,14 @@ function PropertyValueChart({
       })}
     </div>
   );
-}
+});
 
 /**
  * Asset Allocation Donut Chart Component
  * Displays Real Estate vs Other Assets breakdown
  * Shows asset info only on hover
  */
-function AssetAllocationChart({
+const AssetAllocationChart = memo(function AssetAllocationChart({
   data,
   formatCurrency,
 }: {
@@ -343,7 +343,7 @@ function AssetAllocationChart({
       )}
     </div>
   );
-}
+});
 
 /**
  * Property List Item Component

@@ -6,6 +6,7 @@
 
 'use client';
 
+import { memo } from 'react';
 import { LogOutIcon, XIcon } from '@/components/icons';
 
 interface LogoutConfirmationModalProps {
@@ -14,7 +15,7 @@ interface LogoutConfirmationModalProps {
   onConfirm: () => void;
 }
 
-export default function LogoutConfirmationModal({
+function LogoutConfirmationModalInner({
   isOpen,
   onClose,
   onConfirm,
@@ -68,9 +69,7 @@ export default function LogoutConfirmationModal({
   );
 }
 
-
-
-
+export default memo(LogoutConfirmationModalInner);
 
 
 

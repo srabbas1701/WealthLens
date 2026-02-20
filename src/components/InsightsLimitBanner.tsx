@@ -4,6 +4,7 @@
 
 'use client';
 
+import { memo } from 'react';
 import ShowPaywall from '@/components/ShowPaywall';
 import { FEATURE_ACCESS } from '@/config/feature-access';
 
@@ -12,7 +13,7 @@ interface InsightsLimitBannerProps {
   shownInsights: number;
 }
 
-export default function InsightsLimitBanner({
+const InsightsLimitBanner = memo(function InsightsLimitBanner({
   totalInsights,
   shownInsights,
 }: InsightsLimitBannerProps) {
@@ -29,4 +30,6 @@ export default function InsightsLimitBanner({
       bannerDetail={bannerDetail}
     />
   );
-}
+});
+
+export default InsightsLimitBanner;

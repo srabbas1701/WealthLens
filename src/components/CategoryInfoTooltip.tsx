@@ -9,7 +9,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
 
 interface CategoryInfoTooltipProps {
@@ -17,7 +17,7 @@ interface CategoryInfoTooltipProps {
   className?: string;
 }
 
-export function CategoryInfoTooltip({ content, className = '' }: CategoryInfoTooltipProps) {
+export const CategoryInfoTooltip = memo(function CategoryInfoTooltip({ content, className = '' }: CategoryInfoTooltipProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -161,4 +161,4 @@ export function CategoryInfoTooltip({ content, className = '' }: CategoryInfoToo
       )}
     </>
   );
-}
+});

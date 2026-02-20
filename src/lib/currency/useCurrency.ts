@@ -1,6 +1,6 @@
 'use client';
 
-import { useContext } from 'react';
+import { useContext, useCallback, useMemo } from 'react';
 import { CurrencyContext } from '@/components/AppHeader';
 import { formatCurrency as formatCurrencyUtil, type CurrencyFormat } from './formatCurrency';
 
@@ -22,14 +22,15 @@ export function useCurrency() {
 
   const { format, setFormat } = context;
 
-  // Return formatCurrency that uses the shared utility with current format
-  return {
-    format,
-    setFormat,
-    formatCurrency: (amount: number | null | undefined): string => {
-      return formatCurrencyUtil(amount, format);
-    },
-  };
+  const formatCurrency = useCallback(
+    (amount: number | null | undefined): string => formatCurrencyUtil(amount, format),
+    [format]
+  );
+
+  return useMemo(
+    () => ({ format, setFormat, formatCurrency }),
+    [format, setFormat, formatCurrency]
+  );
 }
 
 
