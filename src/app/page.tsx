@@ -87,36 +87,20 @@ export default function HomePage() {
 
   const faqs = [
     {
-      question: "What types of investments can I track?",
-      answer: "LensOnWealth tracks ALL your investments: Stocks, Mutual Funds, ETFs, EPF, NPS, PPF, Fixed Deposits, Bonds (corporate & government), Real Estate, Gold (physical & digital), Cash, and any other assets. If it's part of your wealth, we track it."
+      question: "Do you provide investment advice?",
+      answer: "No. LensOnWealth is a personal finance tracking software. We do not provide investment advice, portfolio management, or trade execution services."
     },
     {
-      question: "How do I add my EPF, NPS, or PPF accounts?",
-      answer: "You can manually enter your EPF/NPS/PPF balances and contribution details. We'll automatically calculate interest and project future values. For EPF, you can download statements from the EPFO portal. For NPS, use your CRA statement. For PPF, use your passbook or bank statement."
+      question: "Do you connect to my broker account?",
+      answer: "No. You upload CSV statements or manually enter data. We do not access broker logins."
     },
     {
-      question: "Do you track fixed deposits and bonds?",
-      answer: "Yes! Add your FDs with bank name, amount, interest rate, and maturity date. We'll track interest accrual and alert you before maturity. For bonds, add details manually or upload statements - we'll track current value and maturity."
-    },
-    {
-      question: "Can I track real estate and gold?",
-      answer: "Absolutely. Add real estate with purchase price and current market value. Track gold (physical or digital gold) with quantity and purchase price - we'll show current market value. Track any asset that contributes to your net worth."
-    },
-    {
-      question: "What about my old investments or dormant accounts?",
-      answer: "Perfect use case! Add everything - that old FD you forgot about, the PPF account from 10 years ago, shares from an old demat account. LensOnWealth helps you see your COMPLETE financial picture with clarity, including assets you might have forgotten."
-    },
-    {
-      question: "Is my data safe?",
-      answer: "Absolutely. We use bank-grade 256-bit encryption and store all data on Indian servers. We never share your information with third parties or use your data for any purpose other than wealth tracking. Your financial data is encrypted both in transit and at rest."
+      question: "Do you execute trades?",
+      answer: "No. LensOnWealth is strictly a record-keeping and visualization platform."
     },
     {
       question: "How accurate are valuations?",
-      answer: "We source mutual fund NAVs directly from AMFI daily. Stock prices are updated in real-time from major Indian exchanges. EPF/NPS/PPF interest is calculated using current rates. FD interest is tracked based on your terms. You'll always see current valuations, not yesterday's prices."
-    },
-    {
-      question: "Do I need broker login?",
-      answer: "No! LensOnWealth works entirely through CSV exports and manual entry. Simply download your holdings from Zerodha, Groww, Kuvera, or any platform, and upload the file. For EPF/NPS/PPF/FDs, enter details manually. We never ask for broker credentials or API access. Your accounts stay completely separate."
+      answer: "Asset prices are updated using publicly available data sources after market hours. Valuations are informational estimates and should be verified with official statements."
     },
   ];
 
@@ -171,17 +155,23 @@ export default function HomePage() {
             {/* Left - Value Proposition */}
             <div className="space-y-4 sm:space-y-5 md:space-y-6 text-center lg:text-left">
               <div className="space-y-3 sm:space-y-4">
-                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold text-[#0F172A] dark:text-[#F8FAFC] leading-tight tracking-tight">
-                  Stop Juggling <br className="hidden sm:block" />
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E]">Investment Apps</span>.
-                  <br className="hidden sm:block" />
-                  See Your Complete Wealth,&nbsp;Clearly
+                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-[#0F172A] dark:text-[#F8FAFC] leading-tight tracking-tight">
+                  Stop Juggling
+                  <br />
+                  Investment Accounts.
+                  <br />
+                  See Your Complete
+                  <br />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E]">Financial Picture</span>
+                  <br />
+                  in One Dashboard.
                 </h1>
                 
                 <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[#6B7280] dark:text-[#94A3B8] leading-relaxed max-w-2xl mx-auto lg:mx-0 px-2 sm:px-0">
-                  Get a lens on <strong className="text-[#0F172A] dark:text-[#F8FAFC]">every rupee you own</strong> - stocks, mutual funds, EPF, NPS, PPF, 
-                  fixed deposits, bonds, real estate, gold, and more. All platforms, all asset 
-                  classes, crystal clear visibility. Real-time valuations. Zero manual work.
+                  Upload your statements. Organize every asset. View consolidated summaries across stocks, mutual funds, EPF, NPS, PPF, fixed deposits, real estate, gold, and more — all in one secure place.
+                </p>
+                <p className="text-base sm:text-lg text-[#6B7280] dark:text-[#94A3B8] leading-relaxed max-w-2xl mx-auto lg:mx-0 px-2 sm:px-0">
+                  Automated price updates after market hours. Simple. Clear. Organized.
                 </p>
               </div>
 
@@ -219,47 +209,19 @@ export default function HomePage() {
                 )}
               </div>
 
-              {/* Asset Type Badges */}
-              <div className="mt-4 sm:mt-5 pt-4 sm:pt-5 border-t border-[#E5E7EB] dark:border-[#334155]">
-                <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm mb-2 sm:mb-3 text-center lg:text-left">Track all your investments:</p>
-                <div className="flex flex-wrap gap-2 sm:gap-2.5 justify-center lg:justify-start">
-                  <span className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-full text-xs text-[#0F172A] dark:text-[#F8FAFC]">
-                    📈 Stocks & ETFs
-                  </span>
-                  <span className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-full text-xs text-[#0F172A] dark:text-[#F8FAFC]">
-                    📊 Mutual Funds
-                  </span>
-                  <span className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-full text-xs text-[#0F172A] dark:text-[#F8FAFC]">
-                    🏦 EPF • NPS • PPF
-                  </span>
-                  <span className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-full text-xs text-[#0F172A] dark:text-[#F8FAFC]">
-                    💰 Fixed Deposits
-                  </span>
-                  <span className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-full text-xs text-[#0F172A] dark:text-[#F8FAFC]">
-                    📜 Bonds
-                  </span>
-                  <span className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-full text-xs text-[#0F172A] dark:text-[#F8FAFC]">
-                    🏠 Real Estate
-                  </span>
-                  <span className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-full text-xs text-[#0F172A] dark:text-[#F8FAFC]">
-                    ✨ Gold • Cash • More
-                  </span>
-                </div>
-              </div>
-
               {/* Trust Badges */}
-              <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3 md:gap-4 justify-center lg:justify-start text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8]">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3 md:gap-4 justify-center lg:justify-start text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] mt-4 sm:mt-5 pt-4 sm:pt-5 border-t border-[#E5E7EB] dark:border-[#334155]">
                 <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2">
                   <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0" />
-                  <span>Bank-grade security</span>
+                  <span>India-hosted data</span>
                 </div>
                 <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2">
                   <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0" />
-                  <span>Real-time updates</span>
+                  <span>Automated price updates</span>
                 </div>
                 <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2">
                   <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0" />
-                  <span>Built for India</span>
+                  <span>Built for Indian investors</span>
                 </div>
               </div>
             </div>
@@ -369,9 +331,6 @@ export default function HomePage() {
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3 sm:mb-4">
               How LensOnWealth Works
             </h2>
-            <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8] max-w-3xl mx-auto px-4 sm:px-0">
-              Three simple steps to see your complete financial picture
-            </p>
           </div>
 
           <div className="relative max-w-5xl mx-auto">
@@ -382,23 +341,23 @@ export default function HomePage() {
               {[
                 {
                   step: 1,
-                  title: 'Upload & Connect',
-                  description: 'Upload statements from Zerodha, Groww, Kuvera, and any platform. Add your EPF, NPS, PPF accounts. Enter fixed deposits, bonds, real estate, gold. Manual entry or CSV - we support both.',
-                  subtitle: 'Supports: Stocks, MFs, EPF, NPS, PPF, FDs, Bonds, Real Estate, Gold, Cash & more',
+                  title: 'Upload Your Records',
+                  description: 'Upload CSV statements from your broker or manually enter assets. Add EPF, NPS, PPF, fixed deposits, bonds, real estate, gold, and cash.',
+                  subtitle: 'No broker login required.',
                   icon: <UploadIcon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8" />
                 },
                 {
                   step: 2,
-                  title: 'We Do the Magic',
-                  description: 'Our engine automatically matches mutual fund ISINs, fetches real-time stock prices, updates NAVs daily, calculates EPF/NPS/PPF interest, tracks FD maturity dates, and values everything accurately.',
-                  subtitle: 'Real-time prices • Automatic interest calculations • Maturity tracking',
+                  title: 'We Standardize & Organize',
+                  description: 'Our system matches ISINs, updates publicly available price references after market hours, and structures everything into a clean format.',
+                  subtitle: 'All your financial records — organized in one place.',
                   icon: <SparklesIcon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8" />
                 },
                 {
                   step: 3,
-                  title: 'Crystal Clear Visibility',
-                  description: 'Get a clear lens on your true net worth across ALL assets. Complete visibility, instant insights. See complete asset allocation - equity vs debt vs retirement vs real assets. Track performance, set goals, get insights.',
-                  subtitle: 'Complete net worth • True asset allocation • Holistic financial view',
+                  title: 'View Clear Summaries',
+                  description: 'See total net worth, asset breakdowns, allocation distribution, and historical performance summaries — all from one dashboard.',
+                  subtitle: 'No spreadsheets. No manual consolidation.',
                   icon: <EyeIcon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8" />
                 },
               ].map((step, i) => (
@@ -435,11 +394,8 @@ export default function HomePage() {
         <div className="container mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-12 md:mb-16">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3 sm:mb-4">
-              Complete Clarity for Your Entire Wealth
+              Complete Clarity Across All Assets
             </h2>
-            <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8] max-w-3xl mx-auto px-4 sm:px-0">
-              Powerful features designed for comprehensive wealth tracking
-            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 max-w-7xl mx-auto">
@@ -447,32 +403,32 @@ export default function HomePage() {
               {
                 icon: '💼',
                 title: 'Complete Wealth Tracking',
-                description: 'Track every asset class - equity (stocks, MFs, ETFs), retirement (EPF, NPS, PPF), fixed income (FDs, bonds), real assets (real estate, gold), and cash. Your complete financial picture in one place.'
+                description: 'Track equity, mutual funds, retirement accounts, fixed income, real assets, and cash in one unified dashboard.'
               },
               {
                 icon: '🔗',
-                title: 'Multi-Platform Portfolio',
-                description: 'Upload holdings from Zerodha, Groww, Kuvera, ICICI Direct, and more. Add EPF from your employer portal, NPS statements, PPF passbook, bank FDs. Manual entry or CSV - we normalize everything into one clean view.'
+                title: 'Multi-Platform Support',
+                description: 'Upload from Zerodha, Groww, Kuvera, ICICI Direct, banks, or any platform that supports CSV export. Manual entry is supported for all asset types.'
               },
               {
                 icon: '💹',
-                title: 'Real-Time Clarity',
-                description: 'Real-time stock prices, daily mutual fund NAVs, automatic EPF/NPS/PPF interest calculations. Always see your current net worth with crystal clarity, not yesterday\'s guess.'
+                title: 'Automated Price Updates',
+                description: 'Stock prices and mutual fund NAV references are updated after market hours using publicly available data sources. Valuations are informational estimates for tracking purposes.'
               },
               {
                 icon: '📊',
-                title: 'Clear Asset Allocation',
-                description: 'See your real allocation across equity, debt, retirement savings, real assets, and cash with perfect clarity. Not just "mutual fund allocation" - your entire wealth distribution. Understand exactly where you\'re overweight or underweight.'
+                title: 'Allocation Visualization',
+                description: 'Understand how your assets are distributed across equity, debt, retirement, real assets, and cash. Clear charts. Simple breakdowns.'
               },
               {
                 icon: '🎯',
-                title: 'Retirement Planning',
-                description: 'Track all retirement accounts together - EPF, NPS, PPF, retirement mutual funds. See total retirement corpus, project future value, identify gaps. Plan confidently for your golden years.'
+                title: 'Advanced Reporting',
+                description: 'View performance summaries, capital gains reports (informational), maturity tracking, and downloadable reports. Export anytime.'
               },
               {
                 icon: '📈',
-                title: 'Complete Analytics',
-                description: 'Net worth tracking, P&L across all investments, XIRR calculations, tax optimization (LTCG/STCG), maturity calendars, goal tracking. Everything you need to manage your wealth intelligently.'
+                title: 'AI-Powered Data Assistant (Premium)',
+                description: 'Ask questions about your uploaded data and receive structured explanations and summaries. For informational use only.'
               },
             ].map((feature, i) => (
               <div
@@ -502,12 +458,8 @@ export default function HomePage() {
         <div className="container mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-12 md:mb-16">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4">
-              Get a Lens on Every Rupee You Own
+              Get a Clear View of Every Asset Type
             </h2>
-            <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8] max-w-3xl mx-auto px-4 sm:px-0">
-              From trading platforms to retirement accounts, from fixed deposits to 
-              real estate - LensOnWealth gives you complete visibility across all your assets
-            </p>
           </div>
 
           {/* Asset Categories Grid */}
@@ -525,14 +477,14 @@ export default function HomePage() {
               </ul>
             </div>
 
-            {/* Retirement Accounts */}
+            {/* Retirement */}
             <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-6 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
               <div className="text-3xl sm:text-4xl mb-3 sm:mb-4">🏦</div>
               <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2 sm:mb-3">Retirement</h3>
               <ul className="space-y-1.5 sm:space-y-2 text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm">
-                <li>✓ EPF (Employee Provident Fund)</li>
-                <li>✓ NPS (National Pension System)</li>
-                <li>✓ PPF (Public Provident Fund)</li>
+                <li>✓ EPF</li>
+                <li>✓ NPS</li>
+                <li>✓ PPF</li>
                 <li>✓ Superannuation</li>
               </ul>
             </div>
@@ -542,14 +494,14 @@ export default function HomePage() {
               <div className="text-3xl sm:text-4xl mb-3 sm:mb-4">💰</div>
               <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2 sm:mb-3">Fixed Income</h3>
               <ul className="space-y-1.5 sm:space-y-2 text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm">
-                <li>✓ Fixed Deposits (Banks)</li>
+                <li>✓ Fixed Deposits</li>
                 <li>✓ Corporate Bonds</li>
                 <li>✓ Government Bonds</li>
                 <li>✓ Debt Mutual Funds</li>
               </ul>
             </div>
 
-            {/* Real Assets & Others */}
+            {/* Real Assets & More */}
             <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-6 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
               <div className="text-3xl sm:text-4xl mb-3 sm:mb-4">✨</div>
               <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2 sm:mb-3">Real Assets & More</h3>
@@ -649,6 +601,39 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Trust & Positioning Block */}
+      <section id="trust" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A]">
+        <div className="container mx-auto px-4 sm:px-6">
+          <div className="text-center mb-10 sm:mb-12 md:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3 sm:mb-4">
+              Trust &amp; Positioning
+            </h2>
+            <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8] max-w-3xl mx-auto px-4 sm:px-0">
+              Transparency and clarity in how we serve you
+            </p>
+          </div>
+
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg p-6 sm:p-8">
+              <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4 text-center">
+                Important Notice
+              </h3>
+              <div className="space-y-4 text-[#6B7280] dark:text-[#94A3B8] text-sm sm:text-base leading-relaxed">
+                <p>
+                  LensOnWealth is a subscription-based personal finance tracking software designed to help individuals organize and view their financial records.
+                </p>
+                <p>
+                  We do not provide investment advisory services, portfolio management, tax advice, or trade execution.
+                </p>
+                <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                  All information is provided for informational purposes only.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Final CTA Section */}
       <section className="py-16 sm:py-20 md:py-24 lg:py-32 bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] relative overflow-hidden">
         
@@ -732,7 +717,7 @@ export default function HomePage() {
                 <li><a href="/terms" className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300">Terms of Service</a></li>
                 <li><a href="/security" className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300">Security</a></li>
                 <li><a href="#faq" className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300">FAQ</a></li>
-                <li><a href="/support" className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300">Support</a></li>
+                <li><a href="/refund-policy" className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300">Refund Policy</a></li>
               </ul>
             </div>
 
@@ -776,8 +761,8 @@ export default function HomePage() {
                 © {new Date().getFullYear()} LensOnWealth. Built with ❤️ in India for Indian investors.
               </p>
               <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs leading-tight">
-                <strong className="text-[#6B7280] dark:text-[#94A3B8]">Disclaimer:</strong> This is an educational portfolio tracking tool. 
-                We do not provide investment advice, recommendations, or tips. We are not SEBI registered investment advisors.
+                <strong className="text-[#6B7280] dark:text-[#94A3B8]">Disclaimer:</strong> LensOnWealth is a personal finance tracking software. 
+                We do not provide investment advice, recommendations, or regulated financial services. Data displayed is for informational purposes only.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center md:justify-end text-xs text-[#6B7280] dark:text-[#94A3B8]">

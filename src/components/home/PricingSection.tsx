@@ -24,14 +24,14 @@ const TIER_CONFIG: Record<
   }
 > = {
   free: {
-    tagline: 'Track your investments in one place',
+    tagline: 'Track and organize your financial records in one place.',
     features: [
-      'Equity & Mutual Fund holdings',
-      'EPF, NPS, PPF visibility',
-      'NAV & price updates (MF, equity)',
-      'Asset allocation & portfolio value',
+      'Equity & Mutual Fund tracking',
+      'Retirement account visibility',
+      'Automated price updates (after market hours)',
+      'Allocation summaries',
       'CSV upload & manual entry',
-      'Secure, India-hosted data',
+      'India-hosted secure data',
     ],
     ctaText: 'Get Started Free',
     ctaHref: '/signup',
@@ -41,14 +41,12 @@ const TIER_CONFIG: Record<
     tagline: 'Most popular · Everything you need to stay in control',
     features: [
       'Everything in Free',
-      'Real Assets (Real Estate, Gold & Commodities)',
+      'Real asset tracking (real estate, gold & more)',
       'Liabilities tracking',
-      'Insurance tracking',
-      'Advanced Analytics',
-      'Sector, market cap & geography exposure',
-      'Stability & capital-protected breakdown',
-      'Scenario impact (drawdown, rate shock)',
-      'Portfolio Health Score & insights',
+      'Advanced reporting tools',
+      'Sector & market exposure breakdown',
+      'Capital gains summaries (informational)',
+      'Scenario comparison tools',
       'PDF & Excel exports',
     ],
     ctaText: 'Upgrade to Pro',
@@ -56,15 +54,13 @@ const TIER_CONFIG: Record<
     microcopy: 'Billed monthly or yearly',
   },
   premium: {
-    tagline: 'Intelligence and guidance when you need it',
+    tagline: 'Intelligence when you need it',
     features: [
       'Everything in Pro',
-      'AI Portfolio Analyst (unlimited queries)',
-      'AI-driven explanations & decision support',
-      'Advanced scenario simulations with guidance',
-      'Weekly deep-dive portfolio summaries',
+      'AI-powered data explanations',
+      'Weekly portfolio summaries',
+      'Advanced scenario comparisons',
       'Priority support',
-      '14-day free trial',
     ],
     ctaText: 'Start Premium Trial',
     ctaHref: '/signup',
@@ -141,7 +137,7 @@ export default function PricingSection({ plans, loading, error }: PricingSection
               Simple, Transparent Pricing
             </h2>
             <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8]">
-              Free to start. Upgrade when you need deeper insights.
+              Free to start. Upgrade for enhanced reporting and automation.
             </p>
           </div>
           <div className="flex justify-center items-center py-12">
@@ -179,7 +175,7 @@ export default function PricingSection({ plans, loading, error }: PricingSection
             Simple, Transparent Pricing
           </h2>
           <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8]">
-            Free to start. Upgrade when you need deeper insights.
+            Free to start. Upgrade for enhanced reporting and automation.
           </p>
         </div>
 
@@ -308,6 +304,10 @@ export default function PricingSection({ plans, loading, error }: PricingSection
 
         <p className="text-center text-[#6B7280] dark:text-[#94A3B8] text-sm max-w-2xl mx-auto mt-6 px-4">
           Your wealth is always visible in the free tier. Upgrade when you need deeper clarity and insights.
+        </p>
+
+        <p className="text-center text-[#6B7280] dark:text-[#94A3B8] text-xs max-w-2xl mx-auto mt-4 px-4">
+          Subscription provides access to software features only. LensOnWealth does not provide investment advisory services or execute trades.
         </p>
       </div>
     </section>

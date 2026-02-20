@@ -13,18 +13,18 @@ export default function RealEstateHighlights() {
   const features = [
     {
       icon: '📊',
-      title: 'Instant Value Snapshot',
-      description: 'See your property value at a glance with ownership-adjusted estimates',
+      title: 'Property Snapshot',
+      description: 'Record property values and ownership-adjusted estimates.',
     },
     {
       icon: '💰',
-      title: 'Rent & Cash Flow Insights',
-      description: 'Track rental income, expenses, and net cash flow with clear analytics',
+      title: 'Rental Tracking',
+      description: 'Track rental income and expenses within your overall financial view.',
     },
     {
       icon: '🔮',
-      title: 'Sell vs Hold Simulator',
-      description: 'Compare selling today vs holding for future years with scenario analysis',
+      title: 'Scenario Comparison Tool',
+      description: 'Compare different holding timelines for informational planning purposes.',
     },
   ];
 
@@ -33,11 +33,8 @@ export default function RealEstateHighlights() {
       <div className="container mx-auto px-4 sm:px-6">
         <div className="text-center mb-10 sm:mb-12 md:mb-16">
           <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3 sm:mb-4">
-            Track & Analyze Your Real Estate Assets
+            Track Your Real Estate Alongside Everything Else
           </h2>
-          <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8] max-w-3xl mx-auto px-4 sm:px-0">
-            Value, cash flow, and smart insights — all part of your full wealth view.
-          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto">

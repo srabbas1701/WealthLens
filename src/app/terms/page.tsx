@@ -3,541 +3,510 @@
 import Link from 'next/link';
 import { AppHeader } from '@/components/AppHeader';
 import { LogoLockup } from '@/components/LogoLockup';
-import { usePlans } from '@/hooks/usePlans';
+import {
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  FileText,
+  Shield,
+  Mail,
+  MapPin,
+  Info,
+  Ban,
+  Scale,
+  CreditCard,
+  FileCheck,
+} from 'lucide-react';
 
 /**
  * Terms of Service - LensOnWealth
- * 
- * Comprehensive terms governing the use of LensOnWealth platform
- * Last updated: January 2025
+ * Last updated: February 20, 2026
  */
 
 export default function TermsOfServicePage() {
-  const { plans, loading: plansLoading } = usePlans();
-  
-  // Find free and premium plans based on price (API returns id, name, monthly_price, annual_price)
-  const freePlan = plans.find(p => p.monthly_price === 0 || p.monthly_price === null);
-  const premiumPlan = plans.find(p => p.monthly_price != null && p.monthly_price > 0);
-  
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader />
 
-      {/* Content */}
       <main className="max-w-4xl mx-auto px-6 py-8 pt-24">
         {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            Terms of Service
-          </h1>
-          <p className="text-[#6B7280] dark:text-[#94A3B8]">
-            Last updated: January 17, 2025
-          </p>
-        </div>
-        
-        {/* Introduction */}
-        <div className="bg-blue-50 dark:bg-blue-950/20 border-l-4 border-[#2563EB] dark:border-[#3B82F6] p-6 rounded-r-lg mb-8">
-          <p className="text-[#0F172A] dark:text-[#F8FAFC] font-medium mb-2">
-            Welcome to LensOnWealth!
-          </p>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] text-sm mb-0">
-            Please read these Terms of Service ("Terms") carefully before using our platform. 
-            By accessing or using LensOnWealth, you agree to be bound by these Terms. If you 
-            disagree with any part of these Terms, you may not use our service.
-          </p>
+        <div className="mb-8 flex items-start gap-4">
+          <div className="flex-shrink-0 p-2 rounded-lg bg-[#2563EB]/10 dark:bg-[#3B82F6]/20">
+            <FileText className="w-8 h-8 text-[#2563EB] dark:text-[#3B82F6]" />
+          </div>
+          <div>
+            <h1 className="text-4xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Terms of Service
+            </h1>
+            <p className="text-[#6B7280] dark:text-[#94A3B8] flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Last updated: February 20, 2026
+            </p>
+          </div>
         </div>
 
-        {/* Section 1 */}
+        {/* Introduction */}
+        <div className="bg-blue-50 dark:bg-blue-950/30 border-l-4 border-[#2563EB] dark:border-[#3B82F6] p-6 rounded-r-lg mb-10 flex gap-4">
+          <Info className="w-6 h-6 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[#0F172A] dark:text-[#F8FAFC] font-semibold mb-2">
+              Welcome to LensOnWealth.
+            </p>
+            <p className="text-[#6B7280] dark:text-[#94A3B8] text-sm mb-3">
+              These Terms of Service (&quot;Terms&quot;) govern your use of the LensOnWealth platform. By accessing or
+              using the platform, you agree to be bound by these Terms.
+            </p>
+            <p className="text-[#DC2626] dark:text-red-400 text-sm font-medium">
+              If you do not agree, please discontinue use of the service.
+            </p>
+          </div>
+        </div>
+
+        {/* 1. Service Description */}
         <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            1. Service Description
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 font-bold text-lg">
+              1
+            </span>
+            Service Description
           </h2>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            LensOnWealth is a wealth tracking and portfolio analytics platform designed for 
-            Indian investors. We provide:
+
+          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-6">
+            LensOnWealth is a personal finance record-keeping and portfolio tracking software platform designed
+            to help individuals organize and visualize their financial data in one place.
           </p>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-            <li>✓ Multi-platform portfolio aggregation via CSV uploads</li>
-            <li>✓ Real-time NAV updates for mutual funds and stock prices</li>
-            <li>✓ Complete asset allocation across equity, debt, retirement, and real assets</li>
-            <li>✓ Portfolio health score and analytics</li>
-            <li>✓ AI-powered portfolio insights (Premium)</li>
-            <li>✓ Tax optimization reports (Coming soon)</li>
+
+          <p className="text-[#0F172A] dark:text-[#F8FAFC] font-semibold mb-3">The platform allows users to:</p>
+          <ul className="space-y-3 mb-8">
+            {[
+              'Upload portfolio data manually via CSV files',
+              'View consolidated asset summaries',
+              'Track historical values of assets',
+              'Generate informational reports and summaries',
+              'View allocation breakdowns across asset categories',
+            ].map((item, i) => (
+              <li key={i} className="flex items-start gap-3 text-[#6B7280] dark:text-[#94A3B8]">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                <span>{item}</span>
+              </li>
+            ))}
           </ul>
 
-          <div className="bg-[#EFF6FF] dark:bg-blue-950/20 border border-[#E5E7EB] dark:border-[#334155] p-6 rounded-lg mt-6">
-            <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Important Clarifications:</h4>
-            <ul className="text-sm text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-              <li>• We are a <strong>tracking platform only</strong>, not a broker or investment advisor</li>
-              <li>• We do NOT execute trades, provide financial advice, or manage your money</li>
-              <li>• We do NOT have access to your broker accounts or passwords</li>
-              <li>• You upload data manually via CSV files - we don't connect directly to brokers</li>
+          <div className="bg-amber-50 dark:bg-amber-950/20 border-l-4 border-amber-500 dark:border-amber-400 p-6 rounded-r-lg">
+            <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              Important Clarifications:
+            </h4>
+            <ul className="space-y-2 text-sm text-[#6B7280] dark:text-[#94A3B8]">
+              {[
+                'We are NOT a broker, investment advisor, portfolio manager, or financial institution',
+                'We do NOT execute trades',
+                'We do NOT provide buy/sell recommendations',
+                'We do NOT provide financial, tax, or legal advice',
+                'We do NOT manage or move customer funds',
+                'We do NOT connect directly to brokerage accounts',
+                'Users upload data voluntarily for record-keeping purposes',
+              ].map((item, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <XCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-[#0F172A] dark:text-[#F8FAFC] font-medium">
+              LensOnWealth is strictly a software tool for personal financial organization and informational display.
+            </p>
+          </div>
+        </section>
+
+        {/* 2. Regulatory Status */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold text-lg">
+              2
+            </span>
+            Regulatory Status
+          </h2>
+          <div className="flex gap-4">
+            <Scale className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-1" />
+            <div className="space-y-3 text-[#6B7280] dark:text-[#94A3B8]">
+              <p>
+                LensOnWealth is not registered with SEBI, RBI, or any financial regulatory authority because it
+                does not provide regulated financial services.
+              </p>
+              <p>
+                The platform does not offer investment advisory, portfolio management, research analysis, or
+                securities distribution services.
+              </p>
+              <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                Users remain solely responsible for all financial decisions.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* 3. Data & Information */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 font-bold text-lg">
+              3
+            </span>
+            Data &amp; Information
+          </h2>
+
+          <div className="space-y-8">
+            <div>
+              <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4 flex items-center gap-2">
+                <FileCheck className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                3.1 User-Provided Data
+              </h3>
+              <ul className="space-y-2 text-[#6B7280] dark:text-[#94A3B8]">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  Users are responsible for the accuracy of uploaded data
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  We do not verify information with financial institutions
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  Portfolio valuations shown are informational estimates only
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  Official statements from banks, brokers, or AMCs should be relied upon for legal or tax purposes
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4 flex items-center gap-2">
+                <Info className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                3.2 Market Data
+              </h3>
+              <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
+                Asset pricing information may be sourced from publicly available data sources after market hours.
+              </p>
+              <p className="text-[#0F172A] dark:text-[#F8FAFC] font-medium mb-2">Such data:</p>
+              <ul className="space-y-2 text-[#6B7280] dark:text-[#94A3B8]">
+                <li className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  May contain delays
+                </li>
+                <li className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  May contain inaccuracies
+                </li>
+                <li className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  Is provided for informational purposes only
+                </li>
+                <li className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  Should not be relied upon for trading or investment decisions
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. No Financial Advice */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-bold text-lg">
+              4
+            </span>
+            No Financial Advice
+          </h2>
+          <div className="bg-red-50 dark:bg-red-950/20 border-l-4 border-red-500 dark:border-red-400 p-6 rounded-r-lg">
+            <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
+              All information presented on LensOnWealth is for informational and educational purposes only.
+            </p>
+            <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Nothing on the platform constitutes:</p>
+            <ul className="space-y-2 text-[#6B7280] dark:text-[#94A3B8] mb-4">
+              {['Investment advice', 'Financial planning advice', 'Tax advice', 'Legal advice'].map((item, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <XCircle className="w-4 h-4 text-red-500 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+              Users should consult licensed professionals before making financial decisions.
+            </p>
+          </div>
+        </section>
+
+        {/* 5. Subscription Plans & Payments */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-bold text-lg">
+              5
+            </span>
+            Subscription Plans &amp; Payments
+          </h2>
+          <div className="flex gap-4 mb-6">
+            <CreditCard className="w-6 h-6 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-1" />
+            <div>
+              <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
+                LensOnWealth offers both free and paid subscription plans. Paid subscriptions provide access to
+                enhanced reporting and platform features.
+              </p>
+              <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">Payment Terms:</p>
+              <ul className="space-y-2 text-[#6B7280] dark:text-[#94A3B8]">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  Subscriptions are billed in advance (monthly or annually)
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  Payments are processed by authorized third-party payment gateways
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  Subscriptions auto-renew unless cancelled prior to renewal
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  Fees are non-refundable except as outlined in our Refund Policy
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  All pricing is displayed in INR
+                </li>
+              </ul>
+              <p className="mt-4 text-[#0F172A] dark:text-[#F8FAFC] font-medium">
+                LensOnWealth does not store card or UPI credentials.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* 6. Refund Policy */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold text-lg">
+              6
+            </span>
+            Refund Policy
+          </h2>
+          <ul className="space-y-3 text-[#6B7280] dark:text-[#94A3B8]">
+            <li className="flex items-start gap-3 p-4 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20">
+              <CheckCircle2 className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
+              <span><strong className="text-[#0F172A] dark:text-[#F8FAFC]">7-day refund</strong> for first-time subscription purchase</span>
+            </li>
+            <li className="flex items-start gap-3 p-4 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20">
+              <Info className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
+              <span>No refunds after 7 days except in cases of technical service disruption</span>
+            </li>
+            <li className="flex items-start gap-3 p-4 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20">
+              <Mail className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
+              <span>Refund requests must be submitted to{' '}
+                <a href="mailto:support@lensonwealth.com" className="text-[#2563EB] dark:text-[#3B82F6] hover:underline font-medium">
+                  support@lensonwealth.com
+                </a>
+              </span>
+            </li>
+          </ul>
+        </section>
+
+        {/* 7. Acceptable Use */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 font-bold text-lg">
+              7
+            </span>
+            Acceptable Use
+          </h2>
+          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4 font-medium">Users agree not to:</p>
+          <ul className="space-y-3">
+            {[
+              'Use the platform for unlawful activities',
+              'Attempt unauthorized access',
+              'Reverse engineer the software',
+              'Use automation tools that overload the system',
+            ].map((item, i) => (
+              <li key={i} className="flex items-start gap-3 text-[#6B7280] dark:text-[#94A3B8]">
+                <Ban className="w-5 h-5 text-rose-500 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* 8. Intellectual Property */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-lg">
+              8
+            </span>
+            Intellectual Property
+          </h2>
+          <div className="flex gap-4">
+            <Shield className="w-6 h-6 text-slate-600 dark:text-slate-400 flex-shrink-0 mt-1" />
+            <div className="space-y-3 text-[#6B7280] dark:text-[#94A3B8]">
+              <p>
+                All platform software, branding, and design elements are owned by LensOnWealth.
+              </p>
+              <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                Users retain ownership of their uploaded data.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* 9. Disclaimer of Warranties */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 font-bold text-lg">
+              9
+            </span>
+            Disclaimer of Warranties
+          </h2>
+          <div className="bg-orange-50 dark:bg-orange-950/20 border-l-4 border-orange-500 dark:border-orange-400 p-6 rounded-r-lg">
+            <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
+              The platform is provided &quot;AS IS&quot; and &quot;AS AVAILABLE&quot;.
+            </p>
+            <p className="text-[#6B7280] dark:text-[#94A3B8] mb-3">We make no warranties regarding:</p>
+            <ul className="space-y-2 text-[#6B7280] dark:text-[#94A3B8]">
+              {[
+                'Accuracy of data',
+                'Financial outcomes',
+                'Continuous availability',
+                'Suitability for specific financial goals',
+              ].map((item, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <XCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
             </ul>
           </div>
         </section>
 
-        {/* Section 2 */}
+        {/* 10. Limitation of Liability */}
         <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            2. Account Registration & Eligibility
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 font-bold text-lg">
+              10
+            </span>
+            Limitation of Liability
           </h2>
-          
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            2.1 Eligibility
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
-            <li>• You must be at least 18 years old to use LensOnWealth</li>
-            <li>• You must provide accurate and complete registration information</li>
-            <li>• You must be legally capable of entering into binding contracts</li>
-            <li>• One person may only create one account (no duplicate accounts)</li>
-          </ul>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            2.2 Account Security
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-            <li>• You are responsible for maintaining the confidentiality of your password</li>
-            <li>• You are responsible for all activities under your account</li>
-            <li>• Notify us immediately of any unauthorized access</li>
-            <li>• We recommend enabling two-factor authentication when available</li>
-            <li>• Never share your LensOnWealth password with anyone</li>
-          </ul>
-        </section>
-
-        {/* Section 3 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            3. Data Upload & Accuracy
-          </h2>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            3.1 CSV Upload Terms
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
-            <li>• You are responsible for the accuracy of data you upload</li>
-            <li>• We process uploaded CSV files to extract portfolio information</li>
-            <li>• We do NOT verify data with your brokers or financial institutions</li>
-            <li>• You should only upload CSV files from legitimate sources (Zerodha, Groww, Kuvera, etc.)</li>
-            <li>• Do NOT upload files containing others' financial information without permission</li>
-          </ul>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            3.2 Data Accuracy & NAV Updates
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
-            <li>• We fetch NAVs from AMFI and stock prices from exchanges (public data sources)</li>
-            <li>• NAV/price data may have delays or inaccuracies from source providers</li>
-            <li>• Our ISIN resolution has 95%+ accuracy but is not 100% guaranteed</li>
-            <li>• You should verify critical information with your broker/AMC statements</li>
-            <li>• Portfolio valuations are estimates for tracking purposes, not official account values</li>
-          </ul>
-
-          <div className="bg-yellow-50 dark:bg-yellow-950/20 border-l-4 border-yellow-500 dark:border-yellow-400 p-6 rounded-r-lg">
-            <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">⚠️ Important Disclaimer:</h4>
-            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-0">
-              LensOnWealth provides tracking and analytics for informational purposes only. 
-              Always refer to official statements from your broker, AMC, or financial institution 
-              for legally binding account values, especially for tax filing, loan applications, or 
-              legal proceedings.
-            </p>
-          </div>
-        </section>
-
-        {/* Section 4 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            4. Acceptable Use Policy
-          </h2>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            You agree NOT to:
-          </p>
-          <div className="space-y-3">
-            <div className="flex items-start gap-3">
-              <span className="text-[#DC2626] dark:text-red-400 mt-1">❌</span>
-              <p className="text-[#6B7280] dark:text-[#94A3B8]">
-                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Violate laws:</strong> Use the service for illegal activities, money laundering, or fraud
-              </p>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="text-[#DC2626] dark:text-red-400 mt-1">❌</span>
-              <p className="text-[#6B7280] dark:text-[#94A3B8]">
-                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Reverse engineer:</strong> Decompile, disassemble, or attempt to discover source code
-              </p>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="text-[#DC2626] dark:text-red-400 mt-1">❌</span>
-              <p className="text-[#6B7280] dark:text-[#94A3B8]">
-                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Abuse system:</strong> Overload servers, use bots, scrapers, or automated tools
-              </p>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="text-[#DC2626] dark:text-red-400 mt-1">❌</span>
-              <p className="text-[#6B7280] dark:text-[#94A3B8]">
-                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Harm others:</strong> Upload malware, viruses, or harmful code
-              </p>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="text-[#DC2626] dark:text-red-400 mt-1">❌</span>
-              <p className="text-[#6B7280] dark:text-[#94A3B8]">
-                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Impersonate:</strong> Pretend to be someone else or create fake accounts
-              </p>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="text-[#DC2626] dark:text-red-400 mt-1">❌</span>
-              <p className="text-[#6B7280] dark:text-[#94A3B8]">
-                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Sell access:</strong> Resell, sublicense, or commercially exploit the service without permission
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 5 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            5. Service Plans & Payment
-          </h2>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            5.1 Free Tier
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
-            <li>• Complete portfolio tracking across all asset types</li>
-            <li>• Daily NAV updates and real-time stock prices</li>
-            <li>• Basic analytics and net worth dashboard</li>
-            <li>• Free forever, no credit card required</li>
-          </ul>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            5.2 {premiumPlan ? premiumPlan.name : 'Premium'} Tier
-            {premiumPlan && (premiumPlan.monthly_price != null || premiumPlan.annual_price != null) && (
-              <span className="text-lg font-normal text-[#6B7280] dark:text-[#94A3B8] ml-2">
-                ({premiumPlan.monthly_price != null && `₹${premiumPlan.monthly_price.toLocaleString('en-IN')}/month`}
-                {premiumPlan.monthly_price != null && premiumPlan.annual_price != null && ' or '}
-                {premiumPlan.annual_price != null && `₹${premiumPlan.annual_price.toLocaleString('en-IN')}/year`})
-              </span>
-            )}
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
-            <li>• Everything in Free tier</li>
-            <li>• Portfolio Health Score with rebalancing suggestions</li>
-            <li>• Advanced analytics (sector, market cap, geography)</li>
-            <li>• AI Portfolio Analyst (unlimited queries)</li>
-            <li>• Tax optimization reports (LTCG/STCG tracking)</li>
-            <li>• Priority support</li>
-          </ul>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            5.3 Payment Terms
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-            <li>• Premium is billed monthly or annually in advance</li>
-            <li>• Payments are processed through secure third-party payment gateways</li>
-            <li>• All fees are in Indian Rupees (INR) and include applicable GST</li>
-            <li>• Subscriptions auto-renew unless cancelled before renewal date</li>
-            <li>• Refunds are provided on a case-by-case basis (see Refund Policy below)</li>
-          </ul>
-        </section>
-
-        {/* Section 6 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            6. Cancellation & Refunds
-          </h2>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            6.1 Cancellation
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
-            <li>• You can cancel Premium subscription anytime from your account settings</li>
-            <li>• Cancellation takes effect at the end of the current billing period</li>
-            <li>• You retain Premium access until the paid period expires</li>
-            <li>• No partial refunds for unused days in the current billing cycle</li>
-          </ul>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            6.2 Refund Policy
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-            <li>• <strong>7-day money-back guarantee:</strong> Full refund if requested within 7 days of first payment</li>
-            <li>• <strong>Technical issues:</strong> Refunds considered if service is unavailable for 48+ consecutive hours</li>
-            <li>• <strong>Unauthorized charges:</strong> Full refund for proven unauthorized transactions</li>
-            <li>• <strong>No refunds for:</strong> Change of mind after 7 days, ToS violations, banned accounts</li>
-            <li>• Refund requests: Email support@lensonwealth.com with order details</li>
-          </ul>
-        </section>
-
-        {/* Section 7 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            7. Intellectual Property
-          </h2>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            LensOnWealth and all related content, features, and functionality are owned by us 
-            and protected by Indian and international copyright, trademark, and other intellectual 
-            property laws.
-          </p>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            7.1 Your Data
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
-            <li>• You retain all rights to your portfolio data</li>
-            <li>• You grant us a limited license to process and display your data to provide the service</li>
-            <li>• We may use anonymized, aggregated data for analytics and service improvement</li>
-            <li>• You can export or delete your data anytime</li>
-          </ul>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            7.2 Restrictions
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-            <li>• You may not copy, modify, or create derivative works of our platform</li>
-            <li>• You may not use our trademarks, logos, or branding without written permission</li>
-            <li>• Screenshots for personal use are allowed; commercial use requires permission</li>
-          </ul>
-        </section>
-
-        {/* Section 8 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            8. Service Availability & Modifications
-          </h2>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            8.1 Availability
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
-            <li>• We strive for 99.9% uptime but cannot guarantee uninterrupted service</li>
-            <li>• Scheduled maintenance will be announced in advance when possible</li>
-            <li>• NAV updates depend on AMFI publishing data (typically by 9 PM IST on trading days)</li>
-            <li>• Stock prices may be delayed by up to 15 minutes (per exchange rules)</li>
-          </ul>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            8.2 Service Modifications
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-            <li>• We may add, remove, or modify features at any time</li>
-            <li>• Major changes affecting paid features will be communicated 30 days in advance</li>
-            <li>• We may discontinue the service with 90 days' notice (with prorated refunds for Premium users)</li>
-          </ul>
-        </section>
-
-        {/* Section 9 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            9. Disclaimers & Limitations
-          </h2>
-
-          <div className="bg-red-50 dark:bg-red-950/20 border-l-4 border-[#DC2626] dark:border-red-400 p-6 rounded-r-lg mb-6">
-            <h4 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3">⚠️ IMPORTANT DISCLAIMERS</h4>
-            <div className="space-y-3 text-sm text-[#6B7280] dark:text-[#94A3B8]">
-              <p>
-                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">1. Not Financial Advice:</strong> LensOnWealth provides 
-                tracking and analytics tools only. We are NOT SEBI-registered investment advisors. Nothing 
-                on our platform constitutes financial, investment, tax, or legal advice. Consult qualified 
-                professionals before making investment decisions.
-              </p>
-              <p>
-                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">2. No Guarantees:</strong> We make no guarantees about 
-                investment returns, portfolio performance, or accuracy of third-party data (NAVs, prices). 
-                Past performance does not guarantee future results.
-              </p>
-              <p>
-                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">3. User Responsibility:</strong> Investment decisions are 
-                your sole responsibility. We are not liable for any losses resulting from your investment 
-                decisions, data entry errors, or reliance on our platform.
-              </p>
-              <p>
-                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">4. Third-Party Data:</strong> We rely on external data 
-                sources (AMFI, NSE, BSE) over which we have no control. We are not responsible for errors, 
-                delays, or unavailability of third-party data.
-              </p>
-            </div>
-          </div>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            9.1 Service "As Is"
-          </h3>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            LensOnWealth is provided "AS IS" and "AS AVAILABLE" without warranties of any kind, either 
-            express or implied, including but not limited to:
-          </p>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-            <li>• Merchantability or fitness for a particular purpose</li>
-            <li>• Accuracy, completeness, or reliability of content</li>
-            <li>• Uninterrupted or error-free operation</li>
-            <li>• Security of data transmission over the internet</li>
-          </ul>
-        </section>
-
-        {/* Section 10 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            10. Limitation of Liability
-          </h2>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            To the maximum extent permitted by Indian law:
-          </p>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-            <li>• We are not liable for indirect, incidental, special, consequential, or punitive damages</li>
-            <li>• Our total liability is limited to the amount you paid us in the 12 months before the claim</li>
-            <li>• This includes damages for lost profits, data loss, business interruption, or investment losses</li>
-            <li>• Some jurisdictions don't allow liability limitations, so these may not apply to you</li>
-          </ul>
-
-          <div className="bg-[#F6F8FB] dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] p-6 rounded-lg mt-6">
-            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-              <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Example:</strong> If our platform displays incorrect 
-              NAV data leading to a poor investment decision, we are not liable for your investment losses. 
-              Always verify critical information with official sources.
-            </p>
-          </div>
-        </section>
-
-        {/* Section 11 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            11. Account Termination
-          </h2>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            11.1 Termination by You
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
-            <li>• You can close your account anytime from account settings</li>
-            <li>• Export your data before closing (we'll delete it after 30 days)</li>
-            <li>• Premium subscriptions continue until the end of paid period</li>
-          </ul>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            11.2 Termination by Us
-          </h3>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            We may suspend or terminate your account immediately if:
-          </p>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-            <li>• You violate these Terms of Service</li>
-            <li>• You engage in fraudulent or illegal activities</li>
-            <li>• Your account has been inactive for 24+ months (with 30 days' notice)</li>
-            <li>• Required by law or court order</li>
-            <li>• We discontinue the service (with 90 days' notice and prorated refunds)</li>
-          </ul>
-        </section>
-
-        {/* Section 12 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            12. Dispute Resolution
-          </h2>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            12.1 Informal Resolution
-          </h3>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            Before filing any legal claim, please contact us at support@lensonwealth.com to resolve 
-            the issue amicably. Most disputes can be resolved through discussion.
-          </p>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            12.2 Governing Law
-          </h3>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            These Terms are governed by the laws of India. Any disputes will be subject to the 
-            exclusive jurisdiction of courts in Greater Noida, India.
-          </p>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            12.3 Arbitration
-          </h3>
-          <p className="text-[#6B7280] dark:text-[#94A3B8]">
-            For disputes exceeding ₹1,00,000, either party may elect to resolve the dispute through 
-            binding arbitration under the Indian Arbitration and Conciliation Act, 1996, conducted 
-            in English in Greater Noida, India.
-          </p>
-        </section>
-
-        {/* Section 13 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            13. Miscellaneous
-          </h2>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            13.1 Entire Agreement
-          </h3>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            These Terms, along with our Privacy Policy and Security page, constitute the entire 
-            agreement between you and LensOnWealth.
-          </p>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            13.2 Changes to Terms
-          </h3>
-          <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2 mb-6">
-            <li>• We may update these Terms at any time</li>
-            <li>• Material changes will be notified via email 30 days in advance</li>
-            <li>• Continued use after changes constitutes acceptance</li>
-            <li>• If you disagree with new terms, you must stop using the service</li>
-          </ul>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            13.3 Severability
-          </h3>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            If any provision of these Terms is found unenforceable, the remaining provisions 
-            remain in full effect.
-          </p>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            13.4 Assignment
-          </h3>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-            You may not transfer your account or these Terms to anyone else. We may assign 
-            our rights and obligations to another entity (e.g., in case of acquisition).
-          </p>
-
-          <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-            13.5 No Waiver
-          </h3>
-          <p className="text-[#6B7280] dark:text-[#94A3B8]">
-            Our failure to enforce any right or provision doesn't constitute a waiver of that 
-            right or provision.
-          </p>
-        </section>
-
-        {/* Contact */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-            14. Contact Us
-          </h2>
-          <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6">
+          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30 p-6 rounded-lg">
             <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
-              Questions about these Terms? Contact us:
+              To the maximum extent permitted by law:
             </p>
-            <div className="space-y-2 text-[#6B7280] dark:text-[#94A3B8]">
-              <p><strong>Email:</strong> <a href="mailto:legal@lensonwealth.com" className="text-[#2563EB] dark:text-[#3B82F6] hover:underline">legal@lensonwealth.com</a></p>
-              <p><strong>Support:</strong> <a href="mailto:support@lensonwealth.com" className="text-[#2563EB] dark:text-[#3B82F6] hover:underline">support@lensonwealth.com</a></p>
-              <p><strong>Website:</strong> <a href="https://lensonwealth.com" className="text-[#2563EB] dark:text-[#3B82F6] hover:underline">lensonwealth.com</a></p>
-            </div>
-            <div className="mt-6 pt-6 border-t border-[#E5E7EB] dark:border-[#334155]">
-              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                <strong>Legal Entity:</strong> LensOnWealth<br />
-                Sector Alpha 2, Greater Noida<br />
-                U.P. India
+            <ul className="space-y-3 text-[#6B7280] dark:text-[#94A3B8]">
+              <li className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                We are not liable for investment losses
+              </li>
+              <li className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                We are not liable for reliance on informational reports
+              </li>
+              <li className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                Total liability is limited to subscription fees paid in the previous 12 months
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        {/* 11. Termination */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 font-bold text-lg">
+              11
+            </span>
+            Termination
+          </h2>
+          <ul className="space-y-3 text-[#6B7280] dark:text-[#94A3B8]">
+            <li className="flex items-start gap-2">
+              <Shield className="w-5 h-5 text-teal-500 flex-shrink-0 mt-0.5" />
+              We may suspend accounts for violation of Terms.
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="w-5 h-5 text-teal-500 flex-shrink-0 mt-0.5" />
+              Users may close their accounts at any time.
+            </li>
+          </ul>
+        </section>
+
+        {/* 12. Governing Law */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold text-lg">
+              12
+            </span>
+            Governing Law
+          </h2>
+          <div className="flex gap-4">
+            <Scale className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-1" />
+            <div className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
+              <p>These Terms are governed by the laws of India.</p>
+              <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                Jurisdiction: Courts of Greater Noida, Uttar Pradesh.
               </p>
             </div>
           </div>
         </section>
 
-        {/* Acceptance */}
-        <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/30 rounded-lg p-6 text-center">
+        {/* 13. Contact */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-6 flex items-center gap-3">
+            <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-bold text-lg">
+              13
+            </span>
+            Contact
+          </h2>
+          <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-xl p-6 shadow-sm">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex items-center gap-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                <div className="p-2 rounded-lg bg-[#2563EB]/10">
+                  <Mail className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6]" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wide">Legal</p>
+                  <a href="mailto:legal@lensonwealth.com" className="text-[#2563EB] dark:text-[#3B82F6] font-semibold hover:underline">
+                    legal@lensonwealth.com
+                  </a>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                <div className="p-2 rounded-lg bg-emerald-500/10">
+                  <Mail className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wide">Support</p>
+                  <a href="mailto:support@lensonwealth.com" className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline">
+                    support@lensonwealth.com
+                  </a>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50 sm:col-span-2">
+                <div className="p-2 rounded-lg bg-violet-500/10">
+                  <MapPin className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wide">Location</p>
+                  <p className="text-[#0F172A] dark:text-[#F8FAFC] font-medium">Greater Noida, India</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Acceptance Banner */}
+        <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/30 rounded-xl p-6 text-center">
+          <CheckCircle2 className="w-12 h-12 text-emerald-500 dark:text-emerald-400 mx-auto mb-3" />
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">
-            By using LensOnWealth, you acknowledge that you have read, understood, and agree to be 
-            bound by these Terms of Service.
+            By using LensOnWealth, you acknowledge that you have read, understood, and agree to be bound by these
+            Terms of Service.
           </p>
           <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
-            Effective Date: January 17, 2025
+            Effective Date: February 20, 2026
           </p>
         </div>
       </main>
@@ -546,8 +515,6 @@ export default function TermsOfServicePage() {
       <footer className="bg-[#F6F8FB] dark:bg-[#0F172A] border-t border-[#E5E7EB] dark:border-[#334155] mt-12">
         <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6 sm:gap-8">
-            
-            {/* Column 1: Brand & Description */}
             <div className="lg:col-span-2">
               <div className="flex items-center gap-2 mb-3">
                 <LogoLockup linkToHome={true} showTagline={true} iconSize="w-12 h-12" />
@@ -556,8 +523,6 @@ export default function TermsOfServicePage() {
                 Your clear view of complete wealth. Track stocks, mutual funds, and ETFs from all platforms in one unified dashboard.
               </p>
             </div>
-
-            {/* Column 2: Product */}
             <div>
               <h3 className="text-[#0F172A] dark:text-[#F8FAFC] font-semibold mb-3 text-sm">Product</h3>
               <ul className="space-y-2">
@@ -568,8 +533,6 @@ export default function TermsOfServicePage() {
                 <li><span className="text-xs sm:text-sm text-[#9CA3AF] dark:text-[#4B5563] cursor-not-allowed opacity-60">Changelog</span></li>
               </ul>
             </div>
-
-            {/* Column 3: Company */}
             <div>
               <h3 className="text-[#0F172A] dark:text-[#F8FAFC] font-semibold mb-3 text-sm">Company</h3>
               <ul className="space-y-2">
@@ -579,8 +542,6 @@ export default function TermsOfServicePage() {
                 <li><span className="text-xs sm:text-sm text-[#9CA3AF] dark:text-[#4B5563] cursor-not-allowed opacity-60">Press Kit</span></li>
               </ul>
             </div>
-
-            {/* Column 4: Legal & Help */}
             <div>
               <h3 className="text-[#0F172A] dark:text-[#F8FAFC] font-semibold mb-3 text-sm">Legal & Help</h3>
               <ul className="space-y-2">
@@ -588,11 +549,9 @@ export default function TermsOfServicePage() {
                 <li><a href="/terms" className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300">Terms of Service</a></li>
                 <li><a href="/security" className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300">Security</a></li>
                 <li><a href="/#faq" className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300">FAQ</a></li>
-                <li><a href="/support" className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300">Support</a></li>
+                <li><a href="/refund-policy" className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300">Refund Policy</a></li>
               </ul>
             </div>
-
-            {/* Column 5: Contact */}
             <div>
               <h3 className="text-[#0F172A] dark:text-[#F8FAFC] font-semibold mb-3 text-sm">Contact</h3>
               <div className="space-y-3">
@@ -622,17 +581,14 @@ export default function TermsOfServicePage() {
                 </div>
               </div>
             </div>
-
           </div>
-
-          {/* Bottom Bar */}
           <div className="mt-6 pt-4 border-t border-[#E5E7EB] dark:border-[#334155] flex flex-col md:flex-row justify-between items-center gap-3">
             <div className="text-center md:text-left">
               <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs mb-1">
                 © {new Date().getFullYear()} LensOnWealth. Built with ❤️ in India for Indian investors.
               </p>
               <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs leading-tight">
-                <strong className="text-[#6B7280] dark:text-[#94A3B8]">Disclaimer:</strong> This is an educational portfolio tracking tool. 
+                <strong className="text-[#6B7280] dark:text-[#94A3B8]">Disclaimer:</strong> This is an educational portfolio tracking tool.
                 We do not provide investment advice, recommendations, or tips. This is a read-only platform—we never execute trades or modify your data.
               </p>
             </div>
