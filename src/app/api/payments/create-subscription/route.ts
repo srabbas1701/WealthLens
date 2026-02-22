@@ -103,8 +103,23 @@ export async function POST(request: NextRequest) {
     }
     const ourPlanId = planRow.id;
 
-    // total_count: 1 per billing cycle (we use separate Razorpay plans for monthly vs yearly)
-    const totalCount = 1;
+    const { data: existingSub } = await admin
+      .from('user_subscriptions')
+      .select('id')
+      .eq('user_id', userId)
+      .in('status', ['pending', 'active'])
+      .limit(1)
+      .maybeSingle();
+
+    if (existingSub) {
+      return NextResponse.json(
+        { error: 'You already have an active or pending subscription.' },
+        { status: 400 }
+      );
+    }
+
+    // total_count: 120 per billing cycle (we use separate Razorpay plans for monthly vs yearly)
+    const totalCount = 120;
 
     const instance = new Razorpay({
       key_id: keyId,
