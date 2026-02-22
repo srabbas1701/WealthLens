@@ -138,21 +138,37 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (existing) {
-      await admin
+      const { error: updateError } = await admin
         .from('user_subscriptions')
         .update({
           razorpay_subscription_id: subscription.id,
-          plan_id: ourPlanId,
+          tier: ourPlanId,
           status: 'pending',
         })
         .eq('id', existing.id);
+
+      if (updateError) {
+        console.error('[Create subscription] Supabase update error:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to update subscription', details: updateError.message },
+          { status: 500 }
+        );
+      }
     } else {
-      await admin.from('user_subscriptions').insert({
+      const { error: insertError } = await admin.from('user_subscriptions').insert({
         user_id: userId,
-        plan_id: ourPlanId,
+        tier: ourPlanId,
         razorpay_subscription_id: subscription.id,
         status: 'pending',
       });
+
+      if (insertError) {
+        console.error('[Create subscription] Supabase insert error:', insertError);
+        return NextResponse.json(
+          { error: 'Failed to create subscription', details: insertError.message },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json({
