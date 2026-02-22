@@ -107,9 +107,9 @@ export default function UpgradePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          planId: selectedPlan.id,
+          planId: selectedPlan.name?.toLowerCase() as 'pro' | 'premium',
+          billingCycle: billingCycle === 'yearly' ? 'annual' : 'monthly',
           userId: user.id,
-          billingCycle,
         }),
       });
 
