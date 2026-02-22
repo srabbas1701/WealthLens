@@ -19,7 +19,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('plans')
-      .select('id, name, monthly_price, annual_price')
+      .select('id, name, monthly_price, annual_price, razorpay_plan_id')
       .order('monthly_price', { ascending: true });
 
     if (error) {

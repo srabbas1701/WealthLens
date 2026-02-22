@@ -31,11 +31,13 @@ export async function GET(request: NextRequest) {
 
     const userId = user.id;
 
-    // Fetch user's current plan
+    // Fetch user's current plan (active only, not expired)
     const { data: subscription, error: subError } = await supabase
       .from('user_subscriptions')
-      .select('plan_id')
+      .select('plan_id, current_period_end')
       .eq('user_id', userId)
+      .eq('status', 'active')
+      .gt('current_period_end', new Date().toISOString())
       .maybeSingle();
 
     if (subError) {

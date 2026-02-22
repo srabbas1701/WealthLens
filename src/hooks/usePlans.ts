@@ -10,6 +10,7 @@ export interface PricingPlan {
   name: string;
   monthly_price: number | null;
   annual_price: number | null;
+  razorpay_plan_id?: string | null;
 }
 
 export function usePlans() {
