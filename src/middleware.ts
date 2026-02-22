@@ -37,6 +37,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const pathname = request.nextUrl.pathname;
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.next();
+  }
+
   // GUARD: Skip Supabase client creation during build or if env vars are missing
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -103,7 +108,6 @@ export async function middleware(request: NextRequest) {
       // Treat as unauthenticated user
       // For auto-logout scenarios, redirect to home page (not login)
       // This provides consistent experience with client-side logout
-      const pathname = request.nextUrl.pathname;
       const isProtectedRoute = PROTECTED_ROUTES.some(route => 
         pathname.startsWith(route)
       );
@@ -125,13 +129,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const pathname = request.nextUrl.pathname;
   const searchParams = request.nextUrl.searchParams;
-
-  // Skip API routes - they handle their own auth
-  if (pathname.startsWith('/api/')) {
-    return response;
-  }
 
   // Skip RSC payload requests (Next.js 16 - reduces redundant auth checks)
   if (searchParams.get('_rsc') || searchParams.has('__next_router_data')) {

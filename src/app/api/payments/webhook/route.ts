@@ -2,7 +2,8 @@
  * POST /api/payments/webhook
  *
  * Razorpay webhook handler. Verifies signature and updates user_subscriptions.
- * Handles: subscription.activated, subscription.charged, subscription.cancelled
+ * Handles: subscription.authenticated, subscription.charged, subscription.completed,
+ * subscription.updated, subscription.halted
  *
  * Uses Node runtime, RAZORPAY_WEBHOOK_SECRET for signature verification.
  */
@@ -56,7 +57,15 @@ function unixToIso(unix?: number): string | null {
   }
 }
 
+// No auth check - webhooks are publicly accessible; security via Razorpay signature verification only
 export async function POST(request: NextRequest) {
+  const rawBody = await request.text();
+  const signature = request.headers.get('x-razorpay-signature');
+  
+  // LOG IMMEDIATELY before any processing
+  console.log('[Webhook] Received payload length:', rawBody.length);
+  console.log('[Webhook] Signature present:', !!signature);
+  console.log('[Webhook] Raw event:', rawBody.substring(0, 200));
   try {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!secret) {
@@ -64,14 +73,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 });
     }
 
-    const signature = request.headers.get('x-razorpay-signature');
     if (!signature) {
       return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
-    }
-
-    const rawBody = await request.text();
-    if (!rawBody) {
-      return NextResponse.json({ error: 'Empty body' }, { status: 400 });
     }
 
     let valid: boolean;
@@ -98,7 +101,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 });
     }
 
-    const handledEvents = ['subscription.activated', 'subscription.charged', 'subscription.cancelled'];
+    const handledEvents = [
+      'subscription.authenticated',
+      'subscription.charged',
+      'subscription.completed',
+      'subscription.updated',
+      'subscription.halted',
+    ];
     if (!handledEvents.includes(event)) {
       return NextResponse.json({ received: true }, { status: 200 });
     }
@@ -111,19 +120,25 @@ export async function POST(request: NextRequest) {
 
     const admin = createAdminClient();
 
-    if (event === 'subscription.cancelled') {
+    const activeStateEvents = [
+      'subscription.authenticated',
+      'subscription.charged',
+      'subscription.completed',
+      'subscription.updated',
+    ];
+    if (event === 'subscription.halted') {
       const { error } = await admin
         .from('user_subscriptions')
         .update({
-          status: 'cancelled',
+          status: 'halted',
           updated_at: new Date().toISOString(),
         })
         .eq('razorpay_subscription_id', subscription.id);
 
       if (error) {
-        console.error('[Webhook] Update cancelled failed:', error);
+        console.error('[Webhook] Update halted failed:', error);
       }
-    } else {
+    } else if (activeStateEvents.includes(event)) {
       const currentPeriodEnd = unixToIso(subscription.current_end);
       const startedAt = unixToIso(subscription.current_start);
 
@@ -143,7 +158,6 @@ export async function POST(request: NextRequest) {
         console.error('[Webhook] Update subscription failed:', error);
       }
     }
-
     return NextResponse.json({ received: true });
   } catch (err) {
     console.error('[Webhook] Unexpected error:', err);
