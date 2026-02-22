@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     const { data: planRow, error: planError } = await admin
       .from('plans')
       .select('id')
-      .eq('name', planId)
+      .eq('id', planId)
       .limit(1)
       .maybeSingle();
 
