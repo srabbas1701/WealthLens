@@ -68,6 +68,7 @@ import InsightsLimitBanner from '@/components/InsightsLimitBanner';
 import OnboardingHint from '@/components/OnboardingHint';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import { CategoryInfoTooltip } from '@/components/CategoryInfoTooltip';
 import { useWebVitals } from '@/hooks/useWebVitals';
 import { useAuth, useAuthAppData } from '@/lib/auth';
@@ -331,6 +332,13 @@ function DashboardContent() {
   const [portfolioHealthScore, setPortfolioHealthScore] = useState<PortfolioHealthScore | null>(null);
   const [healthScoreLoading, setHealthScoreLoading] = useState(false);
   const [showUnitHint, setShowUnitHint] = useState(false);
+  const [upgradeModal, setUpgradeModal] = useState<{
+    open: boolean;
+    plan: 'Pro' | 'Premium';
+    title: string;
+    description: string;
+    benefits: string[];
+  }>({ open: false, plan: 'Pro', title: '', description: '', benefits: [] });
 
   // PERMANENT FIX: Simplified - use portfolioCheckComplete as single source of truth
   // Removed portfolioCheckTimeout to eliminate race conditions
@@ -1137,13 +1145,34 @@ function DashboardContent() {
                   <PlusIcon className="w-5 h-5" />
                   Add Investments
                 </Link>
-                <Link
-                  href="/liabilities"
-                  className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-[#1E293B] text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
-                >
-                  <PlusIcon className="w-5 h-5" />
-                  Add Liability
-                </Link>
+                {hasCapability('manage_liabilities') ? (
+                  <Link
+                    href="/liabilities"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-[#1E293B] text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                  >
+                    <PlusIcon className="w-5 h-5" />
+                    Add Liability
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => setUpgradeModal({
+                      open: true,
+                      plan: 'Pro',
+                      title: 'Liabilities Management',
+                      description: 'Track all your loans, EMIs, and credit card dues in one place. See how they impact your net worth.',
+                      benefits: [
+                        'Loans, EMIs & credit card tracking',
+                        'Net worth outlook & projections',
+                        'Prepayment impact calculator',
+                        'Debt-free timeline planning',
+                      ],
+                    })}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-[#1E293B] text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 font-medium rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                  >
+                    <PlusIcon className="w-5 h-5" />
+                    Add Liability
+                  </button>
+                )}
                 <button
                   onClick={handlePriceUpdate}
                   disabled={priceUpdateLoading}
@@ -1644,19 +1673,58 @@ function DashboardContent() {
                       Monthly EMI: <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">{formatCurrency(liabilityTotalsOverview.totalEmi)}</span>
                     </p>
                   </div>
-                  <Link
-                    href="/liabilities"
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
-                  >
-                    Manage Liabilities
-                  </Link>
+                  {hasCapability('manage_liabilities') ? (
+                    <Link
+                      href="/liabilities"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                    >
+                      Manage Liabilities
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => setUpgradeModal({
+                        open: true,
+                        plan: 'Pro',
+                        title: 'Liabilities Management',
+                        description: 'Track all your loans, EMIs, and credit card dues in one place. See how they impact your net worth.',
+                        benefits: [
+                          'Loans, EMIs & credit card tracking',
+                          'Net worth outlook & projections',
+                          'Prepayment impact calculator',
+                          'Debt-free timeline planning',
+                        ],
+                      })}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                    >
+                      Manage Liabilities
+                    </button>
+                  )}
                 </div>
               );
             })()}
 
             {/* Card 2: Insurance */}
-            <Link href="/portfolio/insurance">
-              <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-colors cursor-pointer h-full">
+            <div
+              onClick={() => {
+                if (hasCapability('manage_insurance')) {
+                  router.push('/portfolio/insurance');
+                } else {
+                  setUpgradeModal({
+                    open: true,
+                    plan: 'Pro',
+                    title: 'Insurance Management',
+                    description: 'Track all your insurance policies, coverage amounts, and renewal dates in one dashboard.',
+                    benefits: [
+                      'Life, health & other policies',
+                      'Coverage summaries & renewal alerts',
+                      'Protection gap analysis',
+                      'Family security overview',
+                    ],
+                  });
+                }
+              }}
+              className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-colors cursor-pointer h-full"
+            >
                 <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Insurance</h3>
                 <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-4">
                   Manage your life, health, and other insurance policies
@@ -1664,8 +1732,7 @@ function DashboardContent() {
                 <div className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 border-2 border-blue-600 dark:border-blue-500 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
                   View Insurance
                 </div>
-              </div>
-            </Link>
+            </div>
           </div>
         </section>
 
@@ -1869,6 +1936,15 @@ function DashboardContent() {
         userId={user?.id || ''}
         source="dashboard"
         onSuccess={handleUploadSuccess}
+      />
+
+      <UpgradeModal
+        isOpen={upgradeModal.open}
+        onClose={() => setUpgradeModal(prev => ({ ...prev, open: false }))}
+        requiredPlan={upgradeModal.plan}
+        featureTitle={upgradeModal.title}
+        featureDescription={upgradeModal.description}
+        benefits={upgradeModal.benefits}
       />
 
     </ErrorBoundary>
