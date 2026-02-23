@@ -7,10 +7,12 @@
  * MF, Stocks, ETFs have dedicated add pages. Others link to their list pages.
  */
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AppHeader } from '@/components/AppHeader';
+import { useCapabilities } from '@/lib/capabilities';
+import { UpgradeModal } from '@/components/UpgradeModal';
 
 interface AssetOption {
   id: string;
@@ -36,6 +38,14 @@ const ASSET_OPTIONS: AssetOption[] = [
 function AddHoldingHubContent() {
   const searchParams = useSearchParams();
   const fromOnboarding = searchParams?.get('from') === 'onboarding';
+  const { hasCapability } = useCapabilities();
+  const [upgradeModal, setUpgradeModal] = useState<{
+    open: boolean;
+    plan: 'Pro' | 'Premium';
+    title: string;
+    description: string;
+    benefits: string[];
+  }>({ open: false, plan: 'Pro', title: '', description: '', benefits: [] });
 
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
@@ -56,21 +66,82 @@ function AddHoldingHubContent() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {ASSET_OPTIONS.map((option) => (
-            <Link
-              key={option.id}
-              href={option.href}
-              className="block p-4 rounded-lg border-2 border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all text-left"
-            >
-              <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC] text-sm">
-                {option.label}
-              </p>
-              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                {option.description}
-              </p>
-            </Link>
-          ))}
+          {ASSET_OPTIONS.map((option) => {
+            const isGold = option.id === 'gold';
+            const isRealEstate = option.id === 'real_estate';
+            
+            const isLocked = 
+              (isGold && !hasCapability('manage_gold')) ||
+              (isRealEstate && !hasCapability('manage_real_assets'));
+
+            if (isLocked) {
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => setUpgradeModal({
+                    open: true,
+                    plan: 'Pro',
+                    title: isGold ? 'Gold Holdings' : 'Real Estate',
+                    description: isGold
+                      ? 'Track all your gold investments — physical gold, SGBs, and Gold ETFs — with live IBJA pricing.'
+                      : 'Track properties, rental income, loans, and see real estate as part of your total net worth.',
+                    benefits: isGold
+                      ? [
+                          'Physical gold, SGB & ETF tracking',
+                          'Live IBJA gold price updates',
+                          'Purity-based valuation (22K/24K)',
+                          'Gold as % of total portfolio',
+                        ]
+                      : [
+                          'Property valuations & current value',
+                          'Rental income & expense tracking',
+                          'Loan and EMI management',
+                          'Net worth with real assets',
+                        ],
+                  })}
+                  className="block p-4 rounded-lg border-2 border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all text-left w-full relative"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC] text-sm">
+                        {option.label}
+                      </p>
+                      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                        {option.description}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full ml-2 flex-shrink-0">
+                      Pro
+                    </span>
+                  </div>
+                </button>
+              );
+            }
+
+            return (
+              <Link
+                key={option.id}
+                href={option.href}
+                className="block p-4 rounded-lg border-2 border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all text-left"
+              >
+                <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC] text-sm">
+                  {option.label}
+                </p>
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+                  {option.description}
+                </p>
+              </Link>
+            );
+          })}
         </div>
+        <UpgradeModal
+          isOpen={upgradeModal.open}
+          onClose={() => setUpgradeModal(prev => ({ ...prev, open: false }))}
+          requiredPlan={upgradeModal.plan}
+          featureTitle={upgradeModal.title}
+          featureDescription={upgradeModal.description}
+          benefits={upgradeModal.benefits}
+        />
       </main>
     </div>
   );
