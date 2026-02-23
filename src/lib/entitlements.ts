@@ -31,8 +31,7 @@ async function getUserEntitlementsUncached(
   // 1. All capability keys from DB (to build full map)
   const { data: allCaps } = await db
     .from('capabilities')
-    .select('key')
-    .eq('is_active', true);
+    .select('key');
   const allKeys = (allCaps ?? []).map((r: { key: string }) => r.key);
 
   // 2. User's active plan from user_subscriptions
@@ -54,11 +53,11 @@ async function getUserEntitlementsUncached(
   if (planId) {
     const { data: planCaps } = await db
       .from('plan_capabilities')
-      .select('capabilities(key)')
-      .eq('plan_id', planId);
+      .select('capability_key')
+      .eq('plan_id', planId)
+      .eq('enabled', true);
     for (const row of planCaps ?? []) {
-      const cap = (row as { capabilities: { key: string } | null }).capabilities;
-      if (cap?.key) enabledByPlan.add(cap.key);
+      if (row.capability_key) enabledByPlan.add(row.capability_key);
     }
   }
 
@@ -101,24 +100,22 @@ async function getUserEntitlementsUncached(
  */
 export const getUserEntitlements = cache(getUserEntitlementsUncached);
 
-/** Get capability keys enabled for any plan with price_monthly > 0 (Premium). */
+/** Get capability keys enabled for any plan with monthly_price > 0 (Premium). */
 async function getPremiumCapabilityKeys(db: SupabaseClient): Promise<string[]> {
   const { data: plans } = await db
     .from('plans')
     .select('id')
-    .gt('price_monthly', 0)
-    .eq('is_active', true);
+    .gt('monthly_price', 0);
   if (!plans?.length) return [];
-
   const planIds = plans.map((p: { id: string }) => p.id);
   const { data: rows } = await db
     .from('plan_capabilities')
-    .select('capabilities(key)')
-    .in('plan_id', planIds);
+    .select('capability_key')
+    .in('plan_id', planIds)
+    .eq('enabled', true);
   const keys = new Set<string>();
   for (const row of rows ?? []) {
-    const cap = (row as { capabilities: { key: string } | null }).capabilities;
-    if (cap?.key) keys.add(cap.key);
+    if (row.capability_key) keys.add(row.capability_key);
   }
   return Array.from(keys);
 }
