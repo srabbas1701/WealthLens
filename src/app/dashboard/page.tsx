@@ -1412,7 +1412,7 @@ function DashboardContent() {
         {/* ============================================================================ */}
         {isDataConsistent && (
         <section className="mb-12">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${bucketCardsContent.length >= 5 ? 'md:grid-cols-5' : bucketCardsContent.length === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
             {bucketCardsContent.map(({ bucket, allocationItem, bucketName, tooltip }) => {
               const value = allocationItem.value;
               const percentage = allocationItem.percentage;
@@ -1445,6 +1445,11 @@ function DashboardContent() {
                       <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
                         {percentage.toFixed(0)}%
                       </p>
+                      {bucket === 'RealAsset' && (
+                        <span className="mt-3 inline-block text-xs text-[#2563EB] dark:text-[#3B82F6]">
+                          + Add Real Estate →
+                        </span>
+                      )}
                     </>
                   )}
                 </>

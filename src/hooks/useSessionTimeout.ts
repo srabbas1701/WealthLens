@@ -233,24 +233,26 @@ export function useSessionTimeout({
     };
     window.fetch = interceptedFetch;
 
-    // Initialize last activity from localStorage if available
+    // Initialize last activity - CRITICAL: ignore stale localStorage values
+    // A stale value (e.g. from hours ago) would cause immediate logout while user is active
     const storedActivity = localStorage.getItem('lastActivity');
-    if (storedActivity) {
-      lastActivityRef.current = parseInt(storedActivity, 10);
+    const storedTime = storedActivity ? parseInt(storedActivity, 10) : 0;
+    const maxStaleMs = INACTIVITY_LOGOUT_TIME - 60 * 1000; // Treat as stale if older than 29 min
+    if (storedActivity && storedTime > 0 && Date.now() - storedTime < maxStaleMs) {
+      lastActivityRef.current = storedTime;
     } else {
-      updateActivity();
+      updateActivity(); // Fresh start - user is active now
     }
 
     // Check inactivity every 30 seconds
     activityCheckIntervalRef.current = setInterval(checkInactivity, 30000);
 
-    // Check session expiration every minute (primary mechanism)
+    // Check session expiration every minute - delay initial check to avoid mount race
     sessionCheckIntervalRef.current = setInterval(checkSessionExpiration, SESSION_CHECK_INTERVAL);
-
-    // Initial session check
-    checkSessionExpiration();
+    const initialCheckDelay = setTimeout(() => checkSessionExpiration(), 10000);
 
     return () => {
+      clearTimeout(initialCheckDelay);
       events.forEach(event => {
         document.removeEventListener(event, handleActivity);
       });

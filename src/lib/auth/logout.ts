@@ -89,49 +89,40 @@ export async function handleLogout(options: LogoutOptions = {}): Promise<void> {
 
 /**
  * Check if Supabase session is expired or invalid
- * 
+ *
+ * Uses getUser() (not getSession()) so Supabase can refresh the token if the
+ * refresh token is valid. getSession() returns cached data and does not refresh,
+ * so it can falsely report expired when the user just needs a token refresh.
+ *
  * @returns true if session is expired/invalid, false otherwise
  */
 export async function isSessionExpired(): Promise<boolean> {
   try {
     const supabase = createClient();
-    const { data: { session }, error } = await supabase.auth.getSession();
-    
-    // If error or no session, consider it expired
-    if (error || !session) {
+    // getUser() validates with server and refreshes token - getSession() does not
+    const { data: { user }, error } = await supabase.auth.getUser();
+
+    if (!user) {
       return true;
     }
 
-    // Check if session is expired (Supabase sessions have expires_at)
-    if (session.expires_at) {
-      const expiresAt = new Date(session.expires_at * 1000); // Convert to milliseconds
-      const now = new Date();
-      
-      // Add 5 minute buffer to account for clock skew
-      const buffer = 5 * 60 * 1000; // 5 minutes in milliseconds
-      
-      if (expiresAt.getTime() - buffer < now.getTime()) {
-        return true;
-      }
-    }
-
-    // Try to get user to check if refresh token is valid
-    const { error: userError } = await supabase.auth.getUser();
-    if (userError) {
-      // Check if it's a refresh token error
+    if (error) {
       if (
-        userError.message?.includes('Refresh Token Not Found') ||
-        userError.message?.includes('refresh_token_not_found') ||
-        (userError as any)?.code === 'refresh_token_not_found'
+        error.message?.includes('Refresh Token Not Found') ||
+        error.message?.includes('refresh_token_not_found') ||
+        (error as { code?: string })?.code === 'refresh_token_not_found'
       ) {
         return true;
       }
+      // Other errors (e.g. network) - do NOT assume expired to avoid kicking active users
+      console.warn('[Logout] Session check error (not refresh token):', error.message);
+      return false;
     }
 
     return false;
   } catch (error) {
     console.error('[Logout] Error checking session expiration:', error);
-    // On error, assume session is expired for safety
-    return true;
+    // On transient errors (network, etc.), do NOT assume expired - avoids logging out active users
+    return false;
   }
 }
