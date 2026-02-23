@@ -10,10 +10,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useCapabilities } from '@/lib/capabilities';
-import { FEATURE_ACCESS } from '@/config/feature-access';
-import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { AnalyticsPageLayout } from '@/components/analytics/AnalyticsPageLayout';
 import { LoadingState } from '@/components/analytics/LoadingState';
 import { ErrorState } from '@/components/analytics/ErrorState';
@@ -37,6 +36,7 @@ import { ShieldCheckIcon } from '@/components/icons';
 import type { StabilityAnalysis } from '@/lib/portfolio-intelligence/stability-analytics';
 
 export default function StabilityAnalyticsPage() {
+  const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
@@ -64,7 +64,7 @@ export default function StabilityAnalyticsPage() {
   }, []);
 
   useEffect(() => {
-    if (authStatus === 'authenticated' && user?.id && hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
+    if (authStatus === 'authenticated' && user?.id && hasCapability('view_premium_analytics')) {
       fetchData(user.id);
     }
   }, [authStatus, user, fetchData, hasCapability]);
@@ -74,13 +74,9 @@ export default function StabilityAnalyticsPage() {
     return null; // Will redirect via middleware
   }
 
-  if (!capabilitiesLoading && !hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
-    return (
-      <LockedFeaturePage
-        title="Stability & Safety Analytics"
-        feature="ANALYTICS_HEALTH"
-      />
-    );
+  if (!capabilitiesLoading && !hasCapability('view_premium_analytics')) {
+    router.replace('/analytics/overview');
+    return null;
   }
 
   if (loading) {
@@ -92,14 +88,9 @@ export default function StabilityAnalyticsPage() {
   }
 
   if (error && !stabilityData) {
-    // ONLY capability-based 403: exact backend message. Do NOT convert 500, network, timeout, DB errors.
     if (error === 'Upgrade required') {
-      return (
-        <LockedFeaturePage
-          title="Stability & Safety Analytics"
-          feature="ANALYTICS_HEALTH"
-        />
-      );
+      router.replace('/analytics/overview');
+      return null;
     }
     return (
       <AnalyticsPageLayout title={PAGE_TITLES.stabilityAnalytics}>

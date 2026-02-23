@@ -15,8 +15,6 @@ import {
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { useCapabilities } from '@/lib/capabilities';
-import { FEATURE_ACCESS } from '@/config/feature-access';
-import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 
 interface SectorExposure {
@@ -151,10 +149,10 @@ export default function SectorExposurePage() {
   }, [authStatus, router]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    if (!capabilitiesLoading && !hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) return;
-    fetchData(user.id);
-  }, [user?.id, fetchData, capabilitiesLoading, hasCapability]);
+    if (user?.id && hasCapability('view_advanced_analytics')) {
+      fetchData(user.id);
+    }
+  }, [user?.id, fetchData, hasCapability]);
 
 
   const highestSector = sectors[0];
@@ -174,14 +172,9 @@ export default function SectorExposurePage() {
     return null; // Redirect happens in useEffect
   }
 
-  // Capability guard: show locked page for free users
-  if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
-    return (
-      <LockedFeaturePage
-        title="Sector Exposure"
-        feature="ANALYTICS_HEALTH"
-      />
-    );
+  if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability('view_advanced_analytics')) {
+    router.replace('/analytics/overview');
+    return null;
   }
 
   if (loading) {

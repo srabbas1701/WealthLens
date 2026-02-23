@@ -12,8 +12,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCapabilities } from '@/lib/capabilities';
-import { FEATURE_ACCESS } from '@/config/feature-access';
-import { LockedFeaturePage } from '@/components/LockedFeaturePage';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import { 
   ArrowLeftIcon,
   InfoIcon,
@@ -54,6 +53,13 @@ export default function AnalyticsOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [ownership, setOwnership] = useState<PortfolioOwnership | null>(null);
   const [exposure, setExposure] = useState<ExposureData | null>(null);
+  const [upgradeModal, setUpgradeModal] = useState<{
+    open: boolean;
+    plan: 'Pro' | 'Premium';
+    title: string;
+    description: string;
+    benefits: string[];
+  }>({ open: false, plan: 'Pro', title: '', description: '', benefits: [] });
 
   const fetchData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -143,21 +149,11 @@ export default function AnalyticsOverviewPage() {
   }, [authStatus, router]);
 
   useEffect(() => {
-    if (user?.id && hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
+    if (user?.id) {
       fetchData(user.id);
     }
-  }, [user?.id, fetchData, hasCapability]);
+  }, [user?.id, fetchData]);
 
-
-  // Capability guard: show locked page BEFORE any API calls
-  if (!capabilitiesLoading && authStatus === 'authenticated' && !hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
-    return (
-      <LockedFeaturePage
-        title="Advanced Analytics"
-        feature="ANALYTICS_HEALTH"
-      />
-    );
-  }
 
   // GUARD: Show loading while auth state is being determined
   if (authStatus === 'loading') {
@@ -199,6 +195,17 @@ export default function AnalyticsOverviewPage() {
       </div>
     );
   }
+
+  const handleLockedClick = (
+    e: React.MouseEvent,
+    plan: 'Pro' | 'Premium',
+    title: string,
+    description: string,
+    benefits: string[]
+  ) => {
+    e.preventDefault();
+    setUpgradeModal({ open: true, plan, title, description, benefits });
+  };
 
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
@@ -355,8 +362,24 @@ export default function AnalyticsOverviewPage() {
             {/* Portfolio Health Score */}
             <Link
               href="/analytics/health"
-              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all group"
+              className="relative bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] dark:hover:border-[#3B82F6] hover:shadow-sm transition-all group"
+              onClick={!hasCapability('view_premium_analytics') ? (e) =>
+                handleLockedClick(e, 'Premium',
+                  'Portfolio Health Score',
+                  'Get a comprehensive 7-pillar analysis of your portfolio structure, risk balance, and improvement opportunities.',
+                  [
+                    '7-pillar health assessment',
+                    'Concentration & diversification analysis',
+                    'Market cap & sector balance check',
+                    'Actionable improvement suggestions'
+                  ]
+                ) : undefined}
             >
+              {!hasCapability('view_premium_analytics') && (
+                <span className="absolute top-3 right-8 text-xs font-semibold px-2 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-full">
+                  Premium
+                </span>
+              )}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-start gap-3 flex-1">
                   <div className="p-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
@@ -382,8 +405,24 @@ export default function AnalyticsOverviewPage() {
             {/* Stability & Downside Protection */}
             <Link
               href="/analytics/stability"
-              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              className="relative bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              onClick={!hasCapability('view_premium_analytics') ? (e) =>
+                handleLockedClick(e, 'Premium',
+                  'Stability & Downside Protection',
+                  'Understand how resilient your portfolio is during market stress, rate hikes, and economic downturns.',
+                  [
+                    'Portfolio stability score',
+                    'Credit risk assessment',
+                    'Liquidity analysis',
+                    'Downside protection rating'
+                  ]
+                ) : undefined}
             >
+              {!hasCapability('view_premium_analytics') && (
+                <span className="absolute top-3 right-8 text-xs font-semibold px-2 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-full">
+                  Premium
+                </span>
+              )}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-start gap-3 flex-1">
                   <div className="p-2 bg-green-50 dark:bg-green-950/20 rounded-lg">
@@ -409,8 +448,24 @@ export default function AnalyticsOverviewPage() {
             {/* Scenario Impact Analysis */}
             <Link
               href="/analytics/scenarios"
-              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              className="relative bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              onClick={!hasCapability('view_premium_analytics') ? (e) =>
+                handleLockedClick(e, 'Premium',
+                  'Scenario Impact Analysis',
+                  'See how your portfolio would perform under market drawdowns, rate shocks, sector crashes, and recovery scenarios.',
+                  [
+                    'Market drawdown simulation',
+                    'Rate shock & sector shock scenarios',
+                    'Recovery projections',
+                    'Portfolio stress testing'
+                  ]
+                ) : undefined}
             >
+              {!hasCapability('view_premium_analytics') && (
+                <span className="absolute top-3 right-8 text-xs font-semibold px-2 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-full">
+                  Premium
+                </span>
+              )}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-start gap-3 flex-1">
                   <div className="p-2 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
@@ -436,8 +491,24 @@ export default function AnalyticsOverviewPage() {
             {/* MF Exposure Analytics */}
             <Link
               href="/analytics/mutualfund-exposure"
-              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              className="relative bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              onClick={!hasCapability('view_advanced_analytics') ? (e) =>
+                handleLockedClick(e, 'Pro',
+                  'Mutual Fund Exposure Analytics',
+                  'See exactly what your mutual funds are invested in — equity, debt, sector, and geography breakdown.',
+                  [
+                    'Equity vs debt exposure via MF',
+                    'Fund-wise allocation breakdown',
+                    'Overlap detection across funds',
+                    'Hidden concentration risks'
+                  ]
+                ) : undefined}
             >
+              {!hasCapability('view_advanced_analytics') && (
+                <span className="absolute top-3 right-8 text-xs font-semibold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full">
+                  Pro
+                </span>
+              )}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-start gap-3 flex-1">
                   <div className="p-2 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
@@ -463,8 +534,24 @@ export default function AnalyticsOverviewPage() {
             {/* Sector Exposure */}
             <Link
               href="/analytics/sector-exposure"
-              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              className="relative bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              onClick={!hasCapability('view_advanced_analytics') ? (e) =>
+                handleLockedClick(e, 'Pro',
+                  'Sector Exposure Analysis',
+                  'Discover which sectors your portfolio is concentrated in — directly and via mutual funds.',
+                  [
+                    'Technology, Banking, FMCG breakdown',
+                    'Direct + MF combined sector exposure',
+                    'Concentration risk by sector',
+                    'Rebalancing suggestions'
+                  ]
+                ) : undefined}
             >
+              {!hasCapability('view_advanced_analytics') && (
+                <span className="absolute top-3 right-8 text-xs font-semibold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full">
+                  Pro
+                </span>
+              )}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-start gap-3 flex-1">
                   <div className="p-2 bg-cyan-50 dark:bg-cyan-950/20 rounded-lg">
@@ -490,8 +577,24 @@ export default function AnalyticsOverviewPage() {
             {/* Market Cap Exposure */}
             <Link
               href="/analytics/marketcap-exposure"
-              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              className="relative bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              onClick={!hasCapability('view_advanced_analytics') ? (e) =>
+                handleLockedClick(e, 'Pro',
+                  'Market Cap Exposure',
+                  'Know your large cap vs mid cap vs small cap balance and whether it matches your risk profile.',
+                  [
+                    'Large, Mid, Small cap breakdown',
+                    'Combined direct + MF exposure',
+                    'Risk level by market cap',
+                    'Balance recommendations'
+                  ]
+                ) : undefined}
             >
+              {!hasCapability('view_advanced_analytics') && (
+                <span className="absolute top-3 right-8 text-xs font-semibold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full">
+                  Pro
+                </span>
+              )}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-start gap-3 flex-1">
                   <div className="p-2 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg">
@@ -517,8 +620,24 @@ export default function AnalyticsOverviewPage() {
             {/* Geography Exposure */}
             <Link
               href="/analytics/geography-exposure"
-              className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              className="relative bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] hover:shadow-sm transition-all group"
+              onClick={!hasCapability('view_advanced_analytics') ? (e) =>
+                handleLockedClick(e, 'Pro',
+                  'Geography Exposure Analysis',
+                  'See how much of your portfolio is in India vs international markets.',
+                  [
+                    'India vs international split',
+                    'Currency risk exposure',
+                    'Domestic concentration check',
+                    'Global diversification score'
+                  ]
+                ) : undefined}
             >
+              {!hasCapability('view_advanced_analytics') && (
+                <span className="absolute top-3 right-8 text-xs font-semibold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full">
+                  Pro
+                </span>
+              )}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-start gap-3 flex-1">
                   <div className="p-2 bg-indigo-50 dark:bg-indigo-950/20 rounded-lg">
@@ -543,6 +662,14 @@ export default function AnalyticsOverviewPage() {
           </div>
         </section>
       </main>
+      <UpgradeModal
+        isOpen={upgradeModal.open}
+        onClose={() => setUpgradeModal(prev => ({ ...prev, open: false }))}
+        requiredPlan={upgradeModal.plan}
+        featureTitle={upgradeModal.title}
+        featureDescription={upgradeModal.description}
+        benefits={upgradeModal.benefits}
+      />
     </div>
   );
 }

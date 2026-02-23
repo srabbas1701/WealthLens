@@ -11,10 +11,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useCapabilities } from '@/lib/capabilities';
-import { FEATURE_ACCESS } from '@/config/feature-access';
-import { LockedFeaturePage } from '@/components/LockedFeaturePage';
 import { AnalyticsPageLayout } from '@/components/analytics/AnalyticsPageLayout';
 import { LoadingState } from '@/components/analytics/LoadingState';
 import { ErrorState } from '@/components/analytics/ErrorState';
@@ -39,6 +38,7 @@ import { ScoreExplanation } from '@/components/analytics/ScoreExplanation';
 import type { PortfolioHealthScore } from '@/lib/portfolio-intelligence/health-score';
 
 export default function HealthScorePage() {
+  const router = useRouter();
   const { user, authStatus } = useAuth();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const [loading, setLoading] = useState(true);
@@ -65,7 +65,7 @@ export default function HealthScorePage() {
   }, []);
 
   useEffect(() => {
-    if (authStatus === 'authenticated' && user?.id && hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
+    if (authStatus === 'authenticated' && user?.id && hasCapability('view_premium_analytics')) {
       fetchData(user.id);
     }
   }, [authStatus, user, fetchData, hasCapability]);
@@ -75,14 +75,9 @@ export default function HealthScorePage() {
     return null; // Will redirect via middleware
   }
 
-  // Capability guard: show locked page BEFORE any API calls
-  if (!capabilitiesLoading && !hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
-    return (
-      <LockedFeaturePage
-        title="Portfolio Health Score"
-        feature="ANALYTICS_HEALTH"
-      />
-    );
+  if (!capabilitiesLoading && !hasCapability('view_premium_analytics')) {
+    router.replace('/analytics/overview');
+    return null;
   }
 
   if (loading) {
@@ -94,14 +89,9 @@ export default function HealthScorePage() {
   }
 
   if (error && !healthScore) {
-    // ONLY capability-based 403: exact backend message. Do NOT convert 500, network, timeout, DB errors.
     if (error === 'Upgrade required') {
-      return (
-        <LockedFeaturePage
-          title="Portfolio Health Score"
-          feature="ANALYTICS_HEALTH"
-        />
-      );
+      router.replace('/analytics/overview');
+      return null;
     }
     return (
       <AnalyticsPageLayout title={PAGE_TITLES.healthScore}>
