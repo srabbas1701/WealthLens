@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
       plan_name: plan.name,
       monthly_price: plan.monthly_price,
       annual_price: plan.annual_price,
+      plan: { id: plan.id, name: plan.name, monthly_price: plan.monthly_price, annual_price: plan.annual_price },
     });
   } catch (error) {
     console.error('[User Plan API] Unexpected error:', error);

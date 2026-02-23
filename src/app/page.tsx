@@ -150,12 +150,12 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="relative h-screen flex items-center justify-center overflow-hidden bg-[#F6F8FB] dark:bg-[#0F172A]">
         
-        <div className="container mx-auto px-4 sm:px-6 pt-24 sm:pt-28 md:pt-32 lg:pt-36 pb-8 sm:pb-12 md:pb-16 lg:pb-20 relative z-10 h-full flex items-center">
+        <div className="container mx-auto px-4 sm:px-6 pt-32 sm:pt-40 md:pt-44 lg:pt-52 pb-8 sm:pb-12 md:pb-16 lg:pb-20 relative z-10 h-full flex items-center">
           <div className="grid lg:grid-cols-2 gap-6 md:gap-8 lg:gap-12 items-center w-full">
-            {/* Left - Value Proposition */}
-            <div className="space-y-4 sm:space-y-5 md:space-y-6 text-center lg:text-left">
+            {/* Left - Value Proposition (z-10 ensures heading stays visible above card) */}
+            <div className="relative z-10 space-y-4 sm:space-y-5 md:space-y-6 text-center lg:text-left">
               <div className="space-y-3 sm:space-y-4">
-                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-[#0F172A] dark:text-[#F8FAFC] leading-tight tracking-tight">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-bold text-[#0F172A] dark:text-[#F8FAFC] leading-[1.15] tracking-tight">
                   Stop Juggling
                   <br />
                   Investment Accounts.

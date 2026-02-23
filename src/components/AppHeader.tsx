@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, SparklesIcon, XIcon, ArrowLeftIcon } from '@/components/icons';
 import { useAuthSession, useAuthAppData } from '@/lib/auth';
+import { useSubscription } from '@/hooks/useSubscription';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
 import { type CurrencyFormat } from '@/lib/currency/formatCurrency';
 import { useCurrency } from '@/lib/currency/useCurrency';
@@ -105,7 +106,15 @@ export function AppHeader({
   const hasPortfolio = (isLandingPage || isInDemoMode) ? false : (appData.hasPortfolio || false);
   
   const { format, setFormat } = useCurrency();
+  const { plan, loading: planLoading } = useSubscription();
   const router = useRouter();
+
+  const planTier = plan?.name?.toLowerCase();
+  const showPlanBadge = planTier === 'pro' || planTier === 'premium';
+  const badgeLabel = planTier === 'premium' ? 'Premium' : 'Pro';
+  const badgeColor = planTier === 'premium'
+    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -551,6 +560,11 @@ export function AppHeader({
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white text-sm font-medium hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
                 >
                   <UserIcon className="w-4 h-4" />
+                  {showPlanBadge && (
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${badgeColor}`}>
+                      {badgeLabel}
+                    </span>
+                  )}
                   <span>Account</span>
                   <ChevronDownIcon className={`w-4 h-4 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
                 </button>
@@ -628,6 +642,11 @@ export function AppHeader({
             <div className="mt-4 px-4 space-y-2">
               {!isInDemoMode && authStatus === 'authenticated' && user ? (
                 <>
+                  {showPlanBadge && (
+                    <div className={`px-4 py-2 rounded-lg text-xs font-semibold ${badgeColor}`}>
+                      {badgeLabel} Plan Active
+                    </div>
+                  )}
                   <Link
                     href="/dashboard"
                     onClick={() => setIsMobileMenuOpen(false)}

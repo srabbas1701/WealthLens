@@ -103,17 +103,17 @@ export async function POST(request: NextRequest) {
     }
     const ourPlanId = planRow.id;
 
-    const { data: existingSub } = await admin
+    const { data: existingActive } = await admin
       .from('user_subscriptions')
       .select('id')
       .eq('user_id', userId)
-      .in('status', ['pending', 'active'])
+      .eq('status', 'active')
       .limit(1)
       .maybeSingle();
 
-    if (existingSub) {
+    if (existingActive) {
       return NextResponse.json(
-        { error: 'You already have an active or pending subscription.' },
+        { error: 'You already have an active subscription.' },
         { status: 400 }
       );
     }
@@ -144,46 +144,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: existing } = await admin
-      .from('user_subscriptions')
-      .select('id')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (existing) {
-      const { error: updateError } = await admin
-        .from('user_subscriptions')
-        .update({
-          razorpay_subscription_id: subscription.id,
-          tier: ourPlanId,
-          status: 'pending',
-        })
-        .eq('id', existing.id);
-
-      if (updateError) {
-        console.error('[Create subscription] Supabase update error:', updateError);
-        return NextResponse.json(
-          { error: 'Failed to update subscription', details: updateError.message },
-          { status: 500 }
-        );
-      }
-    } else {
-      const { error: insertError } = await admin.from('user_subscriptions').insert({
+    const { error: upsertError } = await admin.from('user_subscriptions').upsert(
+      {
         user_id: userId,
-        tier: ourPlanId,
+        plan_id: ourPlanId,
         razorpay_subscription_id: subscription.id,
         status: 'pending',
-      });
+      },
+      { onConflict: 'user_id' }
+    );
 
-      if (insertError) {
-        console.error('[Create subscription] Supabase insert error:', insertError);
-        return NextResponse.json(
-          { error: 'Failed to create subscription', details: insertError.message },
-          { status: 500 }
-        );
-      }
+    if (upsertError) {
+      console.error('[Create subscription] Supabase upsert error:', upsertError);
+      return NextResponse.json(
+        { error: 'Failed to create subscription', details: upsertError.message },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({

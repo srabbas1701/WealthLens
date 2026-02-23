@@ -50,7 +50,7 @@ const TIER_CONFIG: Record<
       'PDF & Excel exports',
     ],
     ctaText: 'Upgrade to Pro',
-    ctaHref: '/upgrade',
+    ctaHref: '/upgrade?plan=pro',
     microcopy: 'Billed monthly or yearly',
   },
   premium: {

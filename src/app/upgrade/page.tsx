@@ -11,7 +11,7 @@
  * 5. After checkout (success or close), show message to refresh / check subscription
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthSession } from '@/lib/auth';
@@ -35,6 +35,24 @@ type RazorpayOptions = {
 };
 
 const CURRENCY = '₹';
+
+type PaymentState = 'idle' | 'processing' | 'verifying' | 'success' | 'timeout' | 'error';
+
+function getUserFriendlyError(rawError: string): string {
+  const lower = rawError.toLowerCase();
+  if (lower.includes('duplicate key') || lower.includes('duplicate') && lower.includes('key')) {
+    return 'You already have a subscription in progress. Please wait a moment and refresh.';
+  }
+  if (
+    lower.includes('failed to fetch') ||
+    lower.includes('network') ||
+    lower.includes('networkerror') ||
+    (lower.includes('typeerror') && lower.includes('fetch'))
+  ) {
+    return 'Unable to connect. Please check your connection and try again.';
+  }
+  return 'Something went wrong. Please try again or contact support.';
+}
 
 function getPaidPlans(plans: PricingPlan[]): PricingPlan[] {
   return plans.filter(
@@ -78,6 +96,9 @@ export default function UpgradePage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentState, setPaymentState] = useState<PaymentState>('idle');
+  const [activatedPlanName, setActivatedPlanName] = useState<string | null>(null);
+  const handlerFiredRef = useRef(false);
 
   const paidPlans = getPaidPlans(plans);
   const planParam = searchParams.get('plan');
@@ -92,6 +113,48 @@ export default function UpgradePage() {
     }
   }, [plans, plansLoading, paidPlans, planParam, selectedPlan]);
 
+  // Poll /api/plans/user when verifying payment
+  useEffect(() => {
+    if (paymentState !== 'verifying') return;
+
+    const POLL_INTERVAL = 2000;
+    const MAX_POLL_TIME = 30000;
+    const startTime = Date.now();
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async (): Promise<boolean> => {
+      try {
+        const res = await fetch('/api/plans/user');
+        const data = await res.json();
+        const planId = data?.plan_id;
+        const planName = data?.plan_name ?? data?.plan?.name;
+        if (planId && planId !== 'free') {
+          setActivatedPlanName(planName || selectedPlan?.name || 'Pro');
+          setPaymentState('success');
+          return true;
+        }
+      } catch {
+        /* ignore fetch errors during poll */
+      }
+      return false;
+    };
+
+    const runPoll = async () => {
+      if (Date.now() - startTime >= MAX_POLL_TIME) {
+        setPaymentState('timeout');
+        return;
+      }
+      const done = await poll();
+      if (done) return;
+      timeoutId = setTimeout(runPoll, POLL_INTERVAL);
+    };
+
+    runPoll();
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [paymentState, selectedPlan?.name]);
+
   const handleUpgrade = async () => {
     if (!user?.id || !selectedPlan) return;
     if (!selectedPlan.razorpay_plan_id && !selectedPlan.id) {
@@ -99,8 +162,10 @@ export default function UpgradePage() {
       return;
     }
 
+    handlerFiredRef.current = false;
     setSubmitting(true);
     setError(null);
+    setPaymentState('processing');
 
     try {
       const res = await fetch('/api/payments/create-subscription', {
@@ -138,11 +203,16 @@ export default function UpgradePage() {
           name: (user.user_metadata as { full_name?: string } | undefined)?.full_name ?? undefined,
         },
         handler: () => {
+          handlerFiredRef.current = true;
           setSubmitting(false);
+          setPaymentState('verifying');
         },
         modal: {
           ondismiss: () => {
             setSubmitting(false);
+            if (!handlerFiredRef.current) {
+              setPaymentState('idle');
+            }
           },
         },
       };
@@ -151,7 +221,9 @@ export default function UpgradePage() {
       rzp.open();
     } catch (err) {
       setSubmitting(false);
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setPaymentState('error');
+      const rawMessage = err instanceof Error ? err.message : 'Something went wrong';
+      setError(getUserFriendlyError(rawMessage));
     }
   };
 
@@ -201,9 +273,67 @@ export default function UpgradePage() {
     );
   }
 
+  // Success screen – replace entire page content
+  if (paymentState === 'success') {
+    return (
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
+        <AppHeader />
+        <main className="max-w-md mx-auto px-4 py-16 sm:py-24 flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] text-center">
+          <div className="w-20 h-20 rounded-full bg-[#16A34A] dark:bg-[#22C55E] flex items-center justify-center mb-6 shadow-lg">
+            <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+            Welcome to {activatedPlanName || selectedPlan?.name || 'Pro'}!
+          </h1>
+          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-8 max-w-sm">
+            Your subscription is now active. Enjoy full access to LensOnWealth.
+          </p>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center justify-center px-8 py-4 bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] text-white font-semibold rounded-xl transition-colors shadow-lg"
+          >
+            Go to Dashboard
+          </Link>
+        </main>
+      </div>
+    );
+  }
+
+  // Timeout screen – payment received but activation pending
+  if (paymentState === 'timeout') {
+    return (
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
+        <AppHeader />
+        <main className="max-w-md mx-auto px-4 py-16 sm:py-24 flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] text-center">
+          <p className="text-[#0F172A] dark:text-[#F8FAFC] mb-8">
+            Payment received! Your account will be activated shortly. Please refresh in a minute.
+          </p>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center justify-center px-8 py-4 bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] text-white font-semibold rounded-xl transition-colors"
+          >
+            Go to Dashboard
+          </Link>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader />
+
+      {/* Verifying overlay – full-page when payment just completed */}
+      {paymentState === 'verifying' && (
+        <div className="fixed inset-0 z-50 bg-[#F6F8FB] dark:bg-[#0F172A] flex flex-col items-center justify-center">
+          <div className="w-12 h-12 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin mb-6" />
+          <p className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Verifying your payment...</p>
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">This usually takes a few seconds</p>
+        </div>
+      )}
+
       <main className="max-w-md mx-auto px-4 py-10 sm:py-16">
         <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
           Upgrade your plan
@@ -281,7 +411,7 @@ export default function UpgradePage() {
           })}
         </div>
 
-        {error && (
+        {error && paymentState === 'error' && (
           <p className="mb-6 text-sm text-red-600 dark:text-red-400">{error}</p>
         )}
 
