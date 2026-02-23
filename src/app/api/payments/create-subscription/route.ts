@@ -101,7 +101,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const ourPlanId = planRow.id;
 
     const { data: existingActive } = await admin
       .from('user_subscriptions')
@@ -147,9 +146,11 @@ export async function POST(request: NextRequest) {
     const { error: upsertError } = await admin.from('user_subscriptions').upsert(
       {
         user_id: userId,
-        plan_id: ourPlanId,
-        razorpay_subscription_id: subscription.id,
+        tier: planId,
         status: 'pending',
+        razorpay_subscription_id: subscription.id,
+        billing_cycle: billingCycle,
+        payment_provider: 'razorpay',
       },
       { onConflict: 'user_id' }
     );
