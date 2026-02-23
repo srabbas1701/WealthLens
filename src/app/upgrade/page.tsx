@@ -431,6 +431,12 @@ export default function UpgradePage() {
           )}
         </button>
 
+        <p className="mt-3 text-xs text-center text-[#6B7280] dark:text-[#94A3B8]">
+          ⓘ ICICI Bank UPI users may experience payment failures.
+          Please try Google Pay or PhonePe linked to a non-ICICI account,
+          or use Netbanking/Card instead.
+        </p>
+
         <p className="mt-6 text-xs text-[#6B7280] dark:text-[#94A3B8] text-center">
           After payment, your subscription will activate automatically. Refresh the page or check
           your account to see updated access.

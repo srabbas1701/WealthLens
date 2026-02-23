@@ -36,15 +36,18 @@ async function getUserEntitlementsUncached(
   const allKeys = (allCaps ?? []).map((r: { key: string }) => r.key);
 
   // 2. User's active plan from user_subscriptions
+  const now = new Date().toISOString();
   const { data: sub } = await db
     .from('user_subscriptions')
-    .select('plan_id')
+    .select('tier')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+    .eq('status', 'active')
+    .gt('current_period_end', now)
+    .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  const planId = sub?.plan_id ?? null;
+  const planId = sub?.tier ?? null;
 
   // 3. Enabled capabilities from plan_capabilities
   let enabledByPlan = new Set<string>();
@@ -65,7 +68,6 @@ async function getUserEntitlementsUncached(
   }
 
   // 4. Trial may expire anytime: always check ends_at dynamically (never rely on frontend state)
-  const now = new Date().toISOString();
   const { data: trial } = await db
     .from('user_trials')
     .select('ends_at')
