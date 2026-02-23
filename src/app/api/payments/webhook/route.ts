@@ -127,17 +127,16 @@ export async function POST(request: NextRequest) {
       'subscription.updated',
     ];
     if (event === 'subscription.halted') {
-      const { error } = await admin
+      const { error, data } = await admin
         .from('user_subscriptions')
         .update({
           status: 'halted',
           updated_at: new Date().toISOString(),
         })
-        .eq('razorpay_subscription_id', subscription.id);
+        .eq('razorpay_subscription_id', subscription.id)
+        .select();
 
-      if (error) {
-        console.error('[Webhook] Update halted failed:', error);
-      }
+      console.log('[Webhook] Update result - data:', data, 'error:', error);
     } else if (activeStateEvents.includes(event)) {
       const currentPeriodEnd = unixToIso(subscription.current_end);
       const startedAt = unixToIso(subscription.current_start);
@@ -149,14 +148,13 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       };
 
-      const { error } = await admin
+      const { error, data } = await admin
         .from('user_subscriptions')
         .update(updates)
-        .eq('razorpay_subscription_id', subscription.id);
+        .eq('razorpay_subscription_id', subscription.id)
+        .select();
 
-      if (error) {
-        console.error('[Webhook] Update subscription failed:', error);
-      }
+      console.log('[Webhook] Update result - data:', data, 'error:', error);
     }
     return NextResponse.json({ received: true });
   } catch (err) {
