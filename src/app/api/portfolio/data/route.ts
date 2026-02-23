@@ -633,34 +633,46 @@ export async function GET(request: NextRequest) {
     // 4.5. Fetch Real Estate assets and add to total value
     // Real Estate is stored in a separate table, not in holdings
     let realEstateValue = 0;
-    try {
-      // Import required functions
-      const { getUserRealEstateAssets } = await import('@/lib/real-estate/get-assets');
-      const { getRealEstateDashboardData } = await import('@/analytics/realEstateDashboard.mapper');
-      
-      // Create a regular client for Real Estate (not admin, uses RLS)
-      const { createClient } = await import('@/lib/supabase/server');
-      const realEstateSupabase = await createClient();
-      
-      // Fetch real estate assets (uses RLS, so user can only see their own)
-      const realEstateAssets = await getUserRealEstateAssets(realEstateSupabase, userId);
-      
-      if (realEstateAssets && realEstateAssets.length > 0) {
-        // Calculate dashboard data to get net real estate worth (net of loans)
-        const dashboardData = await getRealEstateDashboardData(realEstateAssets, null);
-        realEstateValue = dashboardData.summary.netRealEstateWorth || 0;
-        
-        // Add Real Estate to total value
-        totalValue += realEstateValue;
-        
-        // Add Real Estate to allocation map by bucket
-        if (realEstateValue > 0) {
-          allocationMap.set('RealAsset', (allocationMap.get('RealAsset') || 0) + realEstateValue);
+    const { data: realEstateCap } = await supabase
+      .from('plan_capabilities')
+      .select('enabled')
+      .eq('capability_key', 'manage_real_assets')
+      .eq('plan_id', (await supabase
+        .from('user_subscriptions')
+        .select('tier')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .maybeSingle()
+      ).data?.tier ?? 'free')
+      .maybeSingle();
+
+    if (!realEstateCap?.enabled) {
+      // skip real estate fetch entirely
+    } else {
+      try {
+        // Import required functions
+        const { getUserRealEstateAssets } = await import('@/lib/real-estate/get-assets');
+        const { getRealEstateDashboardData } = await import('@/analytics/realEstateDashboard.mapper');
+
+        const realEstateAssets = await getUserRealEstateAssets(supabase, userId);
+
+        if (realEstateAssets && realEstateAssets.length > 0) {
+          // Calculate dashboard data to get net real estate worth (net of loans)
+          const dashboardData = await getRealEstateDashboardData(realEstateAssets, null);
+          realEstateValue = dashboardData.summary.netRealEstateWorth || 0;
+
+          // Add Real Estate to total value
+          totalValue += realEstateValue;
+
+          // Add Real Estate to allocation map by bucket
+          if (realEstateValue > 0) {
+            allocationMap.set('RealAsset', (allocationMap.get('RealAsset') || 0) + realEstateValue);
+          }
         }
+      } catch (error) {
+        // Log error but don't fail the entire request
+        console.error('[Portfolio Data API] Error fetching Real Estate assets:', error);
       }
-    } catch (error) {
-      // Log error but don't fail the entire request
-      console.error('[Portfolio Data API] Error fetching Real Estate assets:', error);
     }
     
     // 5. Calculate allocation by top-level bucket (excludes Insurance and Liabilities from allocation chart)
