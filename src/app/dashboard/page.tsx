@@ -1487,7 +1487,7 @@ function DashboardContent() {
               const tileClassName = "relative bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] block card-hover";
 
               return (
-                <Link key={bucket} href={`/portfolio/summary?bucket=${bucket}`} className={tileClassName}>
+                <Link key={bucket} href={`/portfolio/summary?bucket=${bucket}`} prefetch={false} className={tileClassName}>
                   {tileContent}
                 </Link>
               );

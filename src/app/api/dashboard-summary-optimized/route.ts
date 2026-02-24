@@ -16,7 +16,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { getDailySummary, getLatestDailySummary, getWeeklySummary, getLatestWeeklySummary } from '@/lib/db/copilot-context';
 
 // ============================================================================
 // RESPONSE TYPES (matches existing dashboard API structures)
@@ -75,23 +76,29 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const baseUrl = new URL(request.url).origin;
+    const supabaseClient = createAdminClient();
+    const today = new Date().toISOString().split('T')[0];
 
-    // Build fetch URLs for existing APIs
-    const portfolioUrl = `${baseUrl}/api/portfolio/data?user_id=${encodeURIComponent(userId)}`;
-    const dailySummaryUrl = `${baseUrl}/api/copilot/daily-summary?user_id=${encodeURIComponent(userId)}`;
-    const weeklySummaryUrl = `${baseUrl}/api/copilot/weekly-summary?user_id=${encodeURIComponent(userId)}`;
+    // Fetch portfolio data via internal API (same process, no HTTP hop)
+    const portfolioApiUrl = new URL(request.url);
+    portfolioApiUrl.pathname = '/api/portfolio/data';
+    portfolioApiUrl.search = `?user_id=${encodeURIComponent(userId)}`;
 
-    // Parallel fetch: investments (portfolio), insurance, transactions, daily summary, weekly summary
-    const [portfolioRes, dailySummaryRes, weeklySummaryRes, insuranceData, transactionsData] = await Promise.all([
-      fetch(portfolioUrl, { headers: { Accept: 'application/json' } }),
-      fetch(dailySummaryUrl, { headers: { Accept: 'application/json' } }),
-      fetch(weeklySummaryUrl, { headers: { Accept: 'application/json' } }),
-      fetchInsurance(userId),
-      fetchTransactions(userId),
-    ]);
+    const [portfolioRes, dailySummaryRaw, weeklySummaryRaw, insuranceData, transactionsData] =
+      await Promise.all([
+        fetch(portfolioApiUrl.toString(), {
+          headers: request.headers
+        }),
+        getDailySummary(supabaseClient, userId, today)
+          .then(s => s ?? getLatestDailySummary(supabaseClient, userId))
+          .catch(() => null),
+        getWeeklySummary(supabaseClient, userId, today)
+          .then(s => s ?? getLatestWeeklySummary(supabaseClient, userId))
+          .catch(() => null),
+        fetchInsurance(userId),
+        fetchTransactions(userId),
+      ]);
 
-    // Parse portfolio response
     const portfolioJson = await portfolioRes.json();
     const portfolioData = portfolioJson.success && portfolioJson.data
       ? portfolioJson.data
@@ -122,11 +129,8 @@ export async function GET(request: NextRequest) {
           },
         };
 
-    // Parse daily summary
-    const dailySummaryData = dailySummaryRes.ok ? await dailySummaryRes.json() : null;
-
-    // Parse weekly summary
-    const weeklySummaryData = weeklySummaryRes.ok ? await weeklySummaryRes.json() : null;
+    const dailySummaryData = dailySummaryRaw;
+    const weeklySummaryData = weeklySummaryRaw;
 
     const response: DashboardSummaryResponse = {
       success: true,

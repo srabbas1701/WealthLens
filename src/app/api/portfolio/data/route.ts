@@ -259,46 +259,48 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    // 2. Get portfolio metrics
-    const { data: metrics } = await supabase
-      .from('portfolio_metrics')
-      .select('*')
-      .eq('portfolio_id', portfolio.id)
-      .single();
-    
-    // 3. Get ALL holdings with asset details
-    // Try nested query first (more efficient), fallback to separate queries if 406 error
+    // 2 & 3. Get portfolio metrics AND holdings in parallel (both depend on portfolio.id)
     let rawHoldings: any[] = [];
     let holdingsError: any = null;
     
-    const { data: nestedHoldings, error: nestedError } = await supabase
-      .from('holdings')
-      .select(`
-        id,
-        quantity,
-        invested_value,
-        current_value,
-        average_price,
-        notes,
-        created_at,
-        purchase_date,
-        top_level_bucket,
-        asset_class,
-        risk_behavior,
-        assets (
+    const [
+      { data: metrics },
+      { data: nestedHoldings, error: nestedError }
+    ] = await Promise.all([
+      supabase
+        .from('portfolio_metrics')
+        .select('*')
+        .eq('portfolio_id', portfolio.id)
+        .single(),
+      supabase
+        .from('holdings')
+        .select(`
           id,
-          name,
-          asset_type,
-          symbol,
-          isin,
-          sector,
-          asset_class,
+          quantity,
+          invested_value,
+          current_value,
+          average_price,
+          notes,
+          created_at,
+          purchase_date,
           top_level_bucket,
-          risk_behavior
-        )
-      `)
-      .eq('portfolio_id', portfolio.id)
-      .order('invested_value', { ascending: false });
+          asset_class,
+          risk_behavior,
+          assets (
+            id,
+            name,
+            asset_type,
+            symbol,
+            isin,
+            sector,
+            asset_class,
+            top_level_bucket,
+            risk_behavior
+          )
+        `)
+        .eq('portfolio_id', portfolio.id)
+        .order('invested_value', { ascending: false })
+    ]);
     
     if (nestedError) {
       console.warn('[Portfolio Data API] Nested query failed, trying separate queries:', {
@@ -633,17 +635,20 @@ export async function GET(request: NextRequest) {
     // 4.5. Fetch Real Estate assets and add to total value
     // Real Estate is stored in a separate table, not in holdings
     let realEstateValue = 0;
+    const { data: userSub } = await supabase
+      .from('user_subscriptions')
+      .select('tier')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    const userTier = userSub?.tier ?? 'free';
+
     const { data: realEstateCap } = await supabase
       .from('plan_capabilities')
       .select('enabled')
       .eq('capability_key', 'manage_real_assets')
-      .eq('plan_id', (await supabase
-        .from('user_subscriptions')
-        .select('tier')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .maybeSingle()
-      ).data?.tier ?? 'free')
+      .eq('plan_id', userTier)
       .maybeSingle();
 
     if (!realEstateCap?.enabled) {

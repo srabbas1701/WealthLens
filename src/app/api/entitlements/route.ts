@@ -22,7 +22,11 @@ export async function GET(request: NextRequest) {
     }
 
     const entitlements = await getUserEntitlements(user.id, supabase);
-    return NextResponse.json(entitlements);
+    return NextResponse.json(entitlements, {
+      headers: {
+        'Cache-Control': 'private, max-age=300, stale-while-revalidate=60',
+      },
+    });
   } catch (error) {
     console.error('[Entitlements API] Error:', error);
     return NextResponse.json(
