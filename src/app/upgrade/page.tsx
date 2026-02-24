@@ -91,6 +91,10 @@ function loadRazorpayScript(): Promise<void> {
 export default function UpgradePage() {
   const { user, authStatus } = useAuthSession();
   const searchParams = useSearchParams();
+
+  const planParam = searchParams.get('plan');
+  const cycleParam = searchParams.get('cycle');
+
   const { plans, loading: plansLoading, error: plansError } = usePlans();
 
   const [selectedPlan, setSelectedPlan] = useState<PricingPlan | null>(null);
@@ -143,9 +147,6 @@ export default function UpgradePage() {
     ) return true;
     return false;
   });
-  const planParam = searchParams.get('plan');
-  const cycleParam = searchParams.get('cycle');
-
   useEffect(() => {
     if (!plansLoading && paidPlans.length > 0 && !selectedPlan) {
       const name = planParam?.toLowerCase();
