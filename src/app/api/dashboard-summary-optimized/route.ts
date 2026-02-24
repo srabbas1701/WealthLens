@@ -14,6 +14,7 @@
  */
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 300; // Cache for 5 mins, already on portfolio/data
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
