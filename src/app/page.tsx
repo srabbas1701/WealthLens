@@ -42,7 +42,13 @@ export default function HomePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [showTimeoutMessage, setShowTimeoutMessage] = useState(false);
   const [showSessionExpiredMessage, setShowSessionExpiredMessage] = useState(false);
-  const { plans, loading: plansLoading, error: plansError } = usePlans();
+  const { 
+    plans, 
+    loading: plansLoading, 
+    error: plansError,
+    currentSubscription,
+    subLoading,
+  } = usePlans(!!user);  // Only fetch sub if user is logged in
   
   // Check for timeout message from auto-logout
   useEffect(() => {
@@ -555,7 +561,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      <PricingSection plans={plans} loading={plansLoading} error={plansError} />
+      <PricingSection 
+        plans={plans} 
+        loading={plansLoading} 
+        error={plansError}
+        currentSubscription={currentSubscription}
+        isLoggedIn={!!user}
+      />
 
       {/* FAQ Section */}
       <section id="faq" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A]">

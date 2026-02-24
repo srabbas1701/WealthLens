@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import type { PricingPlan } from '@/hooks/usePlans';
+import type { PricingPlan, CurrentSubscription } from '@/hooks/usePlans';
 
 const CURRENCY = '₹';
+const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, premium: 2 };
 
 type Tier = 'free' | 'pro' | 'premium';
 
@@ -62,9 +63,9 @@ const TIER_CONFIG: Record<
       'Advanced scenario comparisons',
       'Priority support',
     ],
-    ctaText: 'Start Premium Trial',
-    ctaHref: '/signup',
-    microcopy: 'No card required for trial',
+    ctaText: 'Upgrade to Premium',
+    ctaHref: '/upgrade?plan=premium',
+    microcopy: 'Billed monthly or yearly',
   },
 };
 
@@ -80,11 +81,31 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
-/** Always returns exactly three slots: Free, Pro, Premium. Plan may be null if API didn't return that tier. */
-function getThreeTiers(plans: PricingPlan[]): Array<{ tier: Tier; plan: PricingPlan | null }> {
-  const sorted = [...plans].sort((a, b) => (a.monthly_price ?? 0) - (b.monthly_price ?? 0));
-  const freePlan = sorted.find((p) => p.monthly_price === 0 || p.monthly_price === null) ?? null;
-  const paid = sorted.filter((p) => p.monthly_price != null && p.monthly_price > 0);
+function formatRenewalDate(isoDate: string | null): string | null {
+  if (!isoDate) return null;
+  try {
+    return new Date(isoDate).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  } catch {
+    return null;
+  }
+}
+
+function getThreeTiers(
+  plans: PricingPlan[]
+): Array<{ tier: Tier; plan: PricingPlan | null }> {
+  const sorted = [...plans].sort(
+    (a, b) => (a.monthly_price ?? 0) - (b.monthly_price ?? 0)
+  );
+  const freePlan =
+    sorted.find((p) => p.monthly_price === 0 || p.monthly_price === null) ??
+    null;
+  const paid = sorted.filter(
+    (p) => p.monthly_price != null && p.monthly_price > 0
+  );
   const proPlan = paid.length >= 2 ? paid[0]! : paid[0] ?? null;
   const premiumPlan = paid.length >= 1 ? paid[paid.length - 1]! : null;
   return [
@@ -94,13 +115,10 @@ function getThreeTiers(plans: PricingPlan[]): Array<{ tier: Tier; plan: PricingP
   ];
 }
 
-interface PricingSectionProps {
-  plans: PricingPlan[];
-  loading: boolean;
-  error: string | null;
-}
-
-function formatPrice(plan: PricingPlan | null, tier: Tier): { primary: string; secondary?: string } {
+function formatPrice(
+  plan: PricingPlan | null,
+  tier: Tier
+): { primary: string; secondary?: string } {
   if (!plan) {
     if (tier === 'free') return { primary: `${CURRENCY}0`, secondary: '/month' };
     return { primary: '—', secondary: undefined };
@@ -108,7 +126,8 @@ function formatPrice(plan: PricingPlan | null, tier: Tier): { primary: string; s
   const monthly = plan.monthly_price ?? null;
   const annual = plan.annual_price ?? null;
   if (monthly !== null && monthly !== undefined) {
-    if (monthly === 0) return { primary: `${CURRENCY}0`, secondary: '/month' };
+    if (monthly === 0)
+      return { primary: `${CURRENCY}0`, secondary: '/month' };
     const yearlySavings =
       annual && monthly > 0
         ? Math.round(((monthly * 12 - annual) / (monthly * 12)) * 100)
@@ -116,21 +135,42 @@ function formatPrice(plan: PricingPlan | null, tier: Tier): { primary: string; s
     const yearlyMo = annual ? Math.round(annual / 12) : null;
     return {
       primary: `${CURRENCY}${monthly.toLocaleString('en-IN')}`,
-      secondary: yearlySavings && yearlySavings > 0 && yearlyMo != null
-        ? `/month · or ${CURRENCY}${annual.toLocaleString('en-IN')}/year (save ${yearlySavings}%)`
-        : '/month',
+      secondary:
+        yearlySavings && yearlySavings > 0 && yearlyMo != null
+          ? `/month · or ${CURRENCY}${annual.toLocaleString('en-IN')}/year (save ${yearlySavings}%)`
+          : '/month',
     };
   }
   if (annual !== null && annual !== undefined)
-    return { primary: `${CURRENCY}${annual.toLocaleString('en-IN')}`, secondary: '/year' };
+    return {
+      primary: `${CURRENCY}${annual.toLocaleString('en-IN')}`,
+      secondary: '/year',
+    };
   if (tier === 'free') return { primary: `${CURRENCY}0`, secondary: '/month' };
   return { primary: '—', secondary: undefined };
 }
 
-export default function PricingSection({ plans, loading, error }: PricingSectionProps) {
+interface PricingSectionProps {
+  plans: PricingPlan[];
+  loading: boolean;
+  error: string | null;
+  currentSubscription?: CurrentSubscription | null;
+  isLoggedIn?: boolean;
+}
+
+export default function PricingSection({
+  plans,
+  loading,
+  error,
+  currentSubscription,
+  isLoggedIn = false,
+}: PricingSectionProps) {
   if (loading) {
     return (
-      <section id="pricing" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]">
+      <section
+        id="pricing"
+        className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]"
+      >
         <div className="container mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
@@ -150,7 +190,10 @@ export default function PricingSection({ plans, loading, error }: PricingSection
 
   if (error || plans.length === 0) {
     return (
-      <section id="pricing" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]">
+      <section
+        id="pricing"
+        className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]"
+      >
         <div className="container mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
@@ -166,9 +209,33 @@ export default function PricingSection({ plans, loading, error }: PricingSection
   }
 
   const tiers = getThreeTiers(plans);
+  const activeTier = currentSubscription?.status === 'active'
+    ? currentSubscription.tier
+    : null;
+  const activeBillingCycle = currentSubscription?.billingCycle ?? null;
+  const isMonthlyPro =
+    activeTier === 'pro' &&
+    (activeBillingCycle === 'monthly');
+
+  const proPlan = tiers.find((t) => t.tier === 'pro')?.plan ?? null;
+  const proMonthlyCost = proPlan?.monthly_price ?? 0;
+  const proAnnualCost = proPlan?.annual_price ?? 0;
+  const annualSavings =
+    proMonthlyCost > 0 && proAnnualCost > 0
+      ? Math.round(proMonthlyCost * 12 - proAnnualCost)
+      : 0;
+  const annualSavingsPct =
+    proMonthlyCost > 0 && proAnnualCost > 0
+      ? Math.round(
+          ((proMonthlyCost * 12 - proAnnualCost) / (proMonthlyCost * 12)) * 100
+        )
+      : 0;
 
   return (
-    <section id="pricing" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]">
+    <section
+      id="pricing"
+      className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]"
+    >
       <div className="container mx-auto px-4 sm:px-6">
         <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
           <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
@@ -177,16 +244,58 @@ export default function PricingSection({ plans, loading, error }: PricingSection
           <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8]">
             Free to start. Upgrade for enhanced reporting and automation.
           </p>
+          {/* Logged-in greeting */}
+          {isLoggedIn && activeTier && (
+            <p className="text-sm text-[#16A34A] dark:text-[#22C55E] font-medium">
+              You are currently on the{' '}
+              <span className="font-bold capitalize">{activeTier}</span> plan
+              {activeBillingCycle
+                ? ` (${activeBillingCycle === 'yearly' || activeBillingCycle === 'annual' ? 'Annual' : 'Monthly'})`
+                : ''}
+            </p>
+          )}
         </div>
 
-        {/* Desktop ≥768px: single row, equal-width cards. Mobile <768px: stacked, order Free → Pro → Premium */}
+        {/* Monthly→Annual switch banner for Pro Monthly users */}
+        {isMonthlyPro && annualSavings > 0 && (
+          <div className="max-w-2xl mx-auto mb-8 px-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#EFF6FF] dark:bg-[#1E3A8A]/40 border border-[#BFDBFE] dark:border-[#3B82F6]/40 rounded-xl p-4">
+              <div className="text-center sm:text-left">
+                <p className="text-sm font-semibold text-[#1E40AF] dark:text-[#93C5FD]">
+                  💡 Switch to Annual — Save {annualSavingsPct}%
+                </p>
+                <p className="text-xs text-[#3B82F6] dark:text-[#BFDBFE] mt-0.5">
+                  Save ₹{annualSavings.toLocaleString('en-IN')} per year by paying annually
+                </p>
+              </div>
+              <Link
+                href="/upgrade?plan=pro&cycle=yearly"
+                className="shrink-0 px-4 py-2 bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                Switch to Annual
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto overflow-x-hidden">
           {tiers.map(({ tier, plan }) => {
             const config = TIER_CONFIG[tier];
             const isPro = tier === 'pro';
             const isPremium = tier === 'premium';
             const isFree = tier === 'free';
-            const { primary: pricePrimary, secondary: priceSecondary } = formatPrice(plan, tier);
+            const { primary: pricePrimary, secondary: priceSecondary } =
+              formatPrice(plan, tier);
+
+            const isCurrentPlan =
+              activeTier === tier && currentSubscription?.status === 'active';
+            const isLowerPlan =
+              activeTier !== null &&
+              (PLAN_RANK[tier] ?? 0) < (PLAN_RANK[activeTier] ?? 0);
+            const renewalDate = isCurrentPlan
+              ? formatRenewalDate(currentSubscription?.currentPeriodEnd ?? null)
+              : null;
+
             const orderClass =
               tier === 'free'
                 ? 'order-1 md:order-1'
@@ -194,31 +303,55 @@ export default function PricingSection({ plans, loading, error }: PricingSection
                   ? 'order-2 md:order-2'
                   : 'order-3 md:order-3';
 
+            let borderClass = '';
+            if (isCurrentPlan) {
+              borderClass =
+                'border-2 border-[#16A34A] dark:border-[#22C55E] shadow-lg shadow-[#16A34A]/10';
+            } else if (isLowerPlan) {
+              borderClass =
+                'border border-[#E5E7EB] dark:border-[#334155] opacity-60';
+            } else if (isPro && !activeTier) {
+              borderClass =
+                'border-2 border-[#2563EB] dark:border-[#3B82F6] shadow-lg shadow-[#2563EB]/10';
+            } else {
+              borderClass =
+                'border border-[#E5E7EB] dark:border-[#334155] hover:border-[#94A3B8] dark:hover:border-[#64748B]';
+            }
+
             return (
               <div
                 key={tier}
-                className={`${orderClass} flex flex-col h-full bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border transition-all duration-300 overflow-hidden min-w-0 ${
-                  isPro
-                    ? 'border-2 border-[#2563EB] dark:border-[#3B82F6] shadow-lg shadow-[#2563EB]/10 dark:shadow-[#3B82F6]/10'
-                    : isPremium
-                      ? 'border border-[#E5E7EB] dark:border-[#334155] hover:border-[#94A3B8] dark:hover:border-[#64748B]'
-                      : 'border border-[#E5E7EB] dark:border-[#334155] hover:border-[#94A3B8] dark:hover:border-[#64748B]'
-                }`}
+                className={`${orderClass} flex flex-col h-full bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl transition-all duration-300 overflow-hidden min-w-0 ${borderClass}`}
               >
-                {/* Pill label on top — consistent across cards; wraps on small screens to avoid overlap */}
+                {/* Top labels row */}
                 <div className="px-6 pt-4 pb-0 flex flex-wrap items-center gap-2">
                   <span
                     className={`inline-block px-3 py-1 rounded-full text-xs font-semibold shrink-0 ${
-                      isPro
-                        ? 'bg-[#EFF6FF] dark:bg-[#1E3A8A] text-[#2563EB] dark:text-[#93C5FD]'
-                        : 'bg-[#F1F5F9] dark:bg-[#334155] text-[#475569] dark:text-[#94A3B8]'
+                      isCurrentPlan
+                        ? 'bg-[#DCFCE7] dark:bg-[#14532D] text-[#16A34A] dark:text-[#22C55E]'
+                        : isPro && !activeTier
+                          ? 'bg-[#EFF6FF] dark:bg-[#1E3A8A] text-[#2563EB] dark:text-[#93C5FD]'
+                          : 'bg-[#F1F5F9] dark:bg-[#334155] text-[#475569] dark:text-[#94A3B8]'
                     }`}
                   >
                     {TIER_LABEL[tier]}
                   </span>
-                  {isPro && (
+                  {isCurrentPlan && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-[#16A34A] dark:bg-[#22C55E] text-white shrink-0">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Current Plan
+                    </span>
+                  )}
+                  {!isCurrentPlan && isPro && !activeTier && (
                     <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-[#2563EB] dark:bg-[#3B82F6] text-white shrink-0">
                       Most popular
+                    </span>
+                  )}
+                  {isLowerPlan && (
+                    <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-[#F1F5F9] dark:bg-[#334155] text-[#94A3B8] shrink-0">
+                      Lower plan
                     </span>
                   )}
                 </div>
@@ -228,10 +361,14 @@ export default function PricingSection({ plans, loading, error }: PricingSection
                     {plan?.name ?? TIER_LABEL[tier]}
                   </h3>
                   <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] mb-4">
-                    {config.tagline}
+                    {isCurrentPlan
+                      ? tier === 'pro'
+                        ? 'Your active plan · Full access to all Pro features'
+                        : 'Your active plan · Full access to all Premium features'
+                      : config.tagline}
                   </p>
 
-                  {/* Single price block — one line per card; clearly visible on desktop and mobile */}
+                  {/* Price block */}
                   <div className="mb-5">
                     <div className="flex flex-wrap items-baseline gap-1.5">
                       <span className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
@@ -243,6 +380,20 @@ export default function PricingSection({ plans, loading, error }: PricingSection
                         </span>
                       )}
                     </div>
+                    {/* Renewal date for current plan */}
+                    {isCurrentPlan && renewalDate && (
+                      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1.5 flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5 text-[#16A34A] dark:text-[#22C55E]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Next renewal: {renewalDate}
+                      </p>
+                    )}
+                    {isCurrentPlan && !renewalDate && (
+                      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1.5">
+                        Active subscription
+                      </p>
+                    )}
                   </div>
 
                   <ul className="space-y-1.5 sm:space-y-2 text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm flex-1 min-w-0">
@@ -250,11 +401,13 @@ export default function PricingSection({ plans, loading, error }: PricingSection
                       <li key={i} className="flex items-start gap-2 min-w-0">
                         <CheckIcon
                           className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                            isPro
-                              ? 'text-[#2563EB] dark:text-[#3B82F6]'
-                              : isFree
-                                ? 'text-[#16A34A] dark:text-[#22C55E]'
-                                : 'text-[#475569] dark:text-[#94A3B8]'
+                            isCurrentPlan
+                              ? 'text-[#16A34A] dark:text-[#22C55E]'
+                              : isPro && !activeTier
+                                ? 'text-[#2563EB] dark:text-[#3B82F6]'
+                                : isFree
+                                  ? 'text-[#16A34A] dark:text-[#22C55E]'
+                                  : 'text-[#475569] dark:text-[#94A3B8]'
                           }`}
                         />
                         <span className="break-words">{feature}</span>
@@ -262,23 +415,67 @@ export default function PricingSection({ plans, loading, error }: PricingSection
                     ))}
                   </ul>
 
+                  {/* CTA area */}
                   <div className="mt-6 pt-4 border-t border-[#E5E7EB] dark:border-[#334155]">
-                    <Link
-                      href={config.ctaHref}
-                      className={`block w-full min-w-0 py-3 px-4 rounded-lg font-semibold text-sm text-center transition-colors duration-300 ${
-                        isPro
-                          ? 'bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] text-white'
-                          : isPremium
-                            ? 'bg-[#F1F5F9] dark:bg-[#334155] hover:bg-[#E2E8F0] dark:hover:bg-[#475569] text-[#0F172A] dark:text-[#F8FAFC]'
-                            : 'bg-[#F1F5F9] dark:bg-[#334155] hover:bg-[#E2E8F0] dark:hover:bg-[#475569] text-[#0F172A] dark:text-[#F8FAFC]'
-                      }`}
-                    >
-                      {config.ctaText}
-                    </Link>
-                    {config.microcopy && (
-                      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] text-center mt-2">
-                        {config.microcopy}
-                      </p>
+                    {isCurrentPlan ? (
+                      // Current plan — no upgrade button, show manage link
+                      <div className="text-center">
+                        <div className="w-full py-3 px-4 rounded-lg text-sm font-semibold bg-[#F0FDF4] dark:bg-[#14532D]/40 text-[#16A34A] dark:text-[#22C55E] border border-[#BBF7D0] dark:border-[#166534] cursor-default select-none">
+                          ✓ Active Plan
+                        </div>
+                        <Link
+                          href="/dashboard"
+                          className="inline-block mt-2 text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#2563EB] dark:hover:text-[#3B82F6] underline"
+                        >
+                          Go to Dashboard →
+                        </Link>
+                      </div>
+                    ) : isLowerPlan ? (
+                      // Lower plan — greyed out, not clickable
+                      <div className="text-center">
+                        <div className="w-full py-3 px-4 rounded-lg text-sm font-medium bg-[#F1F5F9] dark:bg-[#334155] text-[#94A3B8] cursor-not-allowed select-none">
+                          Not available
+                        </div>
+                        <p className="text-xs text-[#94A3B8] mt-2">
+                          You're on a higher plan
+                        </p>
+                      </div>
+                    ) : isFree && isLoggedIn ? (
+                      // Free tier for logged-in user with paid plan — not applicable
+                      <div className="text-center">
+                        <div className="w-full py-3 px-4 rounded-lg text-sm font-medium bg-[#F1F5F9] dark:bg-[#334155] text-[#94A3B8] cursor-not-allowed select-none">
+                          Included in your plan
+                        </div>
+                      </div>
+                    ) : (
+                      // Normal CTA
+                      <>
+                        <Link
+                          href={
+                            isFree
+                              ? isLoggedIn
+                                ? '/dashboard'
+                                : '/signup'
+                              : config.ctaHref
+                          }
+                          className={`block w-full min-w-0 py-3 px-4 rounded-lg font-semibold text-sm text-center transition-colors duration-300 ${
+                            isPro
+                              ? 'bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] text-white'
+                              : isPremium
+                                ? 'bg-[#F1F5F9] dark:bg-[#334155] hover:bg-[#E2E8F0] dark:hover:bg-[#475569] text-[#0F172A] dark:text-[#F8FAFC]'
+                                : 'bg-[#F1F5F9] dark:bg-[#334155] hover:bg-[#E2E8F0] dark:hover:bg-[#475569] text-[#0F172A] dark:text-[#F8FAFC]'
+                          }`}
+                        >
+                          {isFree && isLoggedIn
+                            ? 'Go to Dashboard'
+                            : config.ctaText}
+                        </Link>
+                        {config.microcopy && (
+                          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] text-center mt-2">
+                            {config.microcopy}
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -303,11 +500,13 @@ export default function PricingSection({ plans, loading, error }: PricingSection
         </div>
 
         <p className="text-center text-[#6B7280] dark:text-[#94A3B8] text-sm max-w-2xl mx-auto mt-6 px-4">
-          Your wealth is always visible in the free tier. Upgrade when you need deeper clarity and insights.
+          Your wealth is always visible in the free tier. Upgrade when you need
+          deeper clarity and insights.
         </p>
 
         <p className="text-center text-[#6B7280] dark:text-[#94A3B8] text-xs max-w-2xl mx-auto mt-4 px-4">
-          Subscription provides access to software features only. LensOnWealth does not provide investment advisory services or execute trades.
+          Subscription provides access to software features only. LensOnWealth
+          does not provide investment advisory services or execute trades.
         </p>
       </div>
     </section>

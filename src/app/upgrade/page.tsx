@@ -35,6 +35,7 @@ type RazorpayOptions = {
 };
 
 const CURRENCY = '₹';
+const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, premium: 2 };
 
 type PaymentState = 'idle' | 'processing' | 'verifying' | 'success' | 'timeout' | 'error';
 
@@ -99,6 +100,30 @@ export default function UpgradePage() {
   const [paymentState, setPaymentState] = useState<PaymentState>('idle');
   const [activatedPlanName, setActivatedPlanName] = useState<string | null>(null);
   const handlerFiredRef = useRef(false);
+
+  const [currentSub, setCurrentSub] = useState<{
+    tier: string;
+    billing_cycle: string;
+    current_period_end: string | null;
+    status: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch('/api/plans/user')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.tier && data.tier !== 'free') {
+          setCurrentSub({
+            tier: data.tier,
+            billing_cycle: data.billing_cycle,
+            current_period_end: data.current_period_end,
+            status: data.status,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [user?.id]);
 
   const paidPlans = getPaidPlans(plans);
   const planParam = searchParams.get('plan');
@@ -373,37 +398,82 @@ export default function UpgradePage() {
           {paidPlans.map((plan) => {
             const isSelected = selectedPlan?.id === plan.id;
             const hasRazorpay = !!(plan.razorpay_plan_id || plan.id);
+
+            const isCurrentPlan = currentSub?.tier === plan.name?.toLowerCase() &&
+              currentSub?.billing_cycle === (billingCycle === 'yearly' ? 'yearly' : 'monthly') &&
+              currentSub?.status === 'active';
+
+            const isLowerPlan = currentSub &&
+              PLAN_RANK[plan.name?.toLowerCase()] < PLAN_RANK[currentSub.tier];
+
+            const renewalDate = isCurrentPlan && currentSub?.current_period_end
+              ? new Date(currentSub.current_period_end).toLocaleDateString('en-IN', {
+                  day: 'numeric', month: 'long', year: 'numeric'
+                })
+              : null;
+
+            const isDisabled = !hasRazorpay || isCurrentPlan || !!isLowerPlan;
+
             return (
               <button
                 key={plan.id}
                 type="button"
-                onClick={() => hasRazorpay && setSelectedPlan(plan)}
-                disabled={!hasRazorpay}
+                onClick={() => !isDisabled && setSelectedPlan(plan)}
+                disabled={isDisabled}
                 className={`w-full flex items-center justify-between p-4 rounded-xl border-2 text-left transition-colors ${
-                  isSelected
-                    ? 'border-[#2563EB] dark:border-[#3B82F6] bg-[#EFF6FF] dark:bg-[#1E3A8A]/30'
-                    : 'border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] hover:border-[#94A3B8] dark:hover:border-[#64748B]'
-                } ${!hasRazorpay ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  isCurrentPlan
+                    ? 'border-[#16A34A] dark:border-[#22C55E] bg-[#F0FDF4] dark:bg-[#14532D]/30'
+                    : isLowerPlan
+                      ? 'border-[#E5E7EB] dark:border-[#334155] bg-[#F9FAFB] dark:bg-[#1E293B] opacity-50 cursor-not-allowed'
+                      : isSelected
+                        ? 'border-[#2563EB] dark:border-[#3B82F6] bg-[#EFF6FF] dark:bg-[#1E3A8A]/30'
+                        : 'border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] hover:border-[#94A3B8] dark:hover:border-[#64748B]'
+                } ${!hasRazorpay && !isCurrentPlan && !isLowerPlan ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 <div className="flex items-center gap-3">
-                  <div
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                      isSelected ? 'border-[#2563EB] dark:border-[#3B82F6] bg-[#2563EB] dark:bg-[#3B82F6]' : 'border-[#94A3B8] dark:border-[#64748B]'
-                    }`}
-                  >
-                    {isSelected && (
+                  {isCurrentPlan ? (
+                    <div className="w-5 h-5 rounded-full bg-[#16A34A] dark:bg-[#22C55E] flex items-center justify-center">
                       <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div
+                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                        isSelected && !isLowerPlan ? 'border-[#2563EB] dark:border-[#3B82F6] bg-[#2563EB] dark:bg-[#3B82F6]' : 'border-[#94A3B8] dark:border-[#64748B]'
+                      }`}
+                    >
+                      {isSelected && !isLowerPlan && (
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                  )}
                   <div>
-                    <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
-                      {plan.name}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                        {plan.name}
+                      </p>
+                      {isCurrentPlan && (
+                        <span className="text-xs font-medium text-[#16A34A] dark:text-[#22C55E] bg-[#DCFCE7] dark:bg-[#14532D] px-2 py-0.5 rounded-full">
+                          ✓ Current Plan
+                        </span>
+                      )}
+                      {isLowerPlan && (
+                        <span className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8] bg-[#F3F4F6] dark:bg-[#334155] px-2 py-0.5 rounded-full">
+                          Lower Plan
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
                       {formatPrice(plan, billingCycle)}
                     </p>
+                    {renewalDate && (
+                      <p className="text-xs text-[#16A34A] dark:text-[#22C55E] mt-0.5">
+                        Renews on {renewalDate}
+                      </p>
+                    )}
                   </div>
                 </div>
               </button>
@@ -418,7 +488,10 @@ export default function UpgradePage() {
         <button
           type="button"
           onClick={handleUpgrade}
-          disabled={submitting || !selectedPlan}
+          disabled={submitting || !selectedPlan ||
+            (currentSub?.tier === selectedPlan?.name?.toLowerCase() &&
+             currentSub?.billing_cycle === (billingCycle === 'yearly' ? 'yearly' : 'monthly') &&
+             currentSub?.status === 'active')}
           className="w-full py-4 px-6 bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold rounded-xl flex items-center justify-center gap-2"
         >
           {submitting ? (

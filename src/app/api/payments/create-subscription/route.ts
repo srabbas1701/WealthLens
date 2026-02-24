@@ -87,6 +87,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const instance = new Razorpay({
+      key_id: keyId,
+      key_secret: keySecret,
+    });
+
     const admin = createAdminClient();
     const { data: planRow, error: planError } = await admin
       .from('plans')
@@ -102,28 +107,52 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: existingActive } = await admin
+    // Fetch current subscription (if any)
+    const { data: currentSub } = await admin
       .from('user_subscriptions')
-      .select('id')
+      .select('id, tier, status, billing_cycle, razorpay_subscription_id')
       .eq('user_id', userId)
-      .eq('status', 'active')
-      .limit(1)
       .maybeSingle();
 
-    if (existingActive) {
+    // Block downgrade attempts
+    const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, premium: 2 };
+    const currentTier = currentSub?.tier ?? 'free';
+    const currentRank = PLAN_RANK[currentTier] ?? 0;
+    const newRank = PLAN_RANK[planId] ?? 0;
+
+    if (currentSub?.status === 'active' && newRank < currentRank) {
       return NextResponse.json(
-        { error: 'You already have an active subscription.' },
+        { error: 'Downgrade not supported. Please contact support.' },
         { status: 400 }
       );
     }
 
+    // If same plan AND same billing cycle AND active → already subscribed
+    if (
+      currentSub?.status === 'active' &&
+      currentSub?.tier === planId &&
+      currentSub?.billing_cycle === billingCycle
+    ) {
+      return NextResponse.json(
+        { error: 'You are already on this plan and billing cycle.' },
+        { status: 400 }
+      );
+    }
+
+    // If upgrading from an active subscription → cancel old Razorpay sub first
+    const previousRazorpaySubId = currentSub?.razorpay_subscription_id ?? null;
+    if (currentSub?.status === 'active' && previousRazorpaySubId) {
+      try {
+        await instance.subscriptions.cancel(previousRazorpaySubId, true);
+        console.log('[Create subscription] Cancelled previous subscription:', previousRazorpaySubId);
+      } catch (cancelErr) {
+        // Log but don't block — Razorpay may already have it cancelled
+        console.warn('[Create subscription] Could not cancel previous subscription:', cancelErr);
+      }
+    }
+
     // total_count: 120 per billing cycle (we use separate Razorpay plans for monthly vs yearly)
     const totalCount = 120;
-
-    const instance = new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret,
-    });
 
     const subscription = await instance.subscriptions.create({
       plan_id: razorpayPlanId,
@@ -149,8 +178,10 @@ export async function POST(request: NextRequest) {
         tier: planId,
         status: 'pending',
         razorpay_subscription_id: subscription.id,
-        billing_cycle: billingCycle,
+        billing_cycle: billingCycle === 'annual' ? 'yearly' : billingCycle,
         payment_provider: 'razorpay',
+        previous_subscription_id: previousRazorpaySubId,
+        upgraded_from: currentSub?.status === 'active' ? currentTier : null,
       },
       { onConflict: 'user_id' }
     );
