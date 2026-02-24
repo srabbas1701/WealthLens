@@ -10,6 +10,7 @@
 import Link from 'next/link';
 import { AppHeader } from '@/components/AppHeader';
 import { LogoLockup } from '@/components/LogoLockup';
+import { FeatureRequestModal } from '@/components/FeatureRequestModal';
 
 export default function RoadmapPage() {
   // Simple roadmap data structure
@@ -171,12 +172,7 @@ export default function RoadmapPage() {
             We're building LensOnWealth for you. Share your ideas and help us prioritize 
             what matters most to Indian investors.
           </p>
-          <a 
-            href="mailto:hello@lensonwealth.com?subject=Feature Request"
-            className="inline-block px-8 py-4 bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] rounded-lg text-lg font-semibold hover:bg-white/90 dark:hover:bg-[#1E293B]/90 shadow-xl transition-all duration-300 hover:scale-105"
-          >
-            📧 Submit Feature Request
-          </a>
+          <FeatureRequestModal />
         </div>
       </section>
 
