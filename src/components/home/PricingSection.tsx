@@ -256,28 +256,6 @@ export default function PricingSection({
           )}
         </div>
 
-        {/* Monthly→Annual switch banner for Pro Monthly users */}
-        {isMonthlyPro && annualSavings > 0 && (
-          <div className="max-w-2xl mx-auto mb-8 px-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#EFF6FF] dark:bg-[#1E3A8A]/40 border border-[#BFDBFE] dark:border-[#3B82F6]/40 rounded-xl p-4">
-              <div className="text-center sm:text-left">
-                <p className="text-sm font-semibold text-[#1E40AF] dark:text-[#93C5FD]">
-                  💡 Switch to Annual — Save {annualSavingsPct}%
-                </p>
-                <p className="text-xs text-[#3B82F6] dark:text-[#BFDBFE] mt-0.5">
-                  Save ₹{annualSavings.toLocaleString('en-IN')} per year by paying annually
-                </p>
-              </div>
-              <Link
-                href="/upgrade?plan=pro&cycle=yearly"
-                className="shrink-0 px-4 py-2 bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] text-white text-sm font-semibold rounded-lg transition-colors"
-              >
-                Switch to Annual
-              </Link>
-            </div>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto overflow-x-hidden">
           {tiers.map(({ tier, plan }) => {
             const config = TIER_CONFIG[tier];
@@ -396,6 +374,23 @@ export default function PricingSection({
                     )}
                   </div>
 
+                  {isCurrentPlan && isMonthlyPro && annualSavings > 0 && (
+                    <div className="mb-4 p-3 rounded-lg bg-[#EFF6FF] dark:bg-[#1E3A8A]/40 border border-[#BFDBFE] dark:border-[#3B82F6]/40">
+                      <p className="text-xs font-semibold text-[#1E40AF] dark:text-[#93C5FD] mb-2">
+                        💡 Switch to Annual — Save {annualSavingsPct}%
+                      </p>
+                      <p className="text-xs text-[#3B82F6] dark:text-[#BFDBFE] mb-2">
+                        Save ₹{annualSavings.toLocaleString('en-IN')}/year by paying annually
+                      </p>
+                      <Link
+                        href="/upgrade?plan=pro&cycle=yearly"
+                        className="inline-block w-full text-center py-1.5 px-3 bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] text-white text-xs font-semibold rounded-md transition-colors"
+                      >
+                        Switch to Annual →
+                      </Link>
+                    </div>
+                  )}
+
                   <ul className="space-y-1.5 sm:space-y-2 text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm flex-1 min-w-0">
                     {config.features.map((feature, i) => (
                       <li key={i} className="flex items-start gap-2 min-w-0">
@@ -421,7 +416,11 @@ export default function PricingSection({
                       // Current plan — no upgrade button, show manage link
                       <div className="text-center">
                         <div className="w-full py-3 px-4 rounded-lg text-sm font-semibold bg-[#F0FDF4] dark:bg-[#14532D]/40 text-[#16A34A] dark:text-[#22C55E] border border-[#BBF7D0] dark:border-[#166534] cursor-default select-none">
-                          ✓ Active Plan
+                          ✓ Active Plan · {
+                            activeBillingCycle === 'yearly' || activeBillingCycle === 'annual'
+                              ? 'Annual'
+                              : 'Monthly'
+                          }
                         </div>
                         <Link
                           href="/dashboard"
