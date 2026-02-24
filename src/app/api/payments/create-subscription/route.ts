@@ -2,8 +2,13 @@
  * POST /api/payments/create-subscription
  *
  * Creates a Razorpay subscription and returns checkout options.
- * Inserts pending row in user_subscriptions for webhook matching.
- * Activation is handled by webhook only (do not trust frontend).
+ * 
+ * CRITICAL SAFETY RULE:
+ * - For NEW subscribers: insert row with status='pending'
+ * - For UPGRADING users: store intent in pending_* columns ONLY
+ *   The active subscription row (tier, status) is NEVER touched here.
+ *   ONLY the webhook sets status='active' and updates tier.
+ *   This means closing Razorpay without paying = zero DB change to active plan.
  *
  * Body: { planId: 'pro' | 'premium', billingCycle: 'monthly' | 'annual', userId: string }
  */
@@ -12,9 +17,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
 import { createAdminClient } from '@/lib/supabase/server';
 
+const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, premium: 2 };
+
 type RequestBody = {
   planId?: 'pro' | 'premium';
-  billingCycle?: 'monthly' | 'annual';
+  billingCycle?: 'monthly' | 'annual' | 'yearly';
   userId?: string;
 };
 
@@ -40,9 +47,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { planId, billingCycle } = body;
-
+    const { planId } = body;
     const userId = typeof body?.userId === 'string' ? body.userId.trim() : null;
+
+    // Normalize billing cycle — accept 'annual', 'yearly', 'monthly'
+    const rawCycle = body.billingCycle ?? 'monthly';
+    const billingCycle: 'monthly' | 'yearly' =
+      rawCycle === 'annual' || rawCycle === 'yearly' ? 'yearly' : 'monthly';
 
     if (!userId) {
       return NextResponse.json(
@@ -52,31 +63,25 @@ export async function POST(request: NextRequest) {
     }
 
     const validPlans = ['pro', 'premium'];
-    const validCycles = ['monthly', 'annual'];
     if (!planId || !validPlans.includes(planId)) {
       return NextResponse.json(
         { error: 'Bad request', details: 'planId must be "pro" or "premium"' },
         { status: 400 }
       );
     }
-    if (!billingCycle || !validCycles.includes(billingCycle)) {
-      return NextResponse.json(
-        { error: 'Bad request', details: 'billingCycle must be "monthly" or "annual"' },
-        { status: 400 }
-      );
-    }
 
+    // Map to Razorpay plan ID
     let razorpayPlanId: string | undefined;
     if (planId === 'pro' && billingCycle === 'monthly') {
       razorpayPlanId = process.env.RAZORPAY_PRO_MONTHLY_PLAN;
     }
-    if (planId === 'pro' && billingCycle === 'annual') {
+    if (planId === 'pro' && billingCycle === 'yearly') {
       razorpayPlanId = process.env.RAZORPAY_PRO_ANNUAL_PLAN;
     }
     if (planId === 'premium' && billingCycle === 'monthly') {
       razorpayPlanId = process.env.RAZORPAY_PREMIUM_MONTHLY_PLAN;
     }
-    if (planId === 'premium' && billingCycle === 'annual') {
+    if (planId === 'premium' && billingCycle === 'yearly') {
       razorpayPlanId = process.env.RAZORPAY_PREMIUM_ANNUAL_PLAN;
     }
 
@@ -87,12 +92,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const instance = new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret,
-    });
-
     const admin = createAdminClient();
+
+    // Verify plan exists in DB
     const { data: planRow, error: planError } = await admin
       .from('plans')
       .select('id')
@@ -107,29 +109,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch current subscription (if any)
+    // Fetch current subscription
     const { data: currentSub } = await admin
       .from('user_subscriptions')
-      .select('id, tier, status, billing_cycle, razorpay_subscription_id')
+      .select('tier, status, billing_cycle, razorpay_subscription_id')
       .eq('user_id', userId)
       .maybeSingle();
 
-    // Block downgrade attempts
-    const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, premium: 2 };
     const currentTier = currentSub?.tier ?? 'free';
     const currentRank = PLAN_RANK[currentTier] ?? 0;
     const newRank = PLAN_RANK[planId] ?? 0;
+    const isCurrentlyActive = currentSub?.status === 'active';
 
-    if (currentSub?.status === 'active' && newRank < currentRank) {
+    // Block downgrade
+    if (isCurrentlyActive && newRank < currentRank) {
       return NextResponse.json(
         { error: 'Downgrade not supported. Please contact support.' },
         { status: 400 }
       );
     }
 
-    // If same plan AND same billing cycle AND active → already subscribed
+    // Block same plan + same cycle (already subscribed)
     if (
-      currentSub?.status === 'active' &&
+      isCurrentlyActive &&
       currentSub?.tier === planId &&
       currentSub?.billing_cycle === billingCycle
     ) {
@@ -139,28 +141,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If upgrading from an active subscription → cancel old Razorpay sub first
-    const previousRazorpaySubId = currentSub?.razorpay_subscription_id ?? null;
-    if (currentSub?.status === 'active' && previousRazorpaySubId) {
-      try {
-        await instance.subscriptions.cancel(previousRazorpaySubId, true);
-        console.log('[Create subscription] Cancelled previous subscription:', previousRazorpaySubId);
-      } catch (cancelErr) {
-        // Log but don't block — Razorpay may already have it cancelled
-        console.warn('[Create subscription] Could not cancel previous subscription:', cancelErr);
-      }
-    }
-
-    // total_count: 120 per billing cycle (we use separate Razorpay plans for monthly vs yearly)
-    const totalCount = 120;
+    // Create Razorpay subscription
+    const instance = new Razorpay({ key_id: keyId, key_secret: keySecret });
 
     const subscription = await instance.subscriptions.create({
       plan_id: razorpayPlanId,
-      total_count: totalCount,
+      total_count: 120,
       quantity: 1,
       customer_notify: true,
       notes: {
         user_id: userId,
+        plan_id: planId,
         billing_cycle: billingCycle,
       },
     });
@@ -172,26 +163,55 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { error: upsertError } = await admin.from('user_subscriptions').upsert(
-      {
-        user_id: userId,
-        tier: planId,
-        status: 'pending',
-        razorpay_subscription_id: subscription.id,
-        billing_cycle: billingCycle === 'annual' ? 'yearly' : billingCycle,
-        payment_provider: 'razorpay',
-        previous_subscription_id: previousRazorpaySubId,
-        upgraded_from: currentSub?.status === 'active' ? currentTier : null,
-      },
-      { onConflict: 'user_id' }
-    );
+    if (isCurrentlyActive) {
+      // UPGRADING USER — NEVER touch tier or status
+      // Store intent in pending_* columns only
+      // Webhook will complete the upgrade when payment confirmed
+      const { error: updateError } = await admin
+        .from('user_subscriptions')
+        .update({
+          pending_tier: planId,
+          pending_billing_cycle: billingCycle,
+          pending_razorpay_subscription_id: subscription.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
 
-    if (upsertError) {
-      console.error('[Create subscription] Supabase upsert error:', upsertError);
-      return NextResponse.json(
-        { error: 'Failed to create subscription', details: upsertError.message },
-        { status: 500 }
+      if (updateError) {
+        console.error('[Create subscription] Failed to store pending upgrade:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to initiate upgrade', details: updateError.message },
+          { status: 500 }
+        );
+      }
+
+      console.log(
+        `[Create subscription] Stored pending upgrade for user ${userId}: ` +
+        `${currentTier} → ${planId} (${billingCycle}), sub: ${subscription.id}`
       );
+    } else {
+      // NEW SUBSCRIBER — safe to insert with status=pending
+      const { error: upsertError } = await admin
+        .from('user_subscriptions')
+        .upsert(
+          {
+            user_id: userId,
+            tier: planId,
+            status: 'pending',
+            razorpay_subscription_id: subscription.id,
+            billing_cycle: billingCycle,
+            payment_provider: 'razorpay',
+          },
+          { onConflict: 'user_id' }
+        );
+
+      if (upsertError) {
+        console.error('[Create subscription] Upsert error:', upsertError);
+        return NextResponse.json(
+          { error: 'Failed to create subscription', details: upsertError.message },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json({
@@ -205,20 +225,13 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[Create subscription] Error:', err);
-
-    // Razorpay API errors often have statusCode
     const statusCode =
       typeof (err as { statusCode?: number }).statusCode === 'number'
         ? (err as { statusCode: number }).statusCode
         : 500;
-
     const httpStatus = statusCode >= 400 && statusCode < 600 ? statusCode : 500;
-
     return NextResponse.json(
-      {
-        error: 'Payment error',
-        details: message,
-      },
+      { error: 'Payment error', details: message },
       { status: httpStatus }
     );
   }

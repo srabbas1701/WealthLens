@@ -94,7 +94,9 @@ export default function UpgradePage() {
   const { plans, loading: plansLoading, error: plansError } = usePlans();
 
   const [selectedPlan, setSelectedPlan] = useState<PricingPlan | null>(null);
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>(
+    cycleParam === 'yearly' ? 'yearly' : 'monthly'
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentState, setPaymentState] = useState<PaymentState>('idle');
@@ -125,8 +127,24 @@ export default function UpgradePage() {
       .catch(() => {});
   }, [user?.id]);
 
-  const paidPlans = getPaidPlans(plans);
+  const currentUserTier = currentSub?.tier ?? 'free';
+  const currentUserRank = PLAN_RANK[currentUserTier] ?? 0;
+
+  const allPaidPlans = getPaidPlans(plans);
+  const paidPlans = allPaidPlans.filter((p) => {
+    const planTier = p.name?.toLowerCase() ?? '';
+    const planRank = PLAN_RANK[planTier] ?? 0;
+    if (planRank > currentUserRank) return true;
+    if (
+      planRank === currentUserRank &&
+      currentSub?.status === 'active' &&
+      currentSub?.billing_cycle !== billingCycle &&
+      billingCycle === 'yearly'
+    ) return true;
+    return false;
+  });
   const planParam = searchParams.get('plan');
+  const cycleParam = searchParams.get('cycle');
 
   useEffect(() => {
     if (!plansLoading && paidPlans.length > 0 && !selectedPlan) {
@@ -298,6 +316,34 @@ export default function UpgradePage() {
     );
   }
 
+  // Premium user — already on highest plan
+  if (currentSub?.tier === 'premium' && currentSub?.status === 'active') {
+    return (
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
+        <AppHeader />
+        <main className="max-w-md mx-auto px-4 py-16 text-center">
+          <div className="w-16 h-16 rounded-full bg-[#16A34A] dark:bg-[#22C55E] flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+            You're on Premium
+          </h1>
+          <p className="text-[#6B7280] dark:text-[#94A3B8] mb-8">
+            You already have the highest plan. All features are unlocked.
+          </p>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center justify-center px-8 py-4 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-semibold rounded-xl"
+          >
+            Go to Dashboard
+          </Link>
+        </main>
+      </div>
+    );
+  }
+
   // Success screen – replace entire page content
   if (paymentState === 'success') {
     return (
@@ -366,6 +412,19 @@ export default function UpgradePage() {
         <p className="text-[#6B7280] dark:text-[#94A3B8] mb-8">
           Select a plan and complete payment. Your subscription will activate automatically.
         </p>
+
+        {currentSub?.tier && currentSub.tier !== 'free' && (
+          <div className="mb-6 p-3 bg-[#F0FDF4] dark:bg-[#14532D]/30 border border-[#BBF7D0] dark:border-[#166534] rounded-lg">
+            <p className="text-sm text-[#16A34A] dark:text-[#22C55E] font-medium">
+              ✓ Currently on{' '}
+              <span className="capitalize font-bold">{currentSub.tier}</span>
+              {currentSub.billing_cycle
+                ? ` (${currentSub.billing_cycle === 'yearly' || currentSub.billing_cycle === 'annual' ? 'Annual' : 'Monthly'})`
+                : ''}
+              {' '}— upgrading will take effect immediately after payment.
+            </p>
+          </div>
+        )}
 
         {/* Billing cycle toggle */}
         <div className="flex rounded-lg bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] p-1 mb-6">

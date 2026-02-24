@@ -1,11 +1,11 @@
 /**
  * POST /api/payments/webhook
+ * Razorpay webhook — the ONLY place that activates subscriptions.
  *
- * Razorpay webhook handler. Verifies signature and updates user_subscriptions.
- * Handles: subscription.authenticated, subscription.charged, subscription.completed,
- * subscription.updated, subscription.halted
- *
- * Uses Node runtime, RAZORPAY_WEBHOOK_SECRET for signature verification.
+ * Two flows handled:
+ * 1. NEW subscription: finds row by razorpay_subscription_id, sets active
+ * 2. UPGRADE: finds row by pending_razorpay_subscription_id, promotes 
+ *    pending_tier → tier, logs history, clears pending columns
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -57,15 +57,12 @@ function unixToIso(unix?: number): string | null {
   }
 }
 
-// No auth check - webhooks are publicly accessible; security via Razorpay signature verification only
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const signature = request.headers.get('x-razorpay-signature');
-  
-  // LOG IMMEDIATELY before any processing
-  console.log('[Webhook] Received payload length:', rawBody.length);
-  console.log('[Webhook] Signature present:', !!signature);
-  console.log('[Webhook] Raw event:', rawBody.substring(0, 200));
+
+  console.log('[Webhook] Received, length:', rawBody.length, 'sig:', !!signature);
+
   try {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!secret) {
@@ -81,7 +78,7 @@ export async function POST(request: NextRequest) {
     try {
       valid = Razorpay.validateWebhookSignature(rawBody, signature, secret);
     } catch (err) {
-      console.error('[Webhook] Signature verification error:', err);
+      console.error('[Webhook] Signature error:', err);
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
@@ -101,6 +98,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 });
     }
 
+    console.log('[Webhook] Event:', event);
+
     const handledEvents = [
       'subscription.authenticated',
       'subscription.charged',
@@ -114,48 +113,148 @@ export async function POST(request: NextRequest) {
 
     const subscription = getSubscriptionEntity(payload);
     if (!subscription) {
-      console.warn('[Webhook] No subscription entity in payload for event:', event);
+      console.warn('[Webhook] No subscription entity for event:', event);
       return NextResponse.json({ received: true }, { status: 200 });
     }
 
     const admin = createAdminClient();
+    const now = new Date().toISOString();
 
-    const activeStateEvents = [
-      'subscription.authenticated',
-      'subscription.charged',
-      'subscription.completed',
-      'subscription.updated',
-    ];
     if (event === 'subscription.halted') {
-      const { error, data } = await admin
+      await admin
+        .from('user_subscriptions')
+        .update({ status: 'halted', updated_at: now })
+        .or(
+          `razorpay_subscription_id.eq.${subscription.id},` +
+          `pending_razorpay_subscription_id.eq.${subscription.id}`
+        );
+      return NextResponse.json({ received: true });
+    }
+
+    // Active state events
+    const currentPeriodEnd = unixToIso(subscription.current_end);
+    const startedAt = unixToIso(subscription.current_start);
+
+    // FLOW 1: Check if this is a PENDING UPGRADE (stored in pending_* columns)
+    const { data: upgradeRow } = await admin
+      .from('user_subscriptions')
+      .select('user_id, tier, billing_cycle, pending_tier, pending_billing_cycle')
+      .eq('pending_razorpay_subscription_id', subscription.id)
+      .maybeSingle();
+
+    if (upgradeRow) {
+      console.log(
+        `[Webhook] Upgrade confirmed: ${upgradeRow.tier} → ${upgradeRow.pending_tier} ` +
+        `for user ${upgradeRow.user_id}`
+      );
+
+      // Record history BEFORE changing
+      await admin.from('subscription_history').insert({
+        user_id: upgradeRow.user_id,
+        event: 'upgraded',
+        from_tier: upgradeRow.tier,
+        to_tier: upgradeRow.pending_tier,
+        from_billing_cycle: upgradeRow.billing_cycle,
+        to_billing_cycle: upgradeRow.pending_billing_cycle,
+        razorpay_subscription_id: subscription.id,
+        occurred_at: now,
+      });
+
+      // Now promote pending → active, clear pending columns
+      const { error } = await admin
         .from('user_subscriptions')
         .update({
-          status: 'halted',
-          updated_at: new Date().toISOString(),
+          tier: upgradeRow.pending_tier,
+          billing_cycle: upgradeRow.pending_billing_cycle,
+          razorpay_subscription_id: subscription.id,
+          status: 'active',
+          current_period_end: currentPeriodEnd,
+          started_at: startedAt,
+          // Clear pending columns
+          pending_tier: null,
+          pending_billing_cycle: null,
+          pending_razorpay_subscription_id: null,
+          updated_at: now,
         })
-        .eq('razorpay_subscription_id', subscription.id)
-        .select();
+        .eq('user_id', upgradeRow.user_id);
 
-      console.log('[Webhook] Update result - data:', data, 'error:', error);
-    } else if (activeStateEvents.includes(event)) {
-      const currentPeriodEnd = unixToIso(subscription.current_end);
-      const startedAt = unixToIso(subscription.current_start);
-
-      const updates: Record<string, unknown> = {
-        status: 'active',
-        current_period_end: currentPeriodEnd,
-        started_at: startedAt,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error, data } = await admin
-        .from('user_subscriptions')
-        .update(updates)
-        .eq('razorpay_subscription_id', subscription.id)
-        .select();
-
-      console.log('[Webhook] Update result - data:', data, 'error:', error);
+      if (error) {
+        console.error('[Webhook] Upgrade update failed:', error);
+      }
+      return NextResponse.json({ received: true });
     }
+
+    // FLOW 2: New subscription (find by razorpay_subscription_id)
+    const { data: newSubRow } = await admin
+      .from('user_subscriptions')
+      .select('user_id, tier, billing_cycle')
+      .eq('razorpay_subscription_id', subscription.id)
+      .maybeSingle();
+
+    if (newSubRow) {
+      console.log(
+        `[Webhook] New subscription activated: ${newSubRow.tier} ` +
+        `for user ${newSubRow.user_id}`
+      );
+
+      // Record history
+      await admin.from('subscription_history').insert({
+        user_id: newSubRow.user_id,
+        event: 'activated',
+        from_tier: 'free',
+        to_tier: newSubRow.tier,
+        from_billing_cycle: null,
+        to_billing_cycle: newSubRow.billing_cycle,
+        razorpay_subscription_id: subscription.id,
+        occurred_at: now,
+      });
+
+      const { error } = await admin
+        .from('user_subscriptions')
+        .update({
+          status: 'active',
+          current_period_end: currentPeriodEnd,
+          started_at: startedAt,
+          updated_at: now,
+        })
+        .eq('razorpay_subscription_id', subscription.id);
+
+      if (error) {
+        console.error('[Webhook] New sub activation failed:', error);
+      }
+      return NextResponse.json({ received: true });
+    }
+
+    // FLOW 3: notes fallback — find by user_id in notes
+    const notesUserId = subscription.notes?.user_id;
+    if (notesUserId) {
+      console.warn(
+        `[Webhook] No row found by sub ID, trying notes.user_id: ${notesUserId}`
+      );
+      const targetTier = subscription.notes?.plan_id;
+      const targetCycle = subscription.notes?.billing_cycle === 'annual'
+        ? 'yearly'
+        : subscription.notes?.billing_cycle ?? 'monthly';
+
+      if (targetTier && ['pro', 'premium'].includes(targetTier)) {
+        await admin
+          .from('user_subscriptions')
+          .update({
+            tier: targetTier,
+            billing_cycle: targetCycle,
+            razorpay_subscription_id: subscription.id,
+            status: 'active',
+            current_period_end: currentPeriodEnd,
+            started_at: startedAt,
+            pending_tier: null,
+            pending_billing_cycle: null,
+            pending_razorpay_subscription_id: null,
+            updated_at: now,
+          })
+          .eq('user_id', notesUserId);
+      }
+    }
+
     return NextResponse.json({ received: true });
   } catch (err) {
     console.error('[Webhook] Unexpected error:', err);
