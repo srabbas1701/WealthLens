@@ -1,8 +1,9 @@
 /**
  * Capabilities Hook
  *
- * Fetches entitlements from GET /api/entitlements only. Does NOT infer capabilities
- * from plan/tier; the API is the single source of truth.
+ * Fetches entitlements from GET /api/entitlements only.
+ * Module-level cache prevents re-fetching on every route navigation.
+ * Cache is keyed by user ID and expires after 5 minutes.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -13,11 +14,40 @@ import type { UserCapabilities, Capability, CapabilityKey } from '@/types/capabi
 const USAGE_KEYS = new Set(['ai_remaining', 'scenario_remaining']);
 const TRIAL_KEY = 'trial';
 
-/** Capability keys that have a "remaining" count in entitlements. */
 const REMAINING_BY_KEY: Record<string, 'ai_remaining' | 'scenario_remaining'> = {
   use_ai_help: 'ai_remaining',
   run_scenarios: 'scenario_remaining',
 };
+
+// ─── Module-level cache (survives route navigation) ───────────────────────────
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+interface EntitlementsCache {
+  userId: string;
+  entitlements: UserEntitlements;
+  fetchedAt: number;
+}
+
+let entitlementsCache: EntitlementsCache | null = null;
+
+function getCached(userId: string): UserEntitlements | null {
+  if (!entitlementsCache) return null;
+  if (entitlementsCache.userId !== userId) return null;
+  if (Date.now() - entitlementsCache.fetchedAt > CACHE_TTL_MS) {
+    entitlementsCache = null;
+    return null;
+  }
+  return entitlementsCache.entitlements;
+}
+
+function setCache(userId: string, entitlements: UserEntitlements) {
+  entitlementsCache = { userId, entitlements, fetchedAt: Date.now() };
+}
+
+export function clearEntitlementsCache() {
+  entitlementsCache = null;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function capabilityKeysFromEntitlements(ent: UserEntitlements): string[] {
   return Object.entries(ent)
@@ -30,14 +60,29 @@ function capabilityKeysFromEntitlements(ent: UserEntitlements): string[] {
 
 export function useCapabilities() {
   const { user } = useAuth();
-  const [entitlements, setEntitlements] = useState<UserEntitlements | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  // Initialize state from cache immediately (no flash)
+  const [entitlements, setEntitlements] = useState<UserEntitlements | null>(
+    () => (user?.id ? getCached(user.id) : null)
+  );
+  const [loading, setLoading] = useState(() => {
+    if (!user?.id) return false;
+    return getCached(user.id) === null; // Only loading if no cache
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) {
       setLoading(false);
       setEntitlements(null);
+      return;
+    }
+
+    // If we have a valid cache, use it immediately — no fetch needed
+    const cached = getCached(user.id);
+    if (cached) {
+      setEntitlements(cached);
+      setLoading(false);
       return;
     }
 
@@ -57,6 +102,7 @@ export function useCapabilities() {
         }
 
         const data: UserEntitlements = await response.json();
+        setCache(user.id, data); // Store in module cache
         setEntitlements(data);
       } catch (err) {
         console.error('Failed to fetch entitlements:', err);

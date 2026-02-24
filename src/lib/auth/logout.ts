@@ -12,6 +12,7 @@
  */
 
 import { createClient } from '@/lib/supabase/client';
+import { clearEntitlementsCache } from '@/hooks/useCapabilities';
 
 export type LogoutReason = 
   | 'inactivity' 
@@ -54,22 +55,25 @@ export async function handleLogout(options: LogoutOptions = {}): Promise<void> {
   };
 
   try {
-    // Step 1: Clear localStorage (session activity tracking)
+    // Step 1: Clear entitlements cache so next user gets a fresh fetch
+    clearEntitlementsCache();
+
+    // Step 2: Clear localStorage (session activity tracking)
     localStorage.removeItem('lastActivity');
     localStorage.removeItem('sessionWarningShown');
     localStorage.removeItem('sessionLogout');
 
-    // Step 2: Clear sessionStorage (auth state)
+    // Step 3: Clear sessionStorage (auth state)
     sessionStorage.removeItem('auth_loading_start');
     sessionStorage.removeItem('loadAppData_start');
 
-    // Step 3: Notify other tabs about logout
+    // Step 4: Notify other tabs about logout
     localStorage.setItem('sessionLogout', Date.now().toString());
     setTimeout(() => {
       localStorage.removeItem('sessionLogout');
     }, 100);
 
-    // Step 4: Clear Supabase session - with 2s timeout so we never get stuck
+    // Step 5: Clear Supabase session - with 2s timeout so we never get stuck
     const supabase = createClient();
     const signOutPromise = supabase.auth.signOut();
     const timeoutPromise = new Promise<void>((resolve) => {
@@ -77,7 +81,7 @@ export async function handleLogout(options: LogoutOptions = {}): Promise<void> {
     });
     await Promise.race([signOutPromise, timeoutPromise]);
 
-    // Step 5: Redirect (always runs - either after signOut or after timeout)
+    // Step 6: Redirect (always runs - either after signOut or after timeout)
     doRedirect();
     console.log('[Logout] Logout complete, reason:', reason);
   } catch (error) {
