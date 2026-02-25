@@ -119,8 +119,9 @@ export async function requirePaidAction(
   const remainingKey = LIMIT_BY_CAPABILITY[capabilityKey];
   if (remainingKey) {
     const remaining = entitlements[remainingKey];
-    const n = typeof remaining === 'number' ? remaining : 0;
-    if (n <= 0) {
+    // Only enforce limits for trial users (remaining is a number).
+    // Paid plan users never have remaining set — they get unlimited access.
+    if (typeof remaining === 'number' && remaining <= 0) {
       return {
         ok: false,
         response: NextResponse.json(

@@ -217,7 +217,36 @@ export default function FloatingCopilot({
       });
 
       if (!response.ok) {
-        throw new Error('API request failed');
+        const errorData = await response.json().catch(() => ({}));
+
+        if (response.status === 429) {
+          const isTrialLimit = errorData?.error === 'Trial limit exceeded';
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: isTrialLimit
+                ? "You've used all your free AI queries for this month. Upgrade to Premium for unlimited access to the Portfolio Analyst."
+                : "You're sending messages too quickly. Please wait a moment and try again.",
+              status: 'attention_required',
+            },
+          ]);
+          return;
+        }
+
+        if (response.status === 403) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: "The Portfolio Analyst is a premium feature. Upgrade your plan to use AI-powered portfolio insights.",
+              status: 'attention_required',
+            },
+          ]);
+          return;
+        }
+
+        throw new Error(errorData?.error || 'API request failed');
       }
 
       const data: CopilotQueryResponse = await response.json();
