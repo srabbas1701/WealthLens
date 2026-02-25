@@ -251,7 +251,7 @@ async function sendTeamEmail(body: FeatureRequestBody): Promise<void> {
     const { Resend } = await import('resend');
     const resend = new Resend(process.env.RESEND_API_KEY);
     const { error } = await resend.emails.send({
-      from: 'LensOnWealth Feature Requests <onboarding@resend.dev>',
+      from: 'LensOnWealth <featurerequest@lensonwealth.com>',
       to: [FEATURE_REQUEST_EMAIL],
       replyTo: body.email,
       subject: `[Feature Request] from ${body.name}`,
@@ -288,9 +288,8 @@ async function sendConfirmationEmail(body: FeatureRequestBody): Promise<void> {
   if (process.env.RESEND_API_KEY) {
     const { Resend } = await import('resend');
     const resend = new Resend(process.env.RESEND_API_KEY);
-    // Use RESEND_FROM override if domain not verified (e.g. onboarding@resend.dev)
     const { error } = await resend.emails.send({
-      from: process.env.RESEND_FROM || fromAddr,
+      from: 'LensOnWealth <featurerequest@lensonwealth.com>',
       to: [body.email],
       subject: "We've received your feature request 🎯",
       html: buildConfirmationEmailHtml(body),

@@ -84,10 +84,10 @@ export function FeatureRequestModal() {
   };
 
   const inputStyles =
-    'bg-[#1e2733] border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-[#3ecf8e] focus:ring-2 focus:ring-[#3ecf8e]/10 outline-none transition-colors w-full';
+    'bg-gray-50 dark:bg-[#1e2733] border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#7a8a9a] focus:border-[#3ecf8e] focus:ring-2 focus:ring-[#3ecf8e]/10 outline-none transition-colors w-full';
 
   const labelStyles =
-    'text-xs uppercase tracking-wider text-[#a8b8c8] font-medium block mb-2';
+    'text-xs uppercase tracking-wider text-gray-500 dark:text-[#a8b8c8] font-medium block mb-2';
 
   return (
     <>
@@ -109,7 +109,7 @@ export function FeatureRequestModal() {
           aria-labelledby="feature-request-title"
         >
           <div
-            className="relative w-full max-w-[560px] rounded-2xl border border-white/10 border-t-0 bg-[#161c26] p-8 overflow-hidden"
+            className="relative w-full max-w-[560px] rounded-2xl bg-white dark:bg-[#161c26] border border-gray-200 dark:border-white/10 border-t-0 p-8 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Teal top border line */}
@@ -124,7 +124,7 @@ export function FeatureRequestModal() {
               type="button"
               onClick={handleClose}
               disabled={loading}
-              className="absolute top-4 right-4 text-[#a8b8c8] hover:text-white transition-colors disabled:opacity-50"
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
               aria-label="Close modal"
             >
               <svg
@@ -144,11 +144,11 @@ export function FeatureRequestModal() {
 
             <h2
               id="feature-request-title"
-              className="text-2xl font-bold text-white mb-2"
+              className="text-2xl font-bold text-gray-900 dark:text-white mb-2"
             >
               Have a Feature Request?
             </h2>
-            <p className="text-[#a8b8c8] text-sm mb-6">
+            <p className="text-gray-500 dark:text-[#7a8a9a] text-sm mb-6">
               Share your ideas and help us prioritize what matters most to Indian
               investors.
             </p>
@@ -158,7 +158,7 @@ export function FeatureRequestModal() {
                 <p className="text-lg text-[#3ecf8e] font-medium">
                   Request Received!
                 </p>
-                <p className="text-[#a8b8c8] mt-2">
+                <p className="text-gray-500 dark:text-[#7a8a9a] mt-2">
                   Thanks for sharing your idea. Our team will review it and reach
                   out if we need more details.
                 </p>
@@ -201,7 +201,7 @@ export function FeatureRequestModal() {
                 <div>
                   <label htmlFor="phone" className={labelStyles}>
                     Phone Number{' '}
-                    <span className="text-[#6b7280] font-normal normal-case">
+                    <span className="text-gray-400 dark:text-[#7a8a9a] font-normal normal-case">
                       (optional)
                     </span>
                   </label>
@@ -230,7 +230,7 @@ export function FeatureRequestModal() {
                     rows={5}
                     className={`${inputStyles} resize-none`}
                   />
-                  <p className="text-xs text-[#6b7280] mt-1.5">
+                  <p className="text-xs text-gray-400 dark:text-[#7a8a9a] mt-1.5">
                     Be as specific as possible — mention asset classes, use
                     cases, or platforms involved.
                   </p>
@@ -249,7 +249,7 @@ export function FeatureRequestModal() {
                   {loading ? 'Sending...' : 'Submit Feature Request'}
                 </button>
 
-                <p className="text-xs text-[#6b7280] flex items-center gap-2">
+                <p className="text-xs text-gray-400 dark:text-[#7a8a9a] flex items-center gap-2">
                   <svg
                     className="w-4 h-4 flex-shrink-0"
                     fill="currentColor"
