@@ -825,6 +825,20 @@ function DashboardContent() {
   const isDataConsistent = validation.isValid && portfolioData.hasData;
   const portfolio = portfolioData;
 
+  // Display percentages that sum to 100% when rounded to integers (avoids 57+23+16+1+1=98% issue)
+  const allocationDisplayPercentages = useMemo(() => {
+    const items = portfolio.allocation.filter(a => a.percentage > 0);
+    if (items.length === 0) return new Map<string, number>();
+    const rounded = items.map(a => ({ name: a.name, pct: Math.round(a.percentage), orig: a.percentage }));
+    const sum = rounded.reduce((s, r) => s + r.pct, 0);
+    const diff = 100 - sum;
+    if (diff !== 0) {
+      const maxIdx = rounded.reduce((best, r, i) => (r.orig > rounded[best].orig ? i : best), 0);
+      rounded[maxIdx].pct += diff;
+    }
+    return new Map(rounded.map(r => [r.name, r.pct]));
+  }, [portfolio.allocation]);
+
   // OPTIMIZATION: Memoize bucket mapping to prevent recalculation on every render
   // Moved to top level to comply with Rules of Hooks
   const bucketCardsContent = useMemo(() => {
@@ -1444,7 +1458,7 @@ function DashboardContent() {
           <div className={`grid grid-cols-1 gap-4 ${bucketCardsContent.length >= 5 ? 'md:grid-cols-5' : bucketCardsContent.length === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
             {bucketCardsContent.map(({ bucket, allocationItem, bucketName, tooltip }) => {
               const value = allocationItem.value;
-              const percentage = allocationItem.percentage;
+              const displayPct = allocationDisplayPercentages.get(allocationItem.name) ?? Math.round(allocationItem.percentage);
               const color = allocationItem.color; // Use color from API allocation (matches pie chart)
 
               // Cash tile: asset-only (liquid cash/bank value). Liabilities live in Non-Investment Overview.
@@ -1472,7 +1486,7 @@ function DashboardContent() {
                         {formatCurrency(value)}
                       </p>
                       <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
-                        {percentage.toFixed(0)}%
+                        {displayPct}%
                       </p>
                       {bucket === 'RealAsset' && (
                         <span className="mt-3 inline-block text-xs text-[#2563EB] dark:text-[#3B82F6]">
@@ -1637,11 +1651,11 @@ function DashboardContent() {
                         </span>
                       </div>
                       <span className={`text-lg font-semibold number-emphasis transition-all duration-300 ${
-                        hoveredIndex === i 
-                          ? 'text-[#0F172A] dark:text-[#F8FAFC] scale-110' 
-                          : 'text-[#0F172A] dark:text-[#F8FAFC]'
+                          hoveredIndex === i 
+                            ? 'text-[#0F172A] dark:text-[#F8FAFC] scale-110' 
+                            : 'text-[#0F172A] dark:text-[#F8FAFC]'
                       }`}>
-                        {item.percentage.toFixed(0)}%
+                        {allocationDisplayPercentages.get(item.name) ?? Math.round(item.percentage)}%
                       </span>
                     </div>
                   ))}

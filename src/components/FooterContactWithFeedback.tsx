@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { MessageSquarePlus } from 'lucide-react';
 import { FeedbackModal } from './FeedbackModal';
 
 interface FooterContactWithFeedbackProps {
@@ -33,9 +34,11 @@ export function FooterContactWithFeedback({
             <button
               type="button"
               onClick={() => setFeedbackOpen(true)}
-              className="block mt-2 text-xs sm:text-sm text-[#2563EB] dark:text-[#3B82F6] hover:underline font-medium"
+              title="Submit Feedback Form"
+              className="mt-1 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              aria-label="Submit Feedback Form"
             >
-              Submit Feedback Form →
+              <MessageSquarePlus className="w-4 h-4" />
             </button>
           </div>
           {showFollowUs && (

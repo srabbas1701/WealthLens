@@ -429,7 +429,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [supabase, appDataRequested, fetchUserData, determineAuthMethod]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- appDataRequested intentionally excluded:
+    // Re-running initAuthSession when appDataRequested flips tears down the onAuthStateChange
+    // subscription, briefly setting authStatus='loading'. If a token refresh event fires in
+    // that gap the event is lost, authStatus resolves to 'unauthenticated', and every page's
+    // client-side guard redirects to /login. The INITIAL_SESSION + onAuthStateChange listener
+    // already covers all auth state transitions; re-initialising is redundant and harmful.
+  }, [supabase, fetchUserData, determineAuthMethod]);
   
   /**
    * Lazy load app data (profile, portfolio, onboarding)

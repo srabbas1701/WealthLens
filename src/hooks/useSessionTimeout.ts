@@ -171,8 +171,10 @@ export function useSessionTimeout({
       }
     } catch (error) {
       console.error('[SessionTimeout] Error checking session expiration:', error);
-      // On error, assume session is expired for safety
-      await handleAutoLogout('session_expired');
+      // Do NOT assume expired on transient errors (network hiccups, Supabase outages).
+      // isSessionExpired() already returns false on its own caught errors; this catch
+      // only fires for truly unexpected exceptions. Logging out here caused false
+      // logouts in production when any part of the check chain threw unexpectedly.
     }
   }, [enabled, user, handleAutoLogout]);
 
