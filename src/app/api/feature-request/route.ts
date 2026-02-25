@@ -100,8 +100,8 @@ function buildConfirmationEmailHtml(body: FeatureRequestBody): string {
 <td>
 <table cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td style="background:linear-gradient(135deg,#1a3a2a,#0d2318); border:1px solid rgba(62,207,142,0.3); border-radius:10px; width:44px; height:44px; text-align:center; vertical-align:middle;">
-<span style="font-size:22px; line-height:44px;">🔍</span>
+<td style="vertical-align:middle;">
+<img src="https://lensonwealth.com/logo.png" alt="LensOnWealth" width="40" height="40" style="display:block; border-radius:10px;" />
 </td>
 <td style="padding-left:12px; vertical-align:middle;">
 <div style="font-size:18px; font-weight:700; color:#f0f4f8; letter-spacing:-0.3px;">LensOnWealth</div>

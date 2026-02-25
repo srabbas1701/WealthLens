@@ -36,6 +36,7 @@ import {
 import { AppHeader } from '@/components/AppHeader';
 import { LogoLockup } from '@/components/LogoLockup';
 import PortfolioUploadModal from '@/components/PortfolioUploadModal';
+import { FooterContactWithFeedback } from '@/components/FooterContactWithFeedback';
 import { useAuth } from '@/lib/auth';
 import type { InvestmentCategory, AddMethod, OnboardingState, AssetStatus } from '@/types/onboarding';
 import { 
@@ -969,15 +970,7 @@ export default function OnboardingPage() {
             </div>
 
             {/* Column 5: Contact */}
-            <div>
-              <h3 className="text-[#0F172A] dark:text-[#F8FAFC] font-semibold mb-3 text-sm">Contact</h3>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">Email</p>
-                  <a href="mailto:support@lensonwealth.com" className="text-xs sm:text-sm text-[#2563EB] dark:text-[#3B82F6] hover:underline font-medium">support@lensonwealth.com</a>
-                </div>
-              </div>
-            </div>
+            <FooterContactWithFeedback showFollowUs={false} />
 
           </div>
 
