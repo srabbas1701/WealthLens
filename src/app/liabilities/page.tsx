@@ -28,8 +28,6 @@ import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import AddLiabilityModal from '@/components/AddLiabilityModal';
 import {
-  getLiabilities,
-  deleteLiability,
   getLiabilityTotals,
   type Liability,
   type LiabilityType,
@@ -128,10 +126,17 @@ export default function LiabilitiesPage() {
   const [prepaymentResultByLiabilityId, setPrepaymentResultByLiabilityId] = useState<Record<string, ReturnType<typeof calculatePrepaymentImpact> | null>>({});
   const [expandedCreditScoreCalc, setExpandedCreditScoreCalc] = useState(false);
 
-  const loadLiabilities = useCallback(() => {
+  const loadLiabilities = useCallback(async () => {
     if (!user?.id) return;
-    const list = getLiabilities(user.id);
-    setLiabilities(list);
+    try {
+      const res = await fetch(`/api/liabilities?user_id=${user.id}`);
+      const json = await res.json();
+      if (json.success) {
+        setLiabilities(json.data ?? []);
+      }
+    } catch (err) {
+      console.error('Failed to load liabilities:', err);
+    }
   }, [user?.id]);
 
   useEffect(() => {
@@ -143,10 +148,11 @@ export default function LiabilitiesPage() {
 
   useEffect(() => {
     if (user?.id) {
-      loadLiabilities();
+      loadLiabilities().finally(() => setLoading(false));
+    } else if (authStatus !== 'loading') {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [user?.id, loadLiabilities]);
+  }, [user?.id, authStatus, loadLiabilities]);
 
   // Fetch portfolio data for PDF (assets from /api/portfolio/data)
   // NOTE: Must run before any conditional return to satisfy Rules of Hooks
@@ -201,11 +207,15 @@ export default function LiabilitiesPage() {
     setDeleteConfirmId(id);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!user?.id || !deleteConfirmId) return;
-    deleteLiability(user.id, deleteConfirmId);
-    loadLiabilities();
+    try {
+      await fetch(`/api/liabilities?user_id=${user.id}&id=${deleteConfirmId}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete liability:', err);
+    }
     setDeleteConfirmId(null);
+    loadLiabilities();
   };
 
   const handleDeleteCancel = () => {

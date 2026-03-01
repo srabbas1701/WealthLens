@@ -81,7 +81,7 @@ import { calculateXIRRFromHoldings, formatXIRR } from '@/lib/xirr-calculator';
 import { fetchPortfolioHealthScore } from '@/services/portfolioAnalytics';
 import type { PortfolioHealthScore } from '@/lib/portfolio-intelligence/health-score';
 import { setCachedPortfolioData, clearPortfolioCache } from '@/lib/portfolio-cache';
-import { getLiabilities, getLiabilityTotals } from '@/lib/liabilities-store';
+import { getLiabilityTotals, type Liability } from '@/lib/liabilities-store';
 import { generateNetWorthTimeline } from '@/lib/net-worth-timeline';
 
 // ============================================================================
@@ -340,9 +340,21 @@ function DashboardContent() {
     benefits: string[];
   }>({ open: false, plan: 'Pro', title: '', description: '', benefits: [] });
 
+  // Liabilities state (fetched from API, replaces localStorage)
+  const [liabilitiesData, setLiabilitiesData] = useState<Liability[]>([]);
+
   // PERMANENT FIX: Simplified - use portfolioCheckComplete as single source of truth
   // Removed portfolioCheckTimeout to eliminate race conditions
   const hasValidSession = !!user && !!user.id;
+
+  // Fetch liabilities from API
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(`/api/liabilities?user_id=${user.id}`)
+      .then((r) => r.json())
+      .then((json) => { if (json.success) setLiabilitiesData(json.data ?? []); })
+      .catch(() => {});
+  }, [user?.id]);
 
   // Track onboarding progress
   useEffect(() => {
@@ -1264,9 +1276,8 @@ function DashboardContent() {
                     const totalAssetsExInsurance = Number(portfolio.metrics.netWorth) || 0;
 
                     // totalLiabilities: Sum of outstanding_amount of all active liabilities
-                    //   Source: liabilities-store (localStorage); all stored liabilities are active
-                    const liabilities = user?.id ? getLiabilities(user.id) : [];
-                    const liabilityTotals = getLiabilityTotals(liabilities);
+                    //   Source: /api/liabilities (Supabase)
+                    const liabilityTotals = getLiabilityTotals(liabilitiesData);
                     const totalLiabilities = Number(liabilityTotals.totalOutstanding) || 0;
 
                     // netWorth = totalAssetsExInsurance − totalLiabilities
@@ -1675,7 +1686,7 @@ function DashboardContent() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Card 1: Liabilities — informational, uses existing liability totals */}
             {(() => {
-              const liabilityTotalsOverview = user?.id ? getLiabilityTotals(getLiabilities(user.id)) : { totalOutstanding: 0, totalEmi: 0 };
+              const liabilityTotalsOverview = getLiabilityTotals(liabilitiesData);
               return (
                 <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
                   <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Liabilities</h3>
@@ -1754,12 +1765,11 @@ function DashboardContent() {
         {/* NET WORTH OUTLOOK — Concise summary (table removed; full timeline on /liabilities) */}
         {/* ============================================================================ */}
         {isDataConsistent && (() => {
-          const liabilities = user?.id ? getLiabilities(user.id) : [];
-          const liabilityTotals = getLiabilityTotals(liabilities);
+          const liabilityTotals = getLiabilityTotals(liabilitiesData);
           const assetsTotal = portfolio.metrics.netWorth + liabilityTotals.totalOutstanding;
           const timeline = generateNetWorthTimeline({
             assetsTotal,
-            liabilities,
+            liabilities: liabilitiesData,
             months: 12,
           });
           const netWorthDelta = timeline.length >= 2

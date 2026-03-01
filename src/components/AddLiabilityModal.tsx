@@ -1,5 +1,5 @@
 /**
- * Add Liability Modal (UI-only)
+ * Add Liability Modal
  *
  * Multi-step onboarding for liabilities with type-specific fields.
  * Step 1: Select liability type
@@ -8,6 +8,8 @@
  * Step 4: EMI & payment (skipped for credit cards)
  * Step 5: Classification (secured, tax benefit, prepayment — pre-filled per type)
  * Step 6: Review & save
+ *
+ * Persists to Supabase via /api/liabilities.
  */
 
 'use client';
@@ -15,7 +17,6 @@
 import { useState, useEffect } from 'react';
 import { XIcon, CheckCircleIcon, AlertTriangleIcon, ArrowLeftIcon, InfoIcon } from './icons';
 import type { Liability, LiabilityType } from '@/lib/liabilities-store';
-import { addLiability, updateLiability } from '@/lib/liabilities-store';
 
 interface AddLiabilityModalProps {
   isOpen: boolean;
@@ -299,8 +300,7 @@ export default function AddLiabilityModal({
 
   // ── Submit ────────────────────────────────────────────────────────────────────
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (step !== 'review') return;
     if (!validateCore()) return;
 
@@ -338,10 +338,19 @@ export default function AddLiabilityModal({
         description: description.trim() || null,
       };
 
-      if (isEditing && existingLiability) {
-        updateLiability(userId, existingLiability.id, payload);
-      } else {
-        addLiability(userId, payload);
+      const response = await fetch('/api/liabilities', {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          isEditing
+            ? { user_id: userId, id: existingLiability!.id, ...payload }
+            : { user_id: userId, ...payload }
+        ),
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save liability');
       }
 
       setStep('success');
