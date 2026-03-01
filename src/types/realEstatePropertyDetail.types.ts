@@ -34,11 +34,14 @@ export interface RealEstatePropertyDetailData {
   monthlyRent: number | null;
   monthlyEmi: number | null;
   maintenanceMonthly: number | null;
-  propertyTaxMonthly: number | null;
+  propertyTaxMonthly: number | null;       // Ownership-adjusted, monthly (for display)
+  propertyTaxAnnual: number | null;        // Raw annual from DB (for editing in modal)
   otherExpensesMonthly: number | null;
   monthlyExpenses: number | null;
   netMonthlyCashFlow: number | null;
   escalationPercent: number | null;
+  rentalStatus: 'self_occupied' | 'rented' | 'vacant' | null;
+  rentStartDate: string | null;
 
   // Loan Fields
   loanId: string | null;
@@ -64,4 +67,8 @@ export interface RealEstatePropertyDetailData {
   state: string | null;
   pincode: string | null;
   valuationLastUpdated: string | null;
+
+  // Co-owner fields (migration 020)
+  coOwnerName: string | null;
+  coOwnerRelationship: string | null;
 }

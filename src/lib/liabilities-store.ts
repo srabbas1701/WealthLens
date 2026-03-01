@@ -25,6 +25,31 @@ export interface Liability {
   taxBenefit?: boolean;
   prepayment?: boolean;
   createdAt: string;
+
+  // Loan-type fields (HOME_LOAN, VEHICLE_LOAN, PERSONAL_LOAN, EDUCATION_LOAN)
+  originalLoanAmount?: number | null;
+  loanStartDate?: string | null;
+  tenureMonths?: number | null;
+
+  // VEHICLE_LOAN specific
+  vehicleType?: 'car' | 'bike' | 'commercial' | 'other' | null;
+  vehicleNumber?: string | null;
+
+  // CREDIT_CARD specific
+  creditLimit?: number | null;
+  billingCycleDate?: number | null; // day of month 1-28
+  minimumDue?: number | null;
+
+  // PERSONAL_LOAN specific
+  purpose?: string | null;
+
+  // EDUCATION_LOAN specific
+  institutionName?: string | null;
+  courseName?: string | null;
+  moratoriumMonths?: number | null;
+
+  // OTHER specific
+  description?: string | null;
 }
 
 const STORAGE_KEY_PREFIX = 'liabilities_';

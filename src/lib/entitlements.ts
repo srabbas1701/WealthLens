@@ -22,6 +22,12 @@ const DEFAULT_TRIAL_LIMITS: TrialLimits = {
   scenario_views_per_month: 5,
 };
 
+/** Paid plan AI query limits per month. Pro=10, Premium=25. */
+const PAID_PLAN_AI_LIMITS: Record<string, number> = {
+  pro: 10,
+  premium: 25,
+};
+
 async function getUserEntitlementsUncached(
   userId: string,
   supabase?: SupabaseClient
@@ -89,6 +95,11 @@ async function getUserEntitlementsUncached(
     entitlements.ai_remaining = Math.max(0, aiLimit - (usage.ai_used ?? 0));
     entitlements.scenario_remaining = Math.max(0, scenarioLimit - (usage.scenario_used ?? 0));
     entitlements.trial = { active: true, ends_at: trial.ends_at, limits };
+  } else if (planId && PAID_PLAN_AI_LIMITS[planId] !== undefined) {
+    // Paid plan (Pro/Premium): enforce monthly AI query limit
+    const paidAiLimit = PAID_PLAN_AI_LIMITS[planId];
+    const usage = await getUsageCounters(db, userId, DEFAULT_TRIAL_LIMITS);
+    entitlements.ai_remaining = Math.max(0, paidAiLimit - (usage.ai_used ?? 0));
   }
 
   return entitlements;
@@ -211,5 +222,75 @@ export async function incrementTrialUsage(
       analytics_views: type === 'scenario' ? 1 : 0,
     });
     if (insertError) console.error('[incrementTrialUsage] insert error:', insertError);
+  }
+}
+
+/**
+ * Increment AI usage for any user type (trial OR paid plan).
+ * Replaces incrementTrialUsage for the AI analyst endpoint.
+ * - Trial users: increments if trial is active
+ * - Pro/Premium users: always increments (limit was pre-checked by requirePaidAction)
+ */
+export async function incrementAIUsage(
+  db: SupabaseClient,
+  userId: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  const monthStart = getMonthStart();
+  const column = 'analyst_queries';
+
+  // Check if user is on an active trial
+  const { data: trial } = await db
+    .from('user_trials')
+    .select('ends_at')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .gt('ends_at', now)
+    .limit(1)
+    .maybeSingle();
+
+  // Check if user is on an active paid plan
+  const { data: sub } = await db
+    .from('user_subscriptions')
+    .select('tier')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .gt('current_period_end', now)
+    .limit(1)
+    .maybeSingle();
+
+  const shouldIncrement = !!trial?.ends_at || !!(sub?.tier && PAID_PLAN_AI_LIMITS[sub.tier] !== undefined);
+  if (!shouldIncrement) return;
+
+  const { data: row, error: fetchError } = await db
+    .from('subscription_usage')
+    .select(column)
+    .eq('user_id', userId)
+    .eq('month', monthStart)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error('[incrementAIUsage] fetch error:', fetchError);
+    return;
+  }
+
+  const current = (row as Record<string, number>)?.[column] ?? 0;
+  const next = current + 1;
+
+  if (row) {
+    const { error: updateError } = await db
+      .from('subscription_usage')
+      .update({ [column]: next })
+      .eq('user_id', userId)
+      .eq('month', monthStart);
+    if (updateError) console.error('[incrementAIUsage] update error:', updateError);
+  } else {
+    const { error: insertError } = await db.from('subscription_usage').insert({
+      user_id: userId,
+      month: monthStart,
+      analyst_queries: 1,
+      analytics_views: 0,
+    });
+    if (insertError) console.error('[incrementAIUsage] insert error:', insertError);
   }
 }

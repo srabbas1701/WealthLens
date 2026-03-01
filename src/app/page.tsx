@@ -303,7 +303,7 @@ export default function HomePage() {
               },
               {
                 icon: '📊',
-                title: 'Manual Tracking Hell',
+                title: 'Manual Tracking Mayhem',
                 description: 'Excel sheets with outdated values. Forgetting about that old FD. No idea what your EPF balance is today. Manually calculating PPF interest. Hours wasted every month just to know "What am I worth?"'
               },
               {

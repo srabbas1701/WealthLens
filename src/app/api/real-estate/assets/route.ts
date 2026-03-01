@@ -86,6 +86,8 @@ export async function POST(request: NextRequest) {
       system_estimated_min: body.system_estimated_min,
       system_estimated_max: body.system_estimated_max,
       valuation_last_updated: body.valuation_last_updated,
+      co_owner_name: body.co_owner_name ?? null,
+      co_owner_relationship: body.co_owner_relationship ?? null,
       loan: body.loan || null,
       cashflow: body.cashflow || null,
     });

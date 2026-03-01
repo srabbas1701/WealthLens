@@ -112,21 +112,35 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
   const validateBasic = () => {
     // Validate UAN (12 digits)
     if (!uan || !/^\d{12}$/.test(uan)) {
-      setError('Please enter a valid 12-digit UAN');
+      setError('Please enter a valid 12-digit UAN (exactly 12 digits)');
       return false;
     }
     if (!employerName || employerName.trim().length < 2) {
       setError('Please enter employer name');
       return false;
     }
-    
+
+    const today = new Date().toISOString().split('T')[0];
+    if (dateOfJoining && dateOfJoining > today) {
+      setError('Date of joining cannot be in the future');
+      return false;
+    }
+    if (dateOfLeaving && dateOfLeaving > today) {
+      setError('Date of leaving cannot be in the future');
+      return false;
+    }
+    if (dateOfLeaving && dateOfJoining && new Date(dateOfLeaving) <= new Date(dateOfJoining)) {
+      setError('Date of leaving must be after date of joining');
+      return false;
+    }
+
     setError(null);
     return true;
   };
 
   const validateFinancial = () => {
-    if (currentBalance < 0) {
-      setError('Current balance cannot be negative');
+    if (currentBalance <= 0) {
+      setError('Current balance must be greater than zero');
       return false;
     }
     if (employeeContributions < 0) {
@@ -150,17 +164,17 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
       setError('Please select last updated date');
       return false;
     }
-    
-    // Validate date of leaving if provided
-    if (dateOfLeaving && dateOfJoining) {
-      const joining = new Date(dateOfJoining);
-      const leaving = new Date(dateOfLeaving);
-      if (leaving <= joining) {
-        setError('Date of leaving must be after date of joining');
-        return false;
-      }
+
+    const today = new Date().toISOString().split('T')[0];
+    if (lastUpdated > today) {
+      setError('Last updated date cannot be in the future');
+      return false;
     }
-    
+    if (dateOfJoining && lastUpdated < dateOfJoining) {
+      setError('Last updated date cannot be before date of joining');
+      return false;
+    }
+
     setError(null);
     return true;
   };
@@ -234,6 +248,13 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
       case 'basic':
         return (
           <div className="space-y-6">
+            {error && (
+              <div className="p-4 bg-[#FEF2F2] dark:bg-[#7F1D1D] border border-[#FEE2E2] dark:border-[#EF4444] rounded-lg flex items-start gap-3">
+                <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] dark:text-[#EF4444] flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-[#991B1B] dark:text-[#FEE2E2]">{error}</p>
+              </div>
+            )}
+
             <div className="p-4 bg-[#EFF6FF] dark:bg-[#1E3A8A] border border-[#2563EB]/20 dark:border-[#3B82F6]/20 rounded-lg flex items-start gap-3">
               <InfoIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
               <div>
@@ -263,8 +284,8 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                 maxLength={12}
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
               />
-              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                12-digit unique identifier (e.g., 123456789012)
+              <p className={`text-xs mt-1 ${uan.length === 12 ? 'text-[#16A34A] dark:text-[#22C55E] font-medium' : 'text-[#6B7280] dark:text-[#94A3B8]'}`}>
+                {uan.length}/12 digits entered{uan.length === 12 ? ' ✓' : ' — must be exactly 12 digits'}
               </p>
             </div>
 
@@ -319,6 +340,7 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                   type="date"
                   value={dateOfJoining}
                   onChange={(e) => setDateOfJoining(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
                   className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
                 />
               </div>
@@ -330,23 +352,25 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                   type="date"
                   value={dateOfLeaving}
                   onChange={(e) => setDateOfLeaving(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
                   className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
                 />
               </div>
             </div>
 
-            {error && (
-              <div className="p-4 bg-[#FEF2F2] dark:bg-[#7F1D1D] border border-[#FEE2E2] dark:border-[#EF4444] rounded-lg flex items-start gap-3">
-                <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] dark:text-[#EF4444] flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-[#991B1B] dark:text-[#FEE2E2]">{error}</p>
-              </div>
-            )}
           </div>
         );
 
       case 'financial':
         return (
           <div className="space-y-6">
+            {error && (
+              <div className="p-4 bg-[#FEF2F2] dark:bg-[#7F1D1D] border border-[#FEE2E2] dark:border-[#EF4444] rounded-lg flex items-start gap-3">
+                <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] dark:text-[#EF4444] flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-[#991B1B] dark:text-[#FEE2E2]">{error}</p>
+              </div>
+            )}
+
             <div className="p-4 bg-[#F0FDF4] dark:bg-[#14532D] border border-[#16A34A]/20 dark:border-[#22C55E]/20 rounded-lg">
               <p className="text-sm text-[#15803D] dark:text-[#86EFAC]">
                 Enter your current EPF balance and contribution details. Interest earned will be auto-calculated.
@@ -439,7 +463,7 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                 </label>
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   min="0"
                   max="15"
                   value={interestRate}
@@ -468,12 +492,6 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               </div>
             </div>
 
-            {error && (
-              <div className="p-4 bg-[#FEF2F2] dark:bg-[#7F1D1D] border border-[#FEE2E2] dark:border-[#EF4444] rounded-lg flex items-start gap-3">
-                <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] dark:text-[#EF4444] flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-[#991B1B] dark:text-[#FEE2E2]">{error}</p>
-              </div>
-            )}
           </div>
         );
 

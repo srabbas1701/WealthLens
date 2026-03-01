@@ -37,6 +37,67 @@ interface EPFHoldingResponse {
 }
 
 // ============================================================================
+// VALIDATION HELPER
+// ============================================================================
+
+function validateEPFData(body: EPFHoldingRequest): string | null {
+  const { uan, employerName, currentBalance, employeeContributions, employerContributions,
+          interestRate, lastUpdated, dateOfJoining, dateOfLeaving } = body;
+
+  if (!uan || !/^\d{12}$/.test(uan)) {
+    return 'UAN must be exactly 12 digits';
+  }
+  if (!employerName || employerName.trim().length < 2) {
+    return 'Employer name is required';
+  }
+  if (currentBalance === undefined || currentBalance <= 0) {
+    return 'Current balance must be greater than zero';
+  }
+  if (employeeContributions < 0) {
+    return 'Employee contributions cannot be negative';
+  }
+  if (employerContributions < 0) {
+    return 'Employer contributions cannot be negative';
+  }
+  const totalContributions = employeeContributions + employerContributions;
+  if (currentBalance < totalContributions) {
+    return 'Current balance cannot be less than total contributions';
+  }
+  if (interestRate !== undefined && (interestRate < 0 || interestRate > 15)) {
+    return 'Interest rate must be between 0 and 15%';
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+
+  if (dateOfJoining) {
+    const joiningStr = dateOfJoining.split('T')[0];
+    if (joiningStr > today) {
+      return 'Date of joining cannot be in the future';
+    }
+  }
+  if (dateOfLeaving) {
+    const leavingStr = dateOfLeaving.split('T')[0];
+    if (leavingStr > today) {
+      return 'Date of leaving cannot be in the future';
+    }
+    if (dateOfJoining && new Date(dateOfLeaving) <= new Date(dateOfJoining)) {
+      return 'Date of leaving must be after date of joining';
+    }
+  }
+  if (lastUpdated) {
+    const updatedStr = lastUpdated.split('T')[0];
+    if (updatedStr > today) {
+      return 'Last updated date cannot be in the future';
+    }
+    if (dateOfJoining && updatedStr < dateOfJoining.split('T')[0]) {
+      return 'Last updated date cannot be before date of joining';
+    }
+  }
+
+  return null; // All valid
+}
+
+// ============================================================================
 // POST - Create EPF Account
 // ============================================================================
 
@@ -58,18 +119,17 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
 
     // Validate required fields
-    if (!user_id || !uan || !employerName || currentBalance === undefined || 
-        employeeContributions === undefined || employerContributions === undefined) {
+    if (!user_id) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: 'Missing user_id' },
         { status: 400 }
       );
     }
 
-    // Validate UAN format (12 digits)
-    if (!/^\d{12}$/.test(uan)) {
+    const validationError = validateEPFData(body);
+    if (validationError) {
       return NextResponse.json(
-        { success: false, error: 'UAN must be exactly 12 digits' },
+        { success: false, error: validationError },
         { status: 400 }
       );
     }
@@ -221,18 +281,17 @@ export async function PUT(request: NextRequest) {
     console.log('[EPF API] Updating EPF account:', { holdingId, uan });
 
     // Validate required fields
-    if (!user_id || !holdingId || !uan || !employerName || currentBalance === undefined || 
-        employeeContributions === undefined || employerContributions === undefined) {
+    if (!user_id || !holdingId) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: 'Missing user_id or holdingId' },
         { status: 400 }
       );
     }
 
-    // Validate UAN format (12 digits)
-    if (!/^\d{12}$/.test(uan)) {
+    const validationError = validateEPFData(body);
+    if (validationError) {
       return NextResponse.json(
-        { success: false, error: 'UAN must be exactly 12 digits' },
+        { success: false, error: validationError },
         { status: 400 }
       );
     }

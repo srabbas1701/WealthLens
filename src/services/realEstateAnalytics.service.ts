@@ -556,8 +556,9 @@ async function calculateRealEstateXIRR(
       // Calculate ownership-adjusted monthly rent
       const monthlyRentAdjusted = monthlyRent * (ownership / 100);
       
-      // Add monthly rental income
-      for (let i = 0; i <= rentMonths; i++) {
+      // Add monthly rental income (start at i=1 — first payment is one month after rent starts,
+      // consistent with how EMI payments begin one month after loan disbursal)
+      for (let i = 1; i <= rentMonths; i++) {
         const rentDate = new Date(rentStart);
         rentDate.setMonth(rentDate.getMonth() + i);
         

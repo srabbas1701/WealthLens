@@ -80,9 +80,10 @@ export function validateStep3(draft: RealEstateDraft): ValidationResult {
 export function validateStep4(draft: RealEstateDraft): ValidationResult {
   const errors: string[] = [];
   
-  // RERA number format validation (if provided)
-  if (draft.reraNumber && !/^[A-Z]{2}\/[A-Z]{2}\/REALESTATE\/\d{4}\/\d{5}$/i.test(draft.reraNumber)) {
-    errors.push('RERA number format is invalid (expected: XX/XX/REALESTATE/YYYY/XXXXX)');
+  // RERA number validation (if provided) — accept any 5-30 character alphanumeric string
+  // RERA formats vary significantly by state (MahaRERA, RERA UP, DDA, etc.)
+  if (draft.reraNumber && (draft.reraNumber.trim().length < 5 || draft.reraNumber.trim().length > 50)) {
+    errors.push('RERA number should be between 5 and 50 characters');
   }
   
   // Area validation (if provided)
@@ -147,23 +148,28 @@ export function validateStep5(draft: RealEstateDraft): ValidationResult {
  */
 export function validateStep6(draft: RealEstateDraft): ValidationResult {
   const errors: string[] = [];
-  
+  const warnings: string[] = [];
+
   if (!draft.hasRental) {
     return { valid: true, errors: [] }; // Skip validation if no rental
   }
-  
+
   if (!draft.cashflow) {
     errors.push('Cashflow details are required when rental is enabled');
     return { valid: false, errors };
   }
-  
+
   // If rented, monthly rent is required
   if (draft.cashflow.rentalStatus === 'rented') {
     if (draft.cashflow.monthlyRent === null || draft.cashflow.monthlyRent <= 0) {
       errors.push('Monthly rent is required for rented properties');
     }
+    // Warn about missing rent_start_date — silently breaks XIRR if absent
+    if (!draft.cashflow.rentStartDate) {
+      warnings.push('Rent start date is recommended — without it, rent income is excluded from XIRR calculation');
+    }
   }
-  
+
   // Expense validations
   if (draft.cashflow.maintenanceMonthly !== null && draft.cashflow.maintenanceMonthly < 0) {
     errors.push('Maintenance charges cannot be negative');
@@ -174,12 +180,12 @@ export function validateStep6(draft: RealEstateDraft): ValidationResult {
   if (draft.cashflow.otherExpensesMonthly !== null && draft.cashflow.otherExpensesMonthly < 0) {
     errors.push('Other expenses cannot be negative');
   }
-  if (draft.cashflow.escalationPercent !== null && 
+  if (draft.cashflow.escalationPercent !== null &&
       (draft.cashflow.escalationPercent < 0 || draft.cashflow.escalationPercent > 100)) {
     errors.push('Rent escalation percentage must be between 0 and 100');
   }
-  
-  return { valid: errors.length === 0, errors };
+
+  return { valid: errors.length === 0, errors, warnings };
 }
 
 /**

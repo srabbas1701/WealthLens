@@ -29,6 +29,8 @@ export interface UpdateRealEstateAssetInput {
   carpet_area_sqft?: number | null;
   builtup_area_sqft?: number | null;
   user_override_value?: number | null;
+  co_owner_name?: string | null;
+  co_owner_relationship?: string | null;
 }
 
 export interface UpdateRealEstateAssetResult {
@@ -221,7 +223,16 @@ export async function updateRealEstateAsset(
     if (updates.user_override_value !== undefined) {
       updateData.user_override_value = updates.user_override_value;
     }
-    
+
+    // Co-owner fields (migration 020)
+    const extendedUpdateData = updateData as Record<string, unknown>;
+    if (updates.co_owner_name !== undefined) {
+      extendedUpdateData.co_owner_name = updates.co_owner_name;
+    }
+    if (updates.co_owner_relationship !== undefined) {
+      extendedUpdateData.co_owner_relationship = updates.co_owner_relationship;
+    }
+
     // Explicitly exclude system_estimated_min/max to prevent overwriting
     // (Even if someone tries to pass them, they won't be in updateData)
     
@@ -229,7 +240,7 @@ export async function updateRealEstateAsset(
     // updated_at is automatically updated by database trigger
     const { data: updatedAsset, error: updateError } = await supabase
       .from('real_estate_assets')
-      .update(updateData)
+      .update(extendedUpdateData as RealEstateAssetUpdate)
       .eq('id', assetId)
       .eq('user_id', userId) // Defense in depth
       .select()

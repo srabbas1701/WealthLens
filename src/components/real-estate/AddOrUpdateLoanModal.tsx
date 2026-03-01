@@ -3,6 +3,10 @@
  *
  * Modal for adding a new loan or updating full loan details for a property.
  * Mirrors the rental-details flow: same UX for add vs update.
+ *
+ * Features:
+ * - EMI auto-calculation from loan amount + interest rate + tenure
+ * - Outstanding balance warning when field is left blank
  */
 
 'use client';
@@ -28,6 +32,18 @@ interface AddOrUpdateLoanModalProps {
   onSuccess: () => void;
 }
 
+/**
+ * Standard EMI formula: P × r × (1+r)^n / ((1+r)^n - 1)
+ * P = principal, r = monthly rate (annual% / 12 / 100), n = tenure months
+ */
+function computeEMI(principal: number, annualRatePercent: number, tenureMonths: number): number | null {
+  if (principal <= 0 || annualRatePercent <= 0 || tenureMonths <= 0) return null;
+  const r = annualRatePercent / 12 / 100;
+  const n = tenureMonths;
+  const emi = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  return Math.round(emi * 100) / 100;
+}
+
 export default function AddOrUpdateLoanModal({
   isOpen,
   onClose,
@@ -45,6 +61,7 @@ export default function AddOrUpdateLoanModal({
   const [emi, setEmi] = useState<string>('');
   const [tenureMonths, setTenureMonths] = useState<string>('');
   const [outstandingBalance, setOutstandingBalance] = useState<string>('');
+  const [emiAutoCalculated, setEmiAutoCalculated] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -54,9 +71,26 @@ export default function AddOrUpdateLoanModal({
       setEmi(currentData.emi?.toString() ?? '');
       setTenureMonths(currentData.tenureMonths?.toString() ?? '');
       setOutstandingBalance(currentData.outstandingBalance?.toString() ?? '');
+      setEmiAutoCalculated(false);
       setError(null);
     }
   }, [isOpen, currentData]);
+
+  // Auto-calculate EMI when all 3 inputs are filled
+  const handleCalculateEMI = () => {
+    const principal = parseFloat(loanAmount);
+    const rate = parseFloat(interestRate);
+    const tenure = parseFloat(tenureMonths);
+    const computed = computeEMI(principal, rate, tenure);
+    if (computed !== null) {
+      setEmi(computed.toString());
+      setEmiAutoCalculated(true);
+    }
+  };
+
+  const canCalculateEMI =
+    !!loanAmount && !!interestRate && !!tenureMonths &&
+    parseFloat(loanAmount) > 0 && parseFloat(interestRate) > 0 && parseFloat(tenureMonths) > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,8 +119,8 @@ export default function AddOrUpdateLoanModal({
         loan_amount: amount,
         interest_rate: interestRate ? parseFloat(interestRate) : null,
         emi: emi ? parseFloat(emi) : null,
-        tenure_months: tenureMonths ? parseFloat(tenureMonths) : null,
-        outstanding_balance: ob ?? amount,
+        tenure_months: tenureMonths ? parseInt(tenureMonths, 10) : null,
+        outstanding_balance: ob ?? amount, // Defaults to full loan amount if not provided
       };
 
       const response = await fetch(`/api/real-estate/assets/${propertyId}/loan`, {
@@ -172,15 +206,15 @@ export default function AddOrUpdateLoanModal({
             </div>
 
             <div>
-              <Label htmlFor="loanAmount">Loan Amount (₹) *</Label>
+              <Label htmlFor="loanAmount">Original Loan Amount (₹) *</Label>
               <Input
                 id="loanAmount"
                 type="number"
                 step="0.01"
-                min="0"
+                min="1"
                 value={loanAmount}
-                onChange={(e) => setLoanAmount(e.target.value)}
-                placeholder="0"
+                onChange={(e) => { setLoanAmount(e.target.value); setEmiAutoCalculated(false); }}
+                placeholder="e.g. 5000000"
                 required
               />
             </div>
@@ -194,21 +228,8 @@ export default function AddOrUpdateLoanModal({
                 min="0"
                 max="100"
                 value={interestRate}
-                onChange={(e) => setInterestRate(e.target.value)}
-                placeholder="0"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="emi">EMI (₹/month)</Label>
-              <Input
-                id="emi"
-                type="number"
-                step="0.01"
-                min="0"
-                value={emi}
-                onChange={(e) => setEmi(e.target.value)}
-                placeholder="0"
+                onChange={(e) => { setInterestRate(e.target.value); setEmiAutoCalculated(false); }}
+                placeholder="e.g. 8.5"
               />
             </div>
 
@@ -218,11 +239,46 @@ export default function AddOrUpdateLoanModal({
                 id="tenureMonths"
                 type="number"
                 step="1"
-                min="0"
+                min="1"
                 value={tenureMonths}
-                onChange={(e) => setTenureMonths(e.target.value)}
-                placeholder="e.g. 240"
+                onChange={(e) => { setTenureMonths(e.target.value); setEmiAutoCalculated(false); }}
+                placeholder="e.g. 240 (20 years)"
               />
+            </div>
+
+            {/* EMI field with auto-calculate */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="emi">EMI (₹/month)</Label>
+                {canCalculateEMI && (
+                  <button
+                    type="button"
+                    onClick={handleCalculateEMI}
+                    className="text-xs text-primary font-medium hover:underline"
+                  >
+                    Calculate EMI
+                  </button>
+                )}
+              </div>
+              <Input
+                id="emi"
+                type="number"
+                step="0.01"
+                min="0"
+                value={emi}
+                onChange={(e) => { setEmi(e.target.value); setEmiAutoCalculated(false); }}
+                placeholder="e.g. 43391"
+              />
+              {emiAutoCalculated && (
+                <p className="mt-1 text-xs text-green-600 dark:text-green-400">
+                  Auto-calculated from loan amount, rate, and tenure.
+                </p>
+              )}
+              {!emiAutoCalculated && canCalculateEMI && !emi && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Fill loan amount, rate, and tenure then click &ldquo;Calculate EMI&rdquo; above.
+                </p>
+              )}
             </div>
 
             <div>
@@ -234,11 +290,17 @@ export default function AddOrUpdateLoanModal({
                 min="0"
                 value={outstandingBalance}
                 onChange={(e) => setOutstandingBalance(e.target.value)}
-                placeholder="Leave blank to use loan amount"
+                placeholder="e.g. 3800000"
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Current amount owed. Defaults to loan amount if empty.
-              </p>
+              {!outstandingBalance ? (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  If left blank, we assume the full loan amount is still outstanding. Enter your current balance from your bank statement for accurate net worth.
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Current remaining principal. Check your latest bank statement or loan account.
+                </p>
+              )}
             </div>
           </div>
         </form>

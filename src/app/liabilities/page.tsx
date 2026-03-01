@@ -53,6 +53,59 @@ const LIABILITY_TYPE_LABELS: Record<LiabilityType, string> = {
   OTHER: 'Other',
 };
 
+const VEHICLE_TYPE_LABELS: Record<string, string> = {
+  car: 'Car / SUV',
+  bike: 'Two-Wheeler',
+  commercial: 'Commercial Vehicle',
+  other: 'Vehicle',
+};
+
+function getTypeSpecificSummary(liability: Liability): string | null {
+  switch (liability.type) {
+    case 'HOME_LOAN': {
+      const parts: string[] = [];
+      if (liability.originalLoanAmount) parts.push(`₹${Math.round(liability.originalLoanAmount / 100000)}L original`);
+      if (liability.tenureMonths) parts.push(`${liability.tenureMonths}M tenure`);
+      if (liability.loanStartDate) parts.push(`from ${new Date(liability.loanStartDate).getFullYear()}`);
+      return parts.length > 0 ? parts.join(' • ') : null;
+    }
+    case 'VEHICLE_LOAN': {
+      const parts: string[] = [];
+      if (liability.vehicleType) parts.push(VEHICLE_TYPE_LABELS[liability.vehicleType] ?? liability.vehicleType);
+      if (liability.vehicleNumber) parts.push(liability.vehicleNumber);
+      if (liability.tenureMonths) parts.push(`${liability.tenureMonths}M tenure`);
+      return parts.length > 0 ? parts.join(' • ') : null;
+    }
+    case 'CREDIT_CARD': {
+      const parts: string[] = [];
+      if (liability.creditLimit) {
+        const utilization = Math.round((liability.outstanding / liability.creditLimit) * 100);
+        parts.push(`₹${Math.round(liability.creditLimit / 1000)}K limit • ${utilization}% utilized`);
+      }
+      if (liability.billingCycleDate) parts.push(`Statement on ${liability.billingCycleDate}th`);
+      return parts.length > 0 ? parts.join(' • ') : null;
+    }
+    case 'PERSONAL_LOAN': {
+      const parts: string[] = [];
+      if (liability.purpose) parts.push(liability.purpose);
+      if (liability.originalLoanAmount) parts.push(`₹${Math.round(liability.originalLoanAmount / 100000)}L original`);
+      if (liability.tenureMonths) parts.push(`${liability.tenureMonths}M tenure`);
+      return parts.length > 0 ? parts.join(' • ') : null;
+    }
+    case 'EDUCATION_LOAN': {
+      const parts: string[] = [];
+      if (liability.institutionName) parts.push(liability.institutionName);
+      if (liability.courseName) parts.push(liability.courseName);
+      if (liability.moratoriumMonths) parts.push(`${liability.moratoriumMonths}M moratorium`);
+      return parts.length > 0 ? parts.join(' • ') : null;
+    }
+    case 'OTHER':
+      return liability.description || null;
+    default:
+      return null;
+  }
+}
+
 export default function LiabilitiesPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
@@ -384,6 +437,8 @@ export default function LiabilitiesPage() {
                   const isExpanded = expandedInsightId === liability.id;
                   const prepaymentInput = prepaymentInputByLiabilityId[liability.id] ?? '';
                   const prepaymentResult = prepaymentResultByLiabilityId[liability.id];
+                  const typeSpecificSummary = getTypeSpecificSummary(liability);
+                  const isCreditCard = liability.type === 'CREDIT_CARD';
 
                   return (
                     <div key={liability.id} className="hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
@@ -403,6 +458,11 @@ export default function LiabilitiesPage() {
                           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
                             {LIABILITY_TYPE_LABELS[liability.type]}
                           </p>
+                          {typeSpecificSummary && (
+                            <p className="text-xs text-[#9CA3AF] dark:text-[#64748B] mt-0.5 truncate max-w-sm">
+                              {typeSpecificSummary}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center gap-4 sm:gap-6">
                           <div className="text-right">
@@ -413,7 +473,29 @@ export default function LiabilitiesPage() {
                               Outstanding
                             </p>
                           </div>
-                          {hasEmi && (
+                          {/* Show credit limit utilization for credit cards */}
+                          {isCreditCard && liability.creditLimit && (
+                            <div className="text-right hidden sm:block">
+                              <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                                {formatCurrency(liability.creditLimit)}
+                              </p>
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                                Credit Limit
+                              </p>
+                            </div>
+                          )}
+                          {/* Show min due for credit cards, EMI for others */}
+                          {isCreditCard && liability.minimumDue && (
+                            <div className="text-right hidden sm:block">
+                              <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                                {formatCurrency(liability.minimumDue)}
+                              </p>
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                                Min Due
+                              </p>
+                            </div>
+                          )}
+                          {!isCreditCard && hasEmi && (
                             <div className="text-right hidden sm:block">
                               <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                                 {formatCurrency(liability.emi)}
@@ -455,19 +537,27 @@ export default function LiabilitiesPage() {
 
                       {/* Expandable Cost & Insights — inline, no modal */}
                       {isExpanded && (
-                        <div className="px-6 pb-4 pt-0 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F9FAFB] dark:bg-[#0F172A]">
+                        <div className="px-6 pb-4 pt-4 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F9FAFB] dark:bg-[#0F172A]">
                           <p className="text-xs font-medium text-muted-foreground mb-3">
                             Cost & Insights
                           </p>
                           <div className="space-y-3">
+                            {/* Credit card: utilization warning */}
+                            {isCreditCard && liability.creditLimit && (
+                              <p className="text-sm text-muted-foreground">
+                                Credit utilization: {Math.round((liability.outstanding / liability.creditLimit) * 100)}% of ₹{Math.round(liability.creditLimit / 1000)}K limit.
+                                {Math.round((liability.outstanding / liability.creditLimit) * 100) > 30 && ' High utilization can hurt your credit score — aim to keep below 30%.'}
+                              </p>
+                            )}
                             {/* Approx yearly interest — if calculable */}
                             {approxCost != null && (
                               <p className="text-sm text-muted-foreground">
-                                Approx. yearly interest: {formatCurrency(approxCost.yearlyInterest)}
+                                Approx. yearly interest cost: {formatCurrency(approxCost.yearlyInterest)}
+                                {isCreditCard && <span className="ml-1 text-xs">(if balance carried month-to-month)</span>}
                               </p>
                             )}
-                            {/* Prepayment input + Calculate — only if EMI exists */}
-                            {hasEmi && (
+                            {/* Prepayment input + Calculate — only if EMI exists (not credit card) */}
+                            {hasEmi && !isCreditCard && (
                               <div className="flex flex-wrap items-center gap-2">
                                 <input
                                   type="number"
@@ -481,14 +571,14 @@ export default function LiabilitiesPage() {
                                       [liability.id]: e.target.value,
                                     }))
                                   }
-                                  className="w-40 px-3 py-2 text-sm rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B]"
+                                  className="w-44 px-3 py-2 text-sm rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B]"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => handlePrepaymentCalculate(liability)}
                                   className="px-3 py-2 text-sm font-medium rounded-lg bg-[#E5E7EB] dark:bg-[#334155] text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#D1D5DB] dark:hover:bg-[#475569] transition-colors"
                                 >
-                                  Calculate
+                                  Calculate Prepayment
                                 </button>
                               </div>
                             )}
@@ -500,7 +590,20 @@ export default function LiabilitiesPage() {
                                   ` • ~${prepaymentResult.approxMonthsSaved} months saved`}
                               </p>
                             )}
-                            {/* TODO: timeline, export, credit score when available */}
+                            {/* Education loan: moratorium note */}
+                            {liability.type === 'EDUCATION_LOAN' && liability.moratoriumMonths && (
+                              <p className="text-sm text-muted-foreground">
+                                Moratorium period: {liability.moratoriumMonths} months. Interest may still accrue during this period.
+                              </p>
+                            )}
+                            {/* Tax benefit reminder */}
+                            {liability.taxBenefit && (
+                              <p className="text-sm text-muted-foreground">
+                                {liability.type === 'HOME_LOAN' && 'Principal repayment eligible under 80C (₹1.5L) and interest under 24b (₹2L) — check with your CA.'}
+                                {liability.type === 'EDUCATION_LOAN' && 'Interest paid is deductible under Section 80E with no upper limit for 8 years.'}
+                                {liability.type !== 'HOME_LOAN' && liability.type !== 'EDUCATION_LOAN' && 'Tax benefit eligible — consult your CA for applicable deductions.'}
+                              </p>
+                            )}
                           </div>
                         </div>
                       )}

@@ -119,13 +119,18 @@ export async function requirePaidAction(
   const remainingKey = LIMIT_BY_CAPABILITY[capabilityKey];
   if (remainingKey) {
     const remaining = entitlements[remainingKey];
-    // Only enforce limits for trial users (remaining is a number).
-    // Paid plan users never have remaining set — they get unlimited access.
+    // Enforce limits for both trial users and paid plan users with monthly caps.
+    // ai_remaining is set for trial users (limit 15) and paid plan users (Pro: 10, Premium: 25).
     if (typeof remaining === 'number' && remaining <= 0) {
+      const isTrialUser = !!entitlements.trial;
       return {
         ok: false,
         response: NextResponse.json(
-          { error: 'Trial limit exceeded', details: `No ${remainingKey} remaining this period` },
+          {
+            error: isTrialUser ? 'Trial limit exceeded' : 'Monthly limit reached',
+            details: `No ${remainingKey} remaining this period`,
+            is_trial: isTrialUser,
+          },
           { status: 429 }
         ),
       };

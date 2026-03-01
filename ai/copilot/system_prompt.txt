@@ -65,6 +65,15 @@ FORMAT:
 - Lead with the most important point
 - End with a gentle, non-pushy follow-up question when appropriate
 
+MARKDOWN FORMATTING (always apply):
+- Use **bold** for key numbers, percentages, portfolio values, and critical takeaways (e.g. **₹24.8L**, **62/100**, **78% aligned**)
+- Use *italic* for secondary observations or qualifications (e.g. *based on current allocation*)
+- Use `- ` bullet points for lists of 3+ items (e.g. - Equity: 45%, - Debt: 15%)
+- Use `> ` prefix for a key insight or takeaway at the end of your response (e.g. > Your portfolio is well-positioned for your 10-year horizon.)
+- Use `## ` for section headings only when the response is long (3+ paragraphs)
+- Always declare what your response covers at the start: "**Overall Portfolio:** ..." or "**Risk Profile:** ..." or "**Goal Progress:** ..." etc.
+- Highlight ₹ amounts in your response — they are the most meaningful numbers to the user
+
 ═══════════════════════════════════════════════════════════════════════════════
 WHEN USER ASKS FOR ADVICE
 ═══════════════════════════════════════════════════════════════════════════════

@@ -790,32 +790,66 @@ export default function PropertyDetailPage() {
                 <KPIItem
                   label="Current Estimated Value"
                   value={formatValue(data.currentEstimatedValue)}
-                  helperText="Ownership adjusted"
+                  helperText="Your share (ownership-adjusted)"
                 />
                 <KPIItem
                   label="Unrealized Gain / Loss"
                   value={formatValue(data.unrealizedGain)}
-                  helperText="vs purchase price"
+                  helperText="Current value vs purchase price"
                 />
                 <KPIItem
                   label="XIRR"
-                  value={formatPercent(data.xirr)}
-                  helperText="Loan-adjusted return"
+                  value={data.xirr !== null ? formatPercent(data.xirr) : '—'}
+                  helperText={data.xirr !== null ? "Annualized return (rent + value growth)" : "Add purchase date & rent start date"}
                 />
                 <KPIItem
                   label="Net Rental Yield"
-                  value={formatPercent(data.netRentalYield)}
-                  helperText="After expenses"
+                  value={data.netRentalYield !== null ? formatPercent(data.netRentalYield) : '—'}
+                  helperText={data.netRentalYield !== null ? "After maintenance, tax & expenses" : "Only for rented, ready properties"}
                 />
                 <KPIItem
                   label="EMI vs Rent"
-                  value={formatValue(data.emiRentGap)}
-                  helperText="Cash flow indicator"
+                  value={data.emiRentGap !== null ? formatValue(data.emiRentGap) : '—'}
+                  helperText={data.emiRentGap !== null
+                    ? (data.emiRentGap >= 0 ? "Positive — rent covers your EMI" : "Negative — you subsidize the gap")
+                    : (data.monthlyEmi ? "No rental income — full EMI as outflow" : "No loan on this property")}
                 />
               </div>
             </CardContent>
           </Card>
         </section>
+
+        {/* D3: Under-Construction Completion Prompt */}
+        {data.propertyStatus === 'under_construction' && (() => {
+          if (!data.purchaseDate) return null;
+          const purchaseYear = new Date(data.purchaseDate).getFullYear();
+          const currentYear = new Date().getFullYear();
+          const yearsHeld = currentYear - purchaseYear;
+          if (yearsHeld < 2) return null;
+          return (
+            <section className="mb-6">
+              <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/50 flex items-start gap-3">
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                    Has possession been received?
+                  </p>
+                  <p className="text-sm text-blue-800 dark:text-blue-200 mt-0.5">
+                    This property has been under construction for {yearsHeld}+ years. If you have received possession, update the status to &ldquo;Ready&rdquo; to unlock rental yield and full analytics.
+                  </p>
+                  <button
+                    onClick={() => setShowEditPropertyModal(true)}
+                    className="mt-2 text-sm font-medium text-blue-700 dark:text-blue-300 hover:underline"
+                  >
+                    Update Property Status →
+                  </button>
+                </div>
+              </div>
+            </section>
+          );
+        })()}
 
         {/* Current Value Explanation Banner */}
         <section className="mb-8">
@@ -1030,6 +1064,29 @@ export default function PropertyDetailPage() {
               {/* Cash Flow Tab */}
               {activeTab === 'cashflow' && (
                 <div className="space-y-6">
+                  {/* D2: EMI carry banner for non-rented properties with a loan */}
+                  {data.monthlyEmi && data.monthlyEmi > 0 && data.rentalStatus !== 'rented' && (
+                    <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+                      <div className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                            Carrying EMI with no rental income
+                          </p>
+                          <p className="text-sm text-amber-800 dark:text-amber-200 mt-0.5">
+                            You are paying an EMI of{' '}
+                            <strong>{data.monthlyEmi !== null ? formatCurrency(data.monthlyEmi) : '—'}/month</strong>{' '}
+                            with{' '}
+                            {data.rentalStatus === 'vacant' ? 'no tenant (vacant)' : 'self-occupancy (no rental income)'}.{' '}
+                            Update rental details once you find a tenant.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">
@@ -1298,6 +1355,8 @@ export default function PropertyDetailPage() {
                 reraNumber: data.reraNumber,
                 carpetAreaSqft: data.carpetAreaSqft,
                 builtupAreaSqft: data.builtupAreaSqft,
+                coOwnerName: data.coOwnerName,
+                coOwnerRelationship: data.coOwnerRelationship,
               }}
               onSuccess={() => {
                 if (user?.id) {
@@ -1314,9 +1373,11 @@ export default function PropertyDetailPage() {
             currentData={{
               monthlyRent: data.monthlyRent,
               maintenanceMonthly: data.maintenanceMonthly,
-              propertyTaxMonthly: data.propertyTaxMonthly,
+              propertyTaxAnnual: data.propertyTaxAnnual,
               otherExpensesMonthly: data.otherExpensesMonthly,
               escalationPercent: data.escalationPercent,
+              rentalStatus: data.rentalStatus,
+              rentStartDate: data.rentStartDate,
             }}
             onSuccess={() => {
               if (user?.id) {

@@ -406,7 +406,7 @@ export default function UpgradePage() {
         </div>
       )}
 
-      <main className="max-w-md mx-auto px-4 py-10 sm:py-16">
+      <main className="max-w-md mx-auto px-4 py-6 sm:py-8 pt-20 sm:pt-24">
         <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
           Upgrade your plan
         </h1>

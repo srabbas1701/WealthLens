@@ -183,19 +183,24 @@ export default function EPFHoldingsPage() {
                 }
               }
 
+              const employeeContributions = epfMetadata.employeeContributions || 0;
+              const employerContributions = epfMetadata.employerContributions || 0;
               return {
                 id: h.id,
-                uanNumber: epfMetadata.uanNumber || h.name || 'Not provided',
-                employeeName: epfMetadata.employeeName || 'Not provided',
-                employerName: epfMetadata.employerName || 'Not provided',
+                uan: epfMetadata.uan || '',
+                memberId: epfMetadata.memberId || null,
+                employerName: epfMetadata.employerName || '',
+                employerCode: epfMetadata.employerCode || null,
                 dateOfJoining: epfMetadata.dateOfJoining || null,
-                employeeContributions: epfMetadata.employeeContributions || epfMetadata.employeeContribution || 0,
-                employerContributions: epfMetadata.employerContributions || epfMetadata.employerContribution || 0,
+                dateOfLeaving: epfMetadata.dateOfLeaving || null,
+                currentBalance: epfMetadata.currentBalance || h.currentValue || h.investedValue || 0,
+                employeeContributions,
+                employerContributions,
+                totalContributions: employeeContributions + employerContributions,
                 interestEarned: epfMetadata.interestEarned || 0,
                 interestRate: epfMetadata.interestRate || 8.25,
-                pensionContribution: epfMetadata.pensionContribution || 0,
-                currentBalance: h.currentValue || h.investedValue || 0,
                 lastUpdated: epfMetadata.lastUpdated || new Date().toISOString(),
+                notes: h.notes,
               };
             });
 

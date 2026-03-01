@@ -43,6 +43,8 @@ export interface CopilotQueryRequest {
   source: Source;
   intent: Intent;
   question: string;
+  /** Conversation history for multi-turn context (last N exchanges) */
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
 /**
@@ -64,6 +66,10 @@ export interface CopilotQueryResponse {
   explanation?: string;
   confidence_level: ConfidenceLevel;
   follow_up_suggestions?: string[];
+  /** Remaining AI queries this month (for Pro/Premium/Trial users with monthly caps) */
+  remaining_queries?: number;
+  /** Monthly query limit for this user's plan */
+  query_limit?: number;
 }
 
 // =============================================================================

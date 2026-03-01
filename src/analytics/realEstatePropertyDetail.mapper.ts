@@ -42,7 +42,7 @@ export async function getRealEstatePropertyDetailData(
   const ownership = ownershipPercentage / 100;
 
   const maintenanceMonthlyRaw = cashflow?.maintenance_monthly ?? null;
-  const propertyTaxAnnualRaw = cashflow?.property_tax_annual ?? null;
+  const propertyTaxAnnualRaw = cashflow?.property_tax_annual ?? null; // Raw DB value (for editing)
   const otherExpensesMonthlyRaw = cashflow?.other_expenses_monthly ?? null;
 
   const maintenanceMonthly =
@@ -101,10 +101,13 @@ export async function getRealEstatePropertyDetailData(
     monthlyEmi,
     maintenanceMonthly,
     propertyTaxMonthly,
+    propertyTaxAnnual: propertyTaxAnnualRaw,  // Raw annual value for modal editing
     otherExpensesMonthly,
     monthlyExpenses,
     netMonthlyCashFlow,
     escalationPercent: cashflow?.escalation_percent ?? null,
+    rentalStatus: cashflow?.rental_status ?? null,
+    rentStartDate: cashflow?.rent_start_date ?? null,
 
     // Loan Fields
     loanId: loan?.id ?? null,
@@ -132,5 +135,8 @@ export async function getRealEstatePropertyDetailData(
     state: asset.state,
     pincode: asset.pincode,
     valuationLastUpdated: asset.valuation_last_updated,
+    // Co-owner fields (migration 020 — cast for type safety until types are regenerated)
+    coOwnerName: (asset as unknown as Record<string, unknown>).co_owner_name as string | null ?? null,
+    coOwnerRelationship: (asset as unknown as Record<string, unknown>).co_owner_relationship as string | null ?? null,
   };
 }

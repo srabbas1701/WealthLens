@@ -3,7 +3,7 @@
 import { createContext, useState, useEffect, useMemo, useCallback, ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, SparklesIcon, XIcon, ArrowLeftIcon } from '@/components/icons';
+import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, BrainIcon, XIcon, ArrowLeftIcon } from '@/components/icons';
 import { useAuthSession, useAuthAppData } from '@/lib/auth';
 import { useSubscription } from '@/hooks/useSubscription';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
@@ -531,13 +531,10 @@ export function AppHeader({
                 Dashboard
               </Link>
               
-              {/* Help / Portfolio Analyst Button - Prominent placement in header */}
+              {/* AI Analyst Button — AI-powered portfolio intelligence */}
               <button
                 onClick={() => {
-                  // Always dispatch event first (works if copilot is already mounted)
                   window.dispatchEvent(new CustomEvent('openCopilot'));
-                  
-                  // If not on dashboard, navigate to dashboard - the URL param will trigger copilot
                   if (!pathname?.startsWith('/dashboard')) {
                     // CRITICAL FIX: Mark navigation source to prevent redirect loops
                     sessionStorage.setItem('navigation_source', 'header');
@@ -546,11 +543,11 @@ export function AppHeader({
                   }
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 dark:bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 dark:hover:bg-emerald-700 transition-colors shadow-sm hover:shadow-md"
-                aria-label="Open Portfolio Analyst Help"
-                title="Get help with your portfolio"
+                aria-label="Open AI Portfolio Analyst"
+                title="AI-powered portfolio intelligence"
               >
-                <SparklesIcon className="w-4 h-4" />
-                <span className="hidden sm:inline">Help</span>
+                <BrainIcon className="w-4 h-4" />
+                <span className="hidden sm:inline">AI Analyst</span>
               </button>
               
               {/* User Menu */}
@@ -667,8 +664,8 @@ export function AppHeader({
                     }}
                     className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-[#ECFDF5] dark:bg-[#022C22] hover:bg-[#DCFCE7] dark:hover:bg-[#064E3B] transition-colors"
                   >
-                    <span>Help</span>
-                    <SparklesIcon className="w-4 h-4" />
+                    <span>AI Analyst</span>
+                    <BrainIcon className="w-4 h-4" />
                   </button>
                   <Link
                     href="/account"

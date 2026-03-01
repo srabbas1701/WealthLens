@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getCopilotContext, logCopilotSession } from '@/lib/db/copilot-context';
 import { requirePaidAction } from '@/lib/capabilities/server';
 import { FEATURE_ACCESS } from '@/config/feature-access';
-import { incrementTrialUsage } from '@/lib/entitlements';
+import { incrementAIUsage } from '@/lib/entitlements';
 import type { 
   CopilotQueryRequest, 
   CopilotQueryResponse,
@@ -460,7 +460,8 @@ async function generateResponse(
   intent: string,
   portfolio: PortfolioContextMock,
   user: UserProfileMock,
-  market: MarketContextMock
+  market: MarketContextMock,
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<{ summary: string; explanation: string; status: Status; confidence: ConfidenceLevel }> {
   
   // Get OpenAI client (using require for server-side)
@@ -505,42 +506,55 @@ async function generateResponse(
 - Goal Alignment: ${portfolio.goal_alignment}%
 - Asset Allocation: ${portfolioAllocation}
 - Top Holdings: ${topHoldings}
-- Active Insights: ${portfolio.active_insights.join('; ')}
+- Active Insights: ${portfolio.active_insights.length > 0 ? portfolio.active_insights.join('; ') : 'None currently'}
 
 USER PROFILE:
 - Name: ${user.name}
-- Risk Comfort Level: ${user.risk_comfort}
+- Risk Comfort: ${user.risk_comfort}
 - Investment Goals: ${user.goals.join(', ')}
 - Time Horizon: ${user.time_horizon} years
 
 MARKET CONTEXT:
 - Market Status: ${market.market_status}
 - Nifty Change Today: ${market.nifty_change > 0 ? '+' : ''}${market.nifty_change}%
-- Sector Movements: ${market.sector_movers.map(s => `${s.sector}: ${s.change > 0 ? '+' : ''}${s.change}%`).join(', ')}
+- Sector Movements: ${market.sector_movers.length > 0 ? market.sector_movers.map(s => `${s.sector}: ${s.change > 0 ? '+' : ''}${s.change}%`).join(', ') : 'No significant sector movements'}
 
 USER QUESTION: ${question}
 DETECTED INTENT: ${intent}
 
-Please provide a helpful, personalized response that:
-1. Directly addresses the user's question
-2. Uses their actual portfolio data
-3. Maintains a calm, educational tone
-4. Avoids any investment advice or predictions
-5. Provides a brief summary (first sentence) followed by a detailed explanation (2-3 paragraphs)
+Respond with a personalized, data-driven answer that:
+1. Directly addresses the question using their actual portfolio numbers
+2. Explains what the data means for their specific situation and goals
+3. Maintains a calm, educational tone — never alarmist
+4. Avoids investment advice, buy/sell recommendations, or price predictions
+5. Uses Indian financial context (₹, lakh, crore) where appropriate
 
-Format your response as:
-SUMMARY: [One sentence summary]
-EXPLANATION: [Detailed explanation in 2-3 paragraphs]`;
+Format your response EXACTLY as:
+SUMMARY: [One clear, personalized sentence that directly answers the question]
+EXPLANATION: [2-3 paragraphs with detailed, data-driven context. Reference their actual numbers.]`;
+
+  // Build messages array: system + conversation history + current context
+  const apiMessages: Array<{ role: string; content: string }> = [
+    { role: 'system', content: systemPrompt },
+  ];
+
+  // Inject conversation history for multi-turn context (up to last 3 exchanges)
+  if (history && history.length > 0) {
+    const recentHistory = history.slice(-6); // Max 3 exchanges = 6 messages
+    for (const msg of recentHistory) {
+      apiMessages.push({ role: msg.role, content: msg.content });
+    }
+  }
+
+  // Add the current portfolio context + question as the latest user message
+  apiMessages.push({ role: 'user', content: context });
 
   try {
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: context },
-      ],
-      temperature: 0.7,
-      max_tokens: 600,
+      messages: apiMessages,
+      temperature: 0.65,
+      max_tokens: 1000,
     } as any);
 
     const aiResponse = completion.choices[0]?.message?.content || '';
@@ -792,29 +806,44 @@ export async function POST(request: NextRequest) {
     }
     
     // Step 3: Generate AI response (or fallback to templates)
+    const detectedIntent = body.intent || 'general_question';
     const generatedResponse = await generateResponse(
       processedQuestion,
-      body.intent || 'general_question',
+      detectedIntent,
       portfolioContext,
       userProfile,
-      marketContext
+      marketContext,
+      body.history,
     );
-    
+
     // Step 4: Apply post-LLM guardrails
     const cleanedExplanation = applyPostLLMGuardrails(generatedResponse.explanation);
-    
-    // Step 5: Build structured response
+
+    // Step 5: Build intent-aware follow-up suggestions
+    const intentFollowUps: Record<string, string[]> = {
+      daily_movement: ['How does volatility affect me?', 'Am I well diversified?', 'Check my goal progress'],
+      risk_explanation: ['How does my allocation compare?', 'What is concentration risk?', 'Am I on track for my goals?'],
+      goal_progress: ['How does market affect my timeline?', 'Explain my risk score', 'What is my asset allocation?'],
+      sector_exposure: ['Explain my risk score', 'How am I doing today?', 'Am I on track for goals?'],
+      portfolio_explanation: ['Break down my risk', 'Explain sector exposure', 'Am I meeting my goals?'],
+      general_question: ['How is my portfolio doing?', 'Explain my risk score', 'Am I on track for my goals?'],
+      onboarding_understanding: ['Explain my risk score', 'What does my allocation mean?', 'How do I track goals?'],
+    };
+    const followUps = intentFollowUps[detectedIntent] ?? intentFollowUps['general_question'];
+
+    // Step 6: Build structured response (include remaining_queries if applicable)
+    const aiRemaining = guard.entitlements?.ai_remaining;
+    // ai_remaining was read before this request; subtract 1 for the current query
+    const remainingAfterThis = typeof aiRemaining === 'number' ? Math.max(0, aiRemaining - 1) : undefined;
+
     const response: CopilotQueryResponse = {
       response_type: 'explanation',
       status: generatedResponse.status,
       summary: generatedResponse.summary,
       explanation: cleanedExplanation,
       confidence_level: generatedResponse.confidence,
-      follow_up_suggestions: [
-        'See risk breakdown',
-        'Understand sector exposure',
-        'Check goal progress',
-      ],
+      follow_up_suggestions: followUps,
+      remaining_queries: remainingAfterThis,
     };
     
     // Step 6: Log session to Supabase
@@ -834,8 +863,8 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if logging fails
     }
 
-    // Step 7: Increment AI usage if still on trial (incrementTrialUsage re-checks ends_at)
-    await incrementTrialUsage(guard.supabase, guard.userId, 'ai');
+    // Step 7: Increment AI usage (handles trial, Pro, and Premium users)
+    await incrementAIUsage(guard.supabase, guard.userId);
 
     return NextResponse.json(response);
     

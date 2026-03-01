@@ -161,6 +161,8 @@ export async function PUT(
       carpet_area_sqft: body.carpet_area_sqft,
       builtup_area_sqft: body.builtup_area_sqft,
       user_override_value: body.user_override_value,
+      co_owner_name: body.co_owner_name ?? null,
+      co_owner_relationship: body.co_owner_relationship ?? null,
     };
     
     const updatedAsset = await updateRealEstateAsset(

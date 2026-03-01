@@ -67,8 +67,11 @@ export interface RealEstateDraft {
 
 /**
  * Validation result
+ * - errors: block form progression (hard failures)
+ * - warnings: informational notices that don't block (soft advisories)
  */
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
+  warnings?: string[];
 }

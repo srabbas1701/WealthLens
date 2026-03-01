@@ -37,7 +37,9 @@ export interface CreateRealEstateAssetInput {
   system_estimated_min?: number | null;
   system_estimated_max?: number | null;
   valuation_last_updated?: string | null;
-  
+  co_owner_name?: string | null;
+  co_owner_relationship?: string | null;
+
   // Optional loan
   loan?: {
     lender_name: string;
@@ -108,7 +110,7 @@ export async function createRealEstateAsset(
     // Step 1: Insert Asset
     // ========================================================================
     
-    const assetInsert: RealEstateAssetInsert = {
+    const assetInsert = {
       user_id: input.user_id,
       property_nickname: input.property_nickname,
       property_type: input.property_type,
@@ -130,7 +132,10 @@ export async function createRealEstateAsset(
       system_estimated_min: input.system_estimated_min ?? null,
       system_estimated_max: input.system_estimated_max ?? null,
       valuation_last_updated: input.valuation_last_updated ?? null,
-    };
+      // Co-owner fields (migration 020 — columns added after type generation)
+      co_owner_name: input.co_owner_name ?? null,
+      co_owner_relationship: input.co_owner_relationship ?? null,
+    } as unknown as RealEstateAssetInsert;
     
     const { data: asset, error: assetError } = await supabase
       .from('real_estate_assets')
