@@ -14,11 +14,13 @@ export interface EntitlementsTrial {
 
 /** Capability keys are booleans; usage counters are numbers; trial when on trial. */
 export interface UserEntitlements {
-  [capabilityKey: string]: boolean | number | EntitlementsTrial | undefined;
+  [capabilityKey: string]: boolean | number | string | EntitlementsTrial | undefined;
   /** Remaining AI (e.g. analyst) uses this period; set when trial or limited plan */
   ai_remaining?: number;
   /** Remaining scenario views this period; set when trial or limited plan */
   scenario_remaining?: number;
   /** Set when user has an active trial */
   trial?: EntitlementsTrial;
+  /** Active paid plan tier, e.g. 'pro' | 'premium'. Undefined for free/trial-only users. */
+  plan_tier?: string;
 }

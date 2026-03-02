@@ -3,7 +3,7 @@
 import { createContext, useState, useEffect, useMemo, useCallback, ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, BrainIcon, XIcon, ArrowLeftIcon } from '@/components/icons';
+import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, XIcon, ArrowLeftIcon, NeuralIcon } from '@/components/icons';
 import { useAuthSession, useAuthAppData } from '@/lib/auth';
 import { useSubscription } from '@/hooks/useSubscription';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
@@ -546,7 +546,7 @@ export function AppHeader({
                 aria-label="Open AI Portfolio Analyst"
                 title="AI-powered portfolio intelligence"
               >
-                <BrainIcon className="w-4 h-4" />
+                <NeuralIcon className="w-4 h-4 text-[#FCD34D]" />
                 <span className="hidden sm:inline">AI Analyst</span>
               </button>
               
@@ -665,7 +665,7 @@ export function AppHeader({
                     className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-[#ECFDF5] dark:bg-[#022C22] hover:bg-[#DCFCE7] dark:hover:bg-[#064E3B] transition-colors"
                   >
                     <span>AI Analyst</span>
-                    <BrainIcon className="w-4 h-4" />
+                    <NeuralIcon className="w-4 h-4 text-[#FCD34D]" />
                   </button>
                   <Link
                     href="/account"

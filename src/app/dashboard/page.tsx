@@ -52,6 +52,7 @@ import {
   BellIcon,
   UserIcon,
   InfoIcon,
+  ChartIcon,
   CalendarIcon,
   LogOutIcon,
   ChevronDownIcon,
@@ -1965,7 +1966,7 @@ function DashboardContent() {
             href="/analytics/overview"
             className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-[#2563EB] dark:text-[#3B82F6] bg-white dark:bg-[#1E293B] border border-[#2563EB] dark:border-[#3B82F6] rounded-lg hover:bg-[#EFF6FF] dark:hover:bg-[#1E3A8A] transition-colors"
           >
-            <InfoIcon className="w-4 h-4 text-[#2563EB] dark:text-[#3B82F6]" />
+            <ChartIcon className="w-4 h-4 text-[#F59E0B]" />
             View Advanced Analytics
             <ArrowRightIcon className="w-4 h-4 text-[#2563EB] dark:text-[#3B82F6]" />
           </Link>

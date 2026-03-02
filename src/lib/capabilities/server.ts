@@ -130,6 +130,7 @@ export async function requirePaidAction(
             error: isTrialUser ? 'Trial limit exceeded' : 'Monthly limit reached',
             details: `No ${remainingKey} remaining this period`,
             is_trial: isTrialUser,
+            plan_tier: entitlements.plan_tier ?? null,
           },
           { status: 429 }
         ),

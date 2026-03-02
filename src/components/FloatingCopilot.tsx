@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { BrainIcon, XIcon, SendIcon, CheckCircleIcon, AlertTriangleIcon, MaximizeIcon, MinimizeIcon } from './icons';
+import { BrainIcon, XIcon, SendIcon, CheckCircleIcon, AlertTriangleIcon, MaximizeIcon, MinimizeIcon, NeuralIcon } from './icons';
 import type {
   CopilotQueryRequest,
   CopilotQueryResponse,
@@ -440,13 +440,20 @@ export default function FloatingCopilot({
         if (response.status === 429) {
           const isTrialLimit = errorData?.error === 'Trial limit exceeded';
           const isPaidLimit = errorData?.error === 'Monthly limit reached';
+          const planTier: string | null = errorData?.plan_tier ?? null;
           let limitMsg: string;
           if (isTrialLimit) {
             limitMsg =
-              "You've used all your free AI queries for this month. Upgrade to Pro or Premium to continue using the AI Portfolio Analyst.";
+              "You've used all 15 free AI queries for this month. Upgrade to Pro (15/mo) or Premium (50/mo) to continue using the AI Portfolio Analyst.";
+          } else if (isPaidLimit && planTier === 'premium') {
+            limitMsg =
+              "You've used all 50 AI queries for this month on your Premium plan. Your limit resets at the start of next month.";
+          } else if (isPaidLimit && planTier === 'pro') {
+            limitMsg =
+              "You've used all 15 AI queries for this month on your Pro plan. Upgrade to Premium for 50 queries/month, or your limit resets at the start of next month.";
           } else if (isPaidLimit) {
             limitMsg =
-              "You've reached your monthly AI query limit. Your limit resets at the start of next month. Upgrade to Premium for a higher limit.";
+              "You've reached your monthly AI query limit. Your limit resets at the start of next month.";
           } else {
             limitMsg = "You're sending messages too quickly. Please wait a moment and try again.";
           }
@@ -537,7 +544,7 @@ export default function FloatingCopilot({
         className={`fixed ${position === 'top-right' ? 'top-20 right-6' : 'bottom-6 right-6'} z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-emerald-600 dark:bg-emerald-600 text-white shadow-lg hover:bg-emerald-700 dark:hover:bg-emerald-700 hover:shadow-xl hover:scale-105 transition-all relative`}
         aria-label="Open AI Portfolio Analyst"
       >
-        <BrainIcon className="w-5 h-5" />
+        <NeuralIcon className="w-5 h-5 text-[#FCD34D]" />
         <span className="font-medium text-sm hidden sm:inline">AI Analyst</span>
         {issueCount > 0 && (
           <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">

@@ -22,10 +22,10 @@ const DEFAULT_TRIAL_LIMITS: TrialLimits = {
   scenario_views_per_month: 5,
 };
 
-/** Paid plan AI query limits per month. Pro=10, Premium=25. */
+/** Paid plan AI query limits per month. Pro=15, Premium=50. */
 const PAID_PLAN_AI_LIMITS: Record<string, number> = {
-  pro: 10,
-  premium: 25,
+  pro: 15,
+  premium: 50,
 };
 
 async function getUserEntitlementsUncached(
@@ -96,7 +96,12 @@ async function getUserEntitlementsUncached(
     entitlements.scenario_remaining = Math.max(0, scenarioLimit - (usage.scenario_used ?? 0));
     entitlements.trial = { active: true, ends_at: trial.ends_at, limits };
   } else if (planId && PAID_PLAN_AI_LIMITS[planId] !== undefined) {
-    // Paid plan (Pro/Premium): enforce monthly AI query limit
+    // Paid plan (Pro/Premium): enforce monthly AI query limit.
+    // Also explicitly grant use_ai_help — paid plans may be missing this row in
+    // plan_capabilities (e.g. premium), but the PAID_PLAN_AI_LIMITS entry IS the
+    // source of truth that this plan has AI access.
+    entitlements['use_ai_help'] = true;
+    entitlements.plan_tier = planId;
     const paidAiLimit = PAID_PLAN_AI_LIMITS[planId];
     const usage = await getUsageCounters(db, userId, DEFAULT_TRIAL_LIMITS);
     entitlements.ai_remaining = Math.max(0, paidAiLimit - (usage.ai_used ?? 0));
