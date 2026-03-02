@@ -131,6 +131,15 @@ export default function UpgradePage() {
       .catch(() => {});
   }, [user?.id]);
 
+  // "Switch to Annual" intent: Premium monthly user came from /upgrade?plan=premium&cycle=yearly
+  const isSwitchToAnnualOnly =
+    planParam?.toLowerCase() === 'premium' &&
+    cycleParam === 'yearly' &&
+    currentSub?.tier === 'premium' &&
+    currentSub?.status === 'active' &&
+    currentSub?.billing_cycle !== 'yearly' &&
+    currentSub?.billing_cycle !== 'annual';
+
   const currentUserTier = currentSub?.tier ?? 'free';
   const currentUserRank = PLAN_RANK[currentUserTier] ?? 0;
 
@@ -317,8 +326,12 @@ export default function UpgradePage() {
     );
   }
 
-  // Premium user — already on highest plan
-  if (currentSub?.tier === 'premium' && currentSub?.status === 'active') {
+  // Premium Annual user — already on highest plan
+  const isPremiumAnnual =
+    currentSub?.tier === 'premium' &&
+    currentSub?.status === 'active' &&
+    (currentSub?.billing_cycle === 'yearly' || currentSub?.billing_cycle === 'annual');
+  if (isPremiumAnnual) {
     return (
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
         <AppHeader />
@@ -424,34 +437,39 @@ export default function UpgradePage() {
                 : ''}
               {' '}— upgrading will take effect immediately after payment.
             </p>
+            <p className="text-xs text-[#16A34A] dark:text-[#22C55E]/80 mt-1.5">
+              If the upgrade doesn’t show right away, wait a moment and refresh. If you still face issues, try logging out and back in.
+            </p>
           </div>
         )}
 
-        {/* Billing cycle toggle */}
-        <div className="flex rounded-lg bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] p-1 mb-6">
-          <button
-            type="button"
-            onClick={() => setBillingCycle('monthly')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              billingCycle === 'monthly'
-                ? 'bg-[#2563EB] dark:bg-[#3B82F6] text-white'
-                : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
-            }`}
-          >
-            Monthly
-          </button>
-          <button
-            type="button"
-            onClick={() => setBillingCycle('yearly')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              billingCycle === 'yearly'
-                ? 'bg-[#2563EB] dark:bg-[#3B82F6] text-white'
-                : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
-            }`}
-          >
-            Yearly (save more)
-          </button>
-        </div>
+        {/* Billing cycle toggle — hidden when switching to Premium Annual only */}
+        {!isSwitchToAnnualOnly && (
+          <div className="flex rounded-lg bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] p-1 mb-6">
+            <button
+              type="button"
+              onClick={() => setBillingCycle('monthly')}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                billingCycle === 'monthly'
+                  ? 'bg-[#2563EB] dark:bg-[#3B82F6] text-white'
+                  : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              onClick={() => setBillingCycle('yearly')}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                billingCycle === 'yearly'
+                  ? 'bg-[#2563EB] dark:bg-[#3B82F6] text-white'
+                  : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC]'
+              }`}
+            >
+              Yearly (save more)
+            </button>
+          </div>
+        )}
 
         {/* Plan options */}
         <div className="space-y-3 mb-8">

@@ -216,6 +216,9 @@ export default function PricingSection({
   const isMonthlyPro =
     activeTier === 'pro' &&
     (activeBillingCycle === 'monthly');
+  const isMonthlyPremium =
+    activeTier === 'premium' &&
+    (activeBillingCycle === 'monthly');
 
   const proPlan = tiers.find((t) => t.tier === 'pro')?.plan ?? null;
   const proMonthlyCost = proPlan?.monthly_price ?? 0;
@@ -228,6 +231,22 @@ export default function PricingSection({
     proMonthlyCost > 0 && proAnnualCost > 0
       ? Math.round(
           ((proMonthlyCost * 12 - proAnnualCost) / (proMonthlyCost * 12)) * 100
+        )
+      : 0;
+
+  const premiumPlan = tiers.find((t) => t.tier === 'premium')?.plan ?? null;
+  const premiumMonthlyCost = premiumPlan?.monthly_price ?? 0;
+  const premiumAnnualCost = premiumPlan?.annual_price ?? 0;
+  const premiumAnnualSavings =
+    premiumMonthlyCost > 0 && premiumAnnualCost > 0
+      ? Math.round(premiumMonthlyCost * 12 - premiumAnnualCost)
+      : 0;
+  const premiumAnnualSavingsPct =
+    premiumMonthlyCost > 0 && premiumAnnualCost > 0
+      ? Math.round(
+          ((premiumMonthlyCost * 12 - premiumAnnualCost) /
+            (premiumMonthlyCost * 12)) *
+            100
         )
       : 0;
 
@@ -384,6 +403,22 @@ export default function PricingSection({
                       </p>
                       <Link
                         href="/upgrade?plan=pro&cycle=yearly"
+                        className="inline-block w-full text-center py-1.5 px-3 bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] text-white text-xs font-semibold rounded-md transition-colors"
+                      >
+                        Switch to Annual →
+                      </Link>
+                    </div>
+                  )}
+                  {isCurrentPlan && isMonthlyPremium && premiumAnnualSavings > 0 && (
+                    <div className="mb-4 p-3 rounded-lg bg-[#EFF6FF] dark:bg-[#1E3A8A]/40 border border-[#BFDBFE] dark:border-[#3B82F6]/40">
+                      <p className="text-xs font-semibold text-[#1E40AF] dark:text-[#93C5FD] mb-2">
+                        💡 Switch to Annual — Save {premiumAnnualSavingsPct}%
+                      </p>
+                      <p className="text-xs text-[#3B82F6] dark:text-[#BFDBFE] mb-2">
+                        Save ₹{premiumAnnualSavings.toLocaleString('en-IN')}/year by paying annually
+                      </p>
+                      <Link
+                        href="/upgrade?plan=premium&cycle=yearly"
                         className="inline-block w-full text-center py-1.5 px-3 bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] text-white text-xs font-semibold rounded-md transition-colors"
                       >
                         Switch to Annual →

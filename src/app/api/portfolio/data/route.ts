@@ -861,56 +861,101 @@ export async function GET(request: NextRequest) {
     
     // 9. Generate insights based on portfolio
     const insights: InsightItem[] = [];
-    
-    // Concentration insight
-    if (topHoldings.length > 0 && topHoldings[0].allocationPct > 25) {
+    let insightId = 1;
+
+    // Helper: find allocation percentage by bucket label
+    const getBucketPct = (label: string) => allocation.find(a => a.name === label)?.percentage || 0;
+
+    const growthPct   = getBucketPct('Growth Assets');
+    const realPct     = getBucketPct('Real Assets');
+    const incomePct   = getBucketPct('Income & Allocation');
+    const cashPct     = getBucketPct('Cash & Liquidity');
+    const numBuckets  = allocation.filter(a => a.percentage >= 1).length;
+
+    // 1. Real estate heavy — illiquidity concentration
+    if (realPct > 50) {
       insights.push({
-        id: 1,
+        id: insightId++,
         type: 'info' as const,
-        title: `${topHoldings[0].name} is ${topHoldings[0].allocationPct.toFixed(1)}% of your portfolio`,
-        description: 'Consider if this concentration aligns with your risk tolerance.',
+        title: `Real estate is ${realPct.toFixed(0)}% of your total wealth`,
+        description: `A large share of your portfolio is locked in illiquid real estate. Ensure you have sufficient liquid assets (FD, savings) to cover 6–12 months of expenses and near-term goals.`,
       });
     }
-    
-    // Equity allocation insight
-    const equityAllocation = allocation.find(a => 
-      a.name === 'Stocks' || a.name === 'Mutual Funds' || a.name === 'Index Funds' || a.name === 'ETFs'
-    );
-    const equityPct = equityAllocation?.percentage || metrics?.equity_pct || 0;
-    
-    if (equityPct > 80) {
+
+    // 2. Single holding concentration (financial instruments only, not real estate)
+    if (topHoldings.length > 0 && topHoldings[0].allocationPct > 30) {
       insights.push({
-        id: 2,
-        type: 'info' as const,
-        title: 'High equity allocation',
-        description: `${equityPct.toFixed(0)}% in equity. Good for growth, but ensure this matches your risk profile.`,
+        id: insightId++,
+        type: 'warning' as const,
+        title: `${topHoldings[0].name} represents ${topHoldings[0].allocationPct.toFixed(1)}% of your investable portfolio`,
+        description: 'High concentration in a single instrument increases risk. Consider whether this aligns with your goals or if gradual diversification would be prudent.',
       });
-    } else if (equityPct < 30 && totalValue > 100000) {
+    }
+
+    // 3. Growth / equity allocation check (using bucket labels — fixed from legacy asset-type check)
+    if (growthPct > 80) {
       insights.push({
-        id: 2,
+        id: insightId++,
+        type: 'info' as const,
+        title: `Equity-heavy portfolio at ${growthPct.toFixed(0)}% growth assets`,
+        description: 'High equity allocation is great for long-term growth. Ensure you have stable income assets (FD, debt funds) to manage short-term volatility.',
+      });
+    } else if (growthPct < 20 && totalValue > 200000 && realPct < 70) {
+      insights.push({
+        id: insightId++,
         type: 'opportunity' as const,
-        title: 'Consider more equity exposure',
-        description: 'For long-term goals, equity historically provides better inflation-adjusted returns.',
+        title: `Consider growing your equity allocation (currently ${growthPct.toFixed(0)}%)`,
+        description: 'Equity (stocks, mutual funds, ETFs) historically delivers the best inflation-adjusted returns over the long term. Even small regular SIPs can compound significantly over 10+ years.',
       });
     }
-    
-    // Diversification insight
+
+    // 4. Income-heavy without meaningful growth — missed opportunity
+    if (incomePct > 60 && growthPct < 15 && totalValue > 500000) {
+      insights.push({
+        id: insightId++,
+        type: 'opportunity' as const,
+        title: 'Heavy income allocation may underperform inflation',
+        description: `${incomePct.toFixed(0)}% in FD/EPF/PPF/NPS earns fixed returns. After inflation and taxes, real returns may be low. Consider shifting a portion to equity for better long-term growth.`,
+      });
+    }
+
+    // 5. Low liquidity alert
+    if (cashPct < 2 && totalValue > 500000 && numBuckets >= 2) {
+      insights.push({
+        id: insightId++,
+        type: 'opportunity' as const,
+        title: 'Low liquid buffer — consider building an emergency fund',
+        description: 'Less than 2% of your portfolio is in accessible cash or liquid funds. Aim to keep 3–6 months of expenses in a high-yield savings account or liquid mutual fund.',
+      });
+    }
+
+    // 6. Well-diversified across multiple buckets
+    if (numBuckets >= 4 && growthPct >= 10 && incomePct >= 10) {
+      insights.push({
+        id: insightId++,
+        type: 'info' as const,
+        title: `Good diversification across ${numBuckets} asset classes`,
+        description: 'Your portfolio spans growth, income, real assets, and more — a balanced mix that helps reduce overall risk while maintaining return potential.',
+      });
+    }
+
+    // 7. Few holdings — low diversification within classes
     if (holdings.length < 5 && holdings.length > 0) {
       insights.push({
-        id: 3,
+        id: insightId++,
         type: 'info' as const,
-        title: 'Portfolio diversification',
-        description: `You have ${holdings.length} holding${holdings.length === 1 ? '' : 's'}. Consider spreading across more assets for better risk management.`,
+        title: 'Consider adding more instruments within each asset class',
+        description: `You currently have ${holdings.length} holding${holdings.length === 1 ? '' : 's'} in your portfolio. Spreading across more funds, stocks, or fixed-income instruments within each bucket reduces single-instrument risk.`,
       });
     }
-    
+
     // Default insight if none generated
     if (insights.length === 0 && holdings.length > 0) {
       insights.push({
-        id: 1,
+        id: insightId++,
         type: 'info' as const,
         title: 'Your portfolio is well-structured',
-        description: 'Continue your regular investments and review periodically.',
+        description: 'Your investments are spread across relevant asset classes. Continue your regular investments and review your allocation annually.',
       });
     }
     

@@ -16,9 +16,8 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { useCapabilities } from '@/lib/capabilities';
 import { FEATURE_ACCESS } from '@/config/feature-access';
@@ -34,9 +33,9 @@ import {
   CheckCircleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  ArrowLeftIcon,
+  LockIcon,
+  UnlockIcon,
 } from '@/components/icons';
-import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 import NPSAddModal from '@/components/NPSAddModal';
 import { generateNPSPDF } from '@/lib/pdf/generateHoldingsPDF';
 
@@ -84,18 +83,6 @@ interface NPSHolding {
   navUpdatedDate: string;
 }
 
-// Fund managers
-const FUND_MANAGERS = [
-  { id: 'HDFC', name: 'HDFC Pension' },
-  { id: 'ICICI', name: 'ICICI Prudential' },
-  { id: 'SBI', name: 'SBI Pension' },
-  { id: 'UTI', name: 'UTI Retirement' },
-  { id: 'LIC', name: 'LIC Pension' },
-  { id: 'KOTAK', name: 'Kotak Mahindra' },
-  { id: 'BIRLA', name: 'Aditya Birla' },
-  { id: 'MAX', name: 'Max Life' },
-];
-
 const ASSET_CLASSES = [
   { id: 'E' as const, name: 'Equity', fullName: 'Equity (Stocks)', color: '#DC2626', riskLevel: 'High' },
   { id: 'C' as const, name: 'Corporate Bonds', fullName: 'Corporate Bonds', color: '#F59E0B', riskLevel: 'Medium' },
@@ -119,6 +106,8 @@ export default function NPSHoldingsPage() {
   const [loading, setLoading] = useState(true);
   const [expandedTier, setExpandedTier] = useState<{ [key: string]: 'tier1' | 'tier2' | null }>({});
   const [navUpdateLoading, setNavUpdateLoading] = useState(false);
+  const [autoUpdating, setAutoUpdating] = useState(false);
+  const hasAutoUpdated = useRef(false);
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -143,14 +132,30 @@ export default function NPSHoldingsPage() {
 
   const fetchNPSHoldings = async () => {
     if (!user?.id) return;
-    
+
     try {
       setLoading(true);
       const response = await fetch(`/api/nps/holdings?user_id=${user.id}`);
       const result = await response.json();
-      
+
       if (result.success) {
-        setHoldings(result.data || []);
+        const loadedHoldings: NPSHolding[] = result.data || [];
+        setHoldings(loadedHoldings);
+
+        // Auto-update NAVs silently on first load if data is stale (not updated today)
+        if (!hasAutoUpdated.current && loadedHoldings.length > 0) {
+          const today = new Date().toISOString().split('T')[0];
+          const isStale = loadedHoldings.some(h => {
+            const navDate = h.navUpdatedDate
+              ? new Date(h.navUpdatedDate).toISOString().split('T')[0]
+              : null;
+            return !navDate || navDate < today;
+          });
+          if (isStale) {
+            hasAutoUpdated.current = true;
+            silentUpdateNAVs();
+          }
+        }
       } else {
         showToast({
           type: 'error',
@@ -169,6 +174,31 @@ export default function NPSHoldingsPage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Silent background NAV update — runs automatically when data is stale
+  const silentUpdateNAVs = async () => {
+    if (!user?.id) return;
+    setAutoUpdating(true);
+    try {
+      const response = await fetch('/api/nps/update-navs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        // Re-fetch to display fresh values
+        const r2 = await fetch(`/api/nps/holdings?user_id=${user.id}`);
+        const d2 = await r2.json();
+        if (d2.success) setHoldings(d2.data || []);
+      }
+    } catch (e) {
+      // Silent fail — user can always click "Update NAVs" manually
+      console.debug('[NPS] Auto-update failed silently:', e);
+    } finally {
+      setAutoUpdating(false);
     }
   };
 
@@ -199,10 +229,11 @@ export default function NPSHoldingsPage() {
 
       if (result.success) {
         await fetchNPSHoldings();
+        const sourceLabel = result.navSource === 'npstrust' ? 'from NPS Trust' : '(estimated — NPS Trust unavailable)';
         showToast({
           type: 'success',
           title: 'NAVs Updated',
-          message: `Updated ${result.updatedCount || 0} scheme NAVs successfully.`,
+          message: `Updated ${result.updatedCount || 0} account(s) ${sourceLabel}.`,
           duration: 5000,
         });
       } else {
@@ -494,6 +525,12 @@ export default function NPSHoldingsPage() {
                   {totalReturns >= 0 ? '+' : ''}{formatCurrency(totalReturns)} ({totalReturnsPercentage >= 0 ? '+' : ''}{totalReturnsPercentage.toFixed(2)}%)
                 </span>
               )}
+              {autoUpdating && (
+                <span className="ml-2 text-xs text-[#2563EB] dark:text-[#3B82F6] inline-flex items-center gap-1">
+                  <RefreshIcon className="w-3 h-3 animate-spin" />
+                  Updating NAVs…
+                </span>
+              )}
             </p>
           </div>
 
@@ -523,6 +560,29 @@ export default function NPSHoldingsPage() {
           </div>
         </div>
 
+        {/* Summary Stats Bar */}
+        {holdings.length > 0 && (
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4">
+              <p className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider mb-1">Total Invested</p>
+              <p className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(totalInvested)}</p>
+            </div>
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4">
+              <p className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider mb-1">Current Value</p>
+              <p className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(totalCurrentValue)}</p>
+            </div>
+            <div className={`rounded-xl border p-4 ${totalReturns >= 0 ? 'bg-[#F0FDF4] dark:bg-[#052E16] border-[#16A34A]/20 dark:border-[#22C55E]/20' : 'bg-[#FEF2F2] dark:bg-[#450A0A] border-[#DC2626]/20 dark:border-[#EF4444]/20'}`}>
+              <p className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wider mb-1">Total Gain / Loss</p>
+              <p className={`text-xl font-semibold ${totalReturns >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                {totalReturns >= 0 ? '+' : ''}{formatCurrency(totalReturns)}
+              </p>
+              <p className={`text-xs font-medium mt-0.5 ${totalReturns >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                {totalReturnsPercentage >= 0 ? '+' : ''}{totalReturnsPercentage.toFixed(2)}%
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Overall Asset Allocation */}
         {holdings.length > 0 && (
           <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 mb-6">
@@ -550,6 +610,12 @@ export default function NPSHoldingsPage() {
                     <p className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                       {percentage.toFixed(1)}%
                     </p>
+                    <div className="mt-2 h-1.5 bg-[#E5E7EB] dark:bg-[#475569] rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(percentage, 100)}%`, backgroundColor: assetClass.color }}
+                      />
+                    </div>
                     <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                       {formatCurrency(value)}
                     </p>
@@ -606,11 +672,6 @@ export default function NPSHoldingsPage() {
                         <p className={`text-sm font-medium ${holding.totalReturns >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
                           {holding.totalReturns >= 0 ? '+' : ''}{formatCurrency(holding.totalReturns)} ({holding.overallReturnsPercentage >= 0 ? '+' : ''}{holding.overallReturnsPercentage.toFixed(2)}%)
                         </p>
-                        {holding.navUpdatedDate && (
-                          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                            NAV Date: {new Date(holding.navUpdatedDate).toLocaleDateString('en-IN')}
-                          </p>
-                        )}
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -655,7 +716,8 @@ export default function NPSHoldingsPage() {
                     className="w-full px-6 py-4 flex items-center justify-between hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors text-left"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="px-3 py-1 bg-[#DBEAFE] dark:bg-[#1E3A8A] text-[#1E40AF] dark:text-[#93C5FD] rounded-lg text-sm font-semibold">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#DBEAFE] dark:bg-[#1E3A8A] text-[#1E40AF] dark:text-[#93C5FD] rounded-lg text-sm font-semibold">
+                        <LockIcon className="w-3.5 h-3.5" />
                         Tier I
                       </div>
                       <div>
@@ -674,8 +736,8 @@ export default function NPSHoldingsPage() {
                         <p className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                           {formatCurrency(holding.tier1.currentValue)}
                         </p>
-                        <p className={`text-sm font-medium ${holding.tier1.returns >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
-                          {holding.tier1.returns >= 0 ? '+' : ''}{formatCurrency(holding.tier1.returns)} ({holding.tier1.returnsPercentage >= 0 ? '+' : ''}{holding.tier1.returnsPercentage.toFixed(2)}%)
+                        <p className={`text-sm font-medium ${holding.tier1.totalReturns >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                          {holding.tier1.totalReturns >= 0 ? '+' : ''}{formatCurrency(holding.tier1.totalReturns)} ({holding.tier1.returnsPercentage >= 0 ? '+' : ''}{holding.tier1.returnsPercentage.toFixed(2)}%)
                         </p>
                       </div>
                       {expandedTier[holding.id] === 'tier1' ? (
@@ -730,25 +792,25 @@ export default function NPSHoldingsPage() {
                           <thead className="border-b border-[#E5E7EB] dark:border-[#334155]">
                             <tr>
                               <th className="text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider pb-2">
-                                Asset Class
+                                Class
                               </th>
                               <th className="text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider pb-2">
-                                Fund Manager
+                                Manager
                               </th>
                               <th className="text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider pb-2">
-                                Allocation
+                                Alloc.
                               </th>
                               <th className="text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider pb-2">
                                 Invested
                               </th>
                               <th className="text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider pb-2">
-                                Current NAV
+                                NAV
                               </th>
                               <th className="text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider pb-2">
                                 Units
                               </th>
                               <th className="text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider pb-2">
-                                Current Value
+                                Value
                               </th>
                               <th className="text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider pb-2">
                                 Returns
@@ -758,13 +820,12 @@ export default function NPSHoldingsPage() {
                           <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                             {holding.tier1.schemes.map((scheme, idx) => {
                               const assetClassInfo = ASSET_CLASSES.find(a => a.id === scheme.assetClass);
-                              const schemeName = `${scheme.fundManager} Pension Fund Scheme ${scheme.assetClass}-Tier I`;
                               return (
                                 <tr key={idx} className="text-sm">
                                   <td className="py-3 pr-4">
                                     <div className="flex items-center gap-2">
-                                      <div 
-                                        className="w-2.5 h-2.5 rounded-full" 
+                                      <div
+                                        className="w-2.5 h-2.5 rounded-full shrink-0"
                                         style={{ backgroundColor: assetClassInfo?.color }}
                                       />
                                       <div className="flex flex-col">
@@ -772,7 +833,7 @@ export default function NPSHoldingsPage() {
                                           {scheme.assetClass}
                                         </span>
                                         <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
-                                          {schemeName}
+                                          {assetClassInfo?.name || scheme.assetClass}
                                         </span>
                                       </div>
                                     </div>
@@ -820,7 +881,8 @@ export default function NPSHoldingsPage() {
                       className="w-full px-6 py-4 flex items-center justify-between hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors text-left"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="px-3 py-1 bg-[#F0FDF4] dark:bg-[#14532D] text-[#166534] dark:text-[#86EFAC] rounded-lg text-sm font-semibold">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#F0FDF4] dark:bg-[#14532D] text-[#166534] dark:text-[#86EFAC] rounded-lg text-sm font-semibold">
+                          <UnlockIcon className="w-3.5 h-3.5" />
                           Tier II
                         </div>
                         <div>
@@ -839,8 +901,8 @@ export default function NPSHoldingsPage() {
                           <p className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                             {formatCurrency(holding.tier2.currentValue)}
                           </p>
-                          <p className={`text-sm font-medium ${holding.tier2.returns >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
-                            {holding.tier2.returns >= 0 ? '+' : ''}{formatCurrency(holding.tier2.returns)} ({holding.tier2.returnsPercentage >= 0 ? '+' : ''}{holding.tier2.returnsPercentage.toFixed(2)}%)
+                          <p className={`text-sm font-medium ${holding.tier2.totalReturns >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                            {holding.tier2.totalReturns >= 0 ? '+' : ''}{formatCurrency(holding.tier2.totalReturns)} ({holding.tier2.returnsPercentage >= 0 ? '+' : ''}{holding.tier2.returnsPercentage.toFixed(2)}%)
                           </p>
                         </div>
                         {expandedTier[holding.id] === 'tier2' ? (
@@ -923,13 +985,12 @@ export default function NPSHoldingsPage() {
                             <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                             {holding.tier2.schemes.map((scheme, idx) => {
                               const assetClassInfo = ASSET_CLASSES.find(a => a.id === scheme.assetClass);
-                              const schemeName = `${scheme.fundManager} Pension Fund Scheme ${scheme.assetClass}-Tier II`;
                               return (
                                 <tr key={idx} className="text-sm">
                                   <td className="py-3 pr-4">
                                     <div className="flex items-center gap-2">
-                                      <div 
-                                        className="w-2.5 h-2.5 rounded-full" 
+                                      <div
+                                        className="w-2.5 h-2.5 rounded-full shrink-0"
                                         style={{ backgroundColor: assetClassInfo?.color }}
                                       />
                                       <div className="flex flex-col">
@@ -937,7 +998,7 @@ export default function NPSHoldingsPage() {
                                           {scheme.assetClass}
                                         </span>
                                         <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
-                                          {schemeName}
+                                          {assetClassInfo?.name || scheme.assetClass}
                                         </span>
                                       </div>
                                     </div>

@@ -327,6 +327,9 @@ function DashboardContent() {
   
   // Portfolio Health Score expanded state
   const [healthScoreExpanded, setHealthScoreExpanded] = useState(false);
+
+  // Insights & Alerts section collapsed state (collapsed by default so user controls visibility)
+  const [insightsCollapsed, setInsightsCollapsed] = useState(false);
   
   // Portfolio Health Score state (fetched from API)
   const [portfolioHealthScore, setPortfolioHealthScore] = useState<PortfolioHealthScore | null>(null);
@@ -1148,11 +1151,11 @@ function DashboardContent() {
         {/* QUICK ACTIONS - Add/Upload Investments */}
         {/* ============================================================================ */}
         <section className="mb-8">
-          <div className="bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-[#0F172A] dark:to-[#0F172A] dark:bg-[#0F172A] dark:[background:var(--background)] rounded-xl border border-emerald-200 dark:border-[#334155] p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-[#0F172A] dark:to-[#0F172A] dark:bg-[#0F172A] dark:[background:var(--background)] rounded-xl border border-emerald-200 dark:border-[#334155] px-5 py-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex-1">
-                <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Manage Your Portfolio</h2>
-                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                <h2 className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-0.5">Manage Your Portfolio</h2>
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
                   Add new investments or update existing holdings anytime
                 </p>
               </div>
@@ -1231,14 +1234,14 @@ function DashboardContent() {
                 </button>
               </div>
             </div>
-            <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-800">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-[#6B7280] dark:text-[#94A3B8]">
-                <div className="flex items-start gap-2">
-                  <UploadIcon className="w-4 h-4 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+            <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800">
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                <div className="flex items-center gap-1.5">
+                  <UploadIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span><strong>Upload:</strong> CAS statements, broker statements (CSV/Excel)</span>
                 </div>
-                <div className="flex items-start gap-2">
-                  <PlusIcon className="w-4 h-4 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                <div className="flex items-center gap-1.5">
+                  <PlusIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span><strong>Add:</strong> FD, EPF, PPF, NPS, Gold, Bonds, and more</span>
                 </div>
               </div>
@@ -1254,12 +1257,12 @@ function DashboardContent() {
           message="Your portfolio value is calculated from all your holdings. You can verify the breakdown in the sections below."
           position="bottom"
         >
-          <section className="mb-6">
+          <section className="mb-8">
             <div
-              className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] px-6 py-8 sm:p-10"
+              className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] px-5 py-8 sm:px-8 sm:py-10"
               data-testid="dashboard-net-worth-card"
             >
-              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-4">Total Net Worth</p>
+              <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-2">Total Net Worth</p>
               {portfolioLoading ? (
                 <div className="h-16 w-64 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-4" />
               ) : !isDataConsistent ? (
@@ -1294,10 +1297,10 @@ function DashboardContent() {
 
                     return (
                       <>
-                        <h2 className="font-semibold text-[#0A2540] dark:text-[#F8FAFC] number-emphasis mb-4 break-words text-[clamp(2.25rem,4.8vw,3.75rem)]">
+                        <h2 className="font-semibold text-[#0A2540] dark:text-[#F8FAFC] number-emphasis mb-2 break-words text-[clamp(2rem,4vw,3rem)]">
                           {formatCurrency(displayNetWorth)}
                         </h2>
-                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-4">
+                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-2">
                           Net Worth = Assets (excluding Insurance) − Liabilities
                         </p>
                         {netWorthChange !== 0 && (
@@ -1322,8 +1325,8 @@ function DashboardContent() {
         {/* ============================================================================ */}
         {isDataConsistent && (portfolioHealthScore || healthScoreLoading) && (
           <ErrorBoundary sectionName="Portfolio Health Score">
-            <section className="mb-6">
-              <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+            <section className="mb-8">
+              <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] px-5 py-5">
               {healthScoreLoading ? (
                 <div className="flex items-center gap-4">
                   <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
@@ -1332,20 +1335,20 @@ function DashboardContent() {
               ) : portfolioHealthScore ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-6 flex-1">
+                    <div className="flex items-center gap-4 flex-1">
                       {/* Circular Progress Ring */}
-                      <div className="relative w-20 h-20 flex-shrink-0">
+                      <div className="relative w-14 h-14 flex-shrink-0">
                         {(() => {
                           const circumference = 2 * Math.PI * 16; // radius = 16
                           const progress = (portfolioHealthScore.totalScore / 100) * circumference;
-                          const strokeColor = portfolioHealthScore.totalScore >= 70 
-                            ? '#10B981' 
-                            : portfolioHealthScore.totalScore >= 55 
-                              ? '#F59E0B' 
+                          const strokeColor = portfolioHealthScore.totalScore >= 70
+                            ? '#10B981'
+                            : portfolioHealthScore.totalScore >= 55
+                              ? '#F59E0B'
                               : '#EF4444';
-                          
+
                           return (
-                            <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 36 36">
+                            <svg className="w-14 h-14 transform -rotate-90" viewBox="0 0 36 36">
                               {/* Background circle */}
                               <circle
                                 cx="18"
@@ -1373,7 +1376,7 @@ function DashboardContent() {
                         })()}
                         {/* Score number in center */}
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                          <span className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                             {portfolioHealthScore.totalScore}
                           </span>
                         </div>
@@ -1381,11 +1384,11 @@ function DashboardContent() {
 
                   {/* Score details */}
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">
+                    <h3 className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-0.5">
                       Portfolio Health Score
                     </h3>
-                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                      {portfolioHealthScore.totalScore} / 100 • {portfolioHealthScore.grade === 'Excellent' ? 'Excellent structure' : 
+                    <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                      {portfolioHealthScore.totalScore} / 100 • {portfolioHealthScore.grade === 'Excellent' ? 'Excellent structure' :
                         portfolioHealthScore.grade === 'Good' ? 'Well-balanced portfolio' :
                         portfolioHealthScore.grade === 'Fair' ? 'Moderate health, needs review' :
                         'High concentration risk'}
@@ -1465,8 +1468,8 @@ function DashboardContent() {
         {/* ZONE 3: TOP-LEVEL BUCKET CARDS (Above the Fold) - Show All 5 Allocation Buckets */}
         {/* ============================================================================ */}
         {isDataConsistent && (
-        <section className="mb-12">
-          <div className={`grid grid-cols-1 gap-4 ${bucketCardsContent.length >= 5 ? 'md:grid-cols-5' : bucketCardsContent.length === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+        <section className="mb-8">
+          <div className={`grid grid-cols-1 gap-3 ${bucketCardsContent.length >= 5 ? 'md:grid-cols-5' : bucketCardsContent.length === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
             {bucketCardsContent.map(({ bucket, allocationItem, bucketName, tooltip }) => {
               const value = allocationItem.value;
               const displayPct = allocationDisplayPercentages.get(allocationItem.name) ?? Math.round(allocationItem.percentage);
@@ -1477,39 +1480,34 @@ function DashboardContent() {
 
               const tileContent = (
                 <>
-                  {/* Color Button - Top Right Corner (double size of legend button) */}
-                  <div 
-                    className="absolute top-4 right-4 w-6 h-6 rounded-full border-2 border-white dark:border-[#1E293B] shadow-sm"
+                  {/* Color Button - Top Right Corner */}
+                  <div
+                    className="absolute top-3 right-3 w-5 h-5 rounded-full border-2 border-white dark:border-[#1E293B] shadow-sm"
                     style={{ backgroundColor: color }}
                     aria-label={`${bucketName} color indicator`}
                   />
-                  <div className="flex items-center gap-2 mb-6 pr-10">
-                    <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap">
+                  <div className="flex items-center gap-2 mb-3 pr-8">
+                    <p className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap">
                       {isCashBucket ? 'Cash' : bucketName}
                     </p>
                     <CategoryInfoTooltip content={tooltip} />
                   </div>
                   {portfolioLoading ? (
-                    <div className="h-10 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-2" />
+                    <div className="h-8 w-24 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-1" />
                   ) : (
                     <>
-                      <p className="text-3xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-2">
+                      <p className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis mb-1">
                         {formatCurrency(value)}
                       </p>
-                      <p className="text-base font-medium text-[#6B7280] dark:text-[#94A3B8]">
+                      <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]">
                         {displayPct}%
                       </p>
-                      {bucket === 'RealAsset' && (
-                        <span className="mt-3 inline-block text-xs text-[#2563EB] dark:text-[#3B82F6]">
-                          + Add Real Estate →
-                        </span>
-                      )}
                     </>
                   )}
                 </>
               );
 
-              const tileClassName = "relative bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] block card-hover";
+              const tileClassName = "relative bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-4 text-left hover:border-[#2563EB] dark:hover:border-[#3B82F6] block card-hover";
 
               return (
                 <Link key={bucket} href={`/portfolio/summary?bucket=${bucket}`} prefetch={false} className={tileClassName}>
@@ -1520,10 +1518,6 @@ function DashboardContent() {
           </div>
         </section>
         )}
-
-        {/* ============================================================================ */}
-        {/* FOLD LINE - Content below requires scrolling */}
-        {/* ============================================================================ */}
 
         {/* ============================================================================ */}
         {/* ZONE 4: PORTFOLIO ALLOCATION (Below the Fold) */}
@@ -1781,10 +1775,13 @@ function DashboardContent() {
         </section>
 
         {/* ============================================================================ */}
-        {/* NET WORTH OUTLOOK — Concise summary (table removed; full timeline on /liabilities) */}
+        {/* NET WORTH OUTLOOK — Only shown when user has active liabilities */}
         {/* ============================================================================ */}
         {isDataConsistent && (() => {
           const liabilityTotals = getLiabilityTotals(liabilitiesData);
+          // Only render when user has actual outstanding liabilities
+          if (liabilityTotals.totalOutstanding <= 0) return null;
+
           const assetsTotal = portfolio.metrics.netWorth + liabilityTotals.totalOutstanding;
           const timeline = generateNetWorthTimeline({
             assetsTotal,
@@ -1794,11 +1791,6 @@ function DashboardContent() {
           const netWorthDelta = timeline.length >= 2
             ? timeline[timeline.length - 1].net_worth - timeline[0].net_worth
             : 0;
-          // For future use on /liabilities: show outlook only when net worth changes month-to-month
-          const hasMeaningfulChange = timeline.some(
-            (point, i) => i > 0 && point.net_worth !== timeline[i - 1].net_worth
-          );
-          void hasMeaningfulChange; // Reserved for /liabilities page
 
           return (
             <section className="mb-6">
@@ -1808,11 +1800,11 @@ function DashboardContent() {
                 </h3>
                 <p className="text-sm text-[#0F172A] dark:text-[#F8FAFC] mb-1">
                   {netWorthDelta === 0
-                    ? 'Your net worth is expected to remain stable over the next 12 months if you make no new investments or loan repayments.'
-                    : `Your net worth is projected to improve by ₹${Math.abs(netWorthDelta).toLocaleString('en-IN', { maximumFractionDigits: 0 })} over the next 12 months due to ongoing loan repayments.`}
+                    ? 'Your net worth will remain stable over the next 12 months assuming no new investments or repayments.'
+                    : `Your net worth is projected to improve by ₹${Math.abs(netWorthDelta).toLocaleString('en-IN', { maximumFractionDigits: 0 })} over the next 12 months as your loans are repaid.`}
                 </p>
                 <p className="text-sm text-muted-foreground mb-3">
-                  This outlook assumes no new investments or loans.
+                  Assumes no new investments or loans.
                 </p>
                 <Link
                   href="/liabilities"
@@ -1829,22 +1821,34 @@ function DashboardContent() {
         {/* ZONE 5: PERFORMANCE SNAPSHOT (Below the Fold) */}
         {/* ============================================================================ */}
         <section className="mb-8 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
-          <div className="text-center">
-            <p className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
-              Portfolio XIRR: {xirrContent.xirr !== null ? formatXIRR(xirrContent.xirr, false) : 'N/A'}
-            </p>
-            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-2">
-              {xirrContent.xirr !== null 
-                ? (portfolioData.summary.createdAt 
-                    ? `Since ${new Date(portfolioData.summary.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })} • All asset classes`
-                    : portfolioData.summary.lastUpdated
-                      ? `Since ${new Date(portfolioData.summary.lastUpdated).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })} • All asset classes`
-                      : 'Since inception • All asset classes')
-                : portfolioData.holdings.length === 0
-                  ? 'Add holdings to calculate XIRR'
-                  : 'Requires at least 30 days of data • All asset classes'
-              }
-            </p>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] mb-1">Portfolio Return (CAGR)</p>
+              <p className={`text-3xl font-semibold number-emphasis ${
+                xirrContent.xirr === null
+                  ? 'text-[#6B7280] dark:text-[#94A3B8]'
+                  : xirrContent.xirr >= 0
+                    ? 'text-[#16A34A] dark:text-[#22C55E]'
+                    : 'text-[#DC2626] dark:text-[#F87171]'
+              }`}>
+                {xirrContent.xirr !== null ? formatXIRR(xirrContent.xirr, false) : '—'}
+              </p>
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1.5">
+                {xirrContent.xirr !== null
+                  ? (portfolioData.summary.createdAt
+                      ? `Annualised since ${new Date(portfolioData.summary.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })} • All asset classes`
+                      : portfolioData.summary.lastUpdated
+                        ? `Annualised since ${new Date(portfolioData.summary.lastUpdated).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })} • All asset classes`
+                        : 'Annualised since inception • All asset classes')
+                  : portfolioData.holdings.length === 0
+                    ? 'Add holdings to calculate returns'
+                    : 'Requires at least 30 days of data'
+                }
+              </p>
+            </div>
+            <div className="text-xs text-[#94A3B8] dark:text-[#64748B] sm:text-right max-w-[220px]">
+              <p>Calculated as CAGR using total invested vs. current value since portfolio creation.</p>
+            </div>
           </div>
         </section>
 
@@ -1858,76 +1862,97 @@ function DashboardContent() {
             position="top"
           >
             <section className="mb-16 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden">
-            <div className="px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
+            <button
+              onClick={() => setInsightsCollapsed(!insightsCollapsed)}
+              className={`w-full px-6 py-4 flex items-center justify-between hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left ${!insightsCollapsed ? 'border-b border-[#E5E7EB] dark:border-[#334155]' : ''}`}
+              aria-expanded={!insightsCollapsed}
+            >
               <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Insights & Alerts</h2>
-            </div>
-          
-          <div className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
-            {portfolio.insights.slice(0, 3).map((insight) => {
-              const isExpanded = expandedInsightId === insight.id;
-              return (
-                <div key={insight.id}>
-                  <button
-                    onClick={() => setExpandedInsightId(isExpanded ? null : insight.id)}
-                    className="w-full px-6 py-5 flex items-center justify-between hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-4">
-                      {insight.type === 'opportunity' ? (
-                        <AlertTriangleIcon className="w-5 h-5 text-[#F59E0B] dark:text-[#FBBF24] flex-shrink-0" />
-                      ) : (
-                        <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0" />
-                      )}
-                      <div>
-                        <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{insight.title}</p>
-                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">{insight.description}</p>
-                      </div>
-                    </div>
-                    <ChevronDownIcon 
-                      className={`w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 transition-transform ${
-                        isExpanded ? 'rotate-0' : 'rotate-[-90deg]'
-                      }`} 
-                    />
-                  </button>
-                  {isExpanded && (
-                    <div className="px-6 py-4 bg-[#F6F8FB] dark:bg-[#334155] border-t border-[#E5E7EB] dark:border-[#334155]">
-                      <div className="text-sm text-[#475569] dark:text-[#CBD5E1] leading-relaxed">
-                        <p className="mb-2">
-                          <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Details:</strong>
-                        </p>
-                        <p className="text-[#475569] dark:text-[#CBD5E1]">
-                          {insight.description}
-                        </p>
-                        {insight.type === 'warning' && (
-                          <div className="mt-3 p-3 bg-[#FEF3C7] dark:bg-[#78350F] border border-[#F59E0B]/20 dark:border-[#FBBF24]/20 rounded-lg">
-                            <p className="text-xs text-[#92400E] dark:text-[#FCD34D]">
-                              This insight requires attention. Consider reviewing your portfolio allocation.
-                            </p>
-                          </div>
-                        )}
-                        {insight.type === 'opportunity' && (
-                          <div className="mt-3 p-3 bg-[#D1FAE5] dark:bg-[#14532D] border border-[#16A34A]/20 dark:border-[#22C55E]/20 rounded-lg">
-                            <p className="text-xs text-[#065F46] dark:text-[#86EFAC]">
-                              This is an opportunity to optimize your portfolio.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          
-          {/* Show upsell banner if more insights available */}
-          {portfolio.insights.length > 3 && (
-            <div className="px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155]">
-              <InsightsLimitBanner
-                totalInsights={portfolio.insights.length}
-                shownInsights={3}
+              <ChevronDownIcon
+                className={`w-5 h-5 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 transition-transform duration-200 ${
+                  insightsCollapsed ? 'rotate-[-90deg]' : 'rotate-0'
+                }`}
               />
-            </div>
-          )}
+            </button>
+
+          {!insightsCollapsed && (() => {
+            // Premium/Pro users with analytics capability see ALL insights — no limit, no paywall
+            const canSeeAllInsights = hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability);
+            const visibleInsights = canSeeAllInsights
+              ? portfolio.insights
+              : portfolio.insights.slice(0, 3);
+
+            return (
+              <>
+                <div className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
+                  {visibleInsights.map((insight) => {
+                    const isExpanded = expandedInsightId === insight.id;
+                    const iconEl = insight.type === 'warning'
+                      ? <AlertTriangleIcon className="w-5 h-5 text-[#DC2626] dark:text-[#F87171] flex-shrink-0" />
+                      : insight.type === 'opportunity'
+                        ? <TrendingUpIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0" />
+                        : <InfoIcon className="w-5 h-5 text-[#2563EB] dark:text-[#60A5FA] flex-shrink-0" />;
+
+                    const tagEl = insight.type === 'warning'
+                      ? <span className="text-[10px] font-semibold uppercase tracking-wide text-[#DC2626] dark:text-[#F87171] bg-[#FEE2E2] dark:bg-[#450a0a] px-1.5 py-0.5 rounded">Action needed</span>
+                      : insight.type === 'opportunity'
+                        ? <span className="text-[10px] font-semibold uppercase tracking-wide text-[#16A34A] dark:text-[#22C55E] bg-[#D1FAE5] dark:bg-[#052e16] px-1.5 py-0.5 rounded">Opportunity</span>
+                        : <span className="text-[10px] font-semibold uppercase tracking-wide text-[#2563EB] dark:text-[#60A5FA] bg-[#EFF6FF] dark:bg-[#0c1a3a] px-1.5 py-0.5 rounded">Info</span>;
+
+                    return (
+                      <div key={insight.id}>
+                        <button
+                          onClick={() => setExpandedInsightId(isExpanded ? null : insight.id)}
+                          className="w-full px-6 py-4 flex items-start justify-between hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors text-left cursor-pointer"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5">{iconEl}</div>
+                            <div>
+                              <div className="flex items-center gap-2 mb-0.5">
+                                {tagEl}
+                              </div>
+                              <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{insight.title}</p>
+                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5 leading-relaxed">{insight.description}</p>
+                            </div>
+                          </div>
+                          <ChevronDownIcon
+                            className={`w-4 h-4 mt-1 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 transition-transform ${
+                              isExpanded ? 'rotate-180' : 'rotate-0'
+                            }`}
+                          />
+                        </button>
+                        {isExpanded && (
+                          <div className={`px-6 py-3 border-t border-[#E5E7EB] dark:border-[#334155] ${
+                            insight.type === 'warning'
+                              ? 'bg-[#FFF7F7] dark:bg-[#2d0808]'
+                              : insight.type === 'opportunity'
+                                ? 'bg-[#F0FDF4] dark:bg-[#061409]'
+                                : 'bg-[#F0F7FF] dark:bg-[#071428]'
+                          }`}>
+                            <p className="text-xs text-[#475569] dark:text-[#94A3B8] leading-relaxed">
+                              {insight.type === 'warning' && '⚠ Review your portfolio to address this concentration risk.'}
+                              {insight.type === 'opportunity' && '💡 Take action on this to improve your long-term returns.'}
+                              {insight.type === 'info' && 'ℹ No immediate action required. Keep this in mind as you review your portfolio.'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Upsell banner — only for users who cannot see all insights */}
+                {!canSeeAllInsights && portfolio.insights.length > 3 && (
+                  <div className="px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155]">
+                    <InsightsLimitBanner
+                      totalInsights={portfolio.insights.length}
+                      shownInsights={3}
+                    />
+                  </div>
+                )}
+              </>
+            );
+          })()}
           </section>
           </OnboardingHint>
         </ErrorBoundary>
