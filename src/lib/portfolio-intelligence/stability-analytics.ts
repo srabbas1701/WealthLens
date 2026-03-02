@@ -67,6 +67,8 @@ export interface StabilityAnalysis {
   creditRisk: CreditRiskExposure;
   retirement: RetirementContribution;
   insights: string[];
+  /** Top equity sectors by value (for scenario analysis) */
+  topSectors: Array<{ sector: string; percentage: number; value: number }>;
   metadata: {
     calculatedAt: string;
     totalPortfolioValue: number;
@@ -275,37 +277,56 @@ export function calculateStabilityAnalysis(
   const metrics = calculateStabilityMetrics(holdings);
   const creditRisk = calculateCreditRiskExposure(holdings);
   const retirement = calculateRetirementContribution(holdings);
-  
+
+  // ── Top sectors from direct equity holdings (used by scenario analysis) ──
+  const equityHoldings = holdings.filter(h => h.assetType === 'equity' && h.sector);
+  const sectorMap = new Map<string, number>();
+  equityHoldings.forEach(h => {
+    if (h.sector) {
+      sectorMap.set(h.sector, (sectorMap.get(h.sector) ?? 0) + h.currentValue);
+    }
+  });
+  const totalEquityValue = equityHoldings.reduce((s, h) => s + h.currentValue, 0);
+  const topSectors = [...sectorMap.entries()]
+    .map(([sector, value]) => ({
+      sector,
+      value,
+      percentage: totalEquityValue > 0 ? (value / totalEquityValue) * 100 : 0,
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+
   // Generate insights (compliance-friendly language: no buy/sell, use review/consider)
   const insights: string[] = [];
-  
+
   if (metrics.capitalProtected.percentage < 20 && summary.totalValue > 500000) {
     insights.push(`${metrics.capitalProtected.percentage.toFixed(0)}% in stability-oriented assets — consider reviewing allocation for portfolio balance`);
   }
-  
+
   if (metrics.stabilityScore >= 60) {
     insights.push(`Stability score of ${metrics.stabilityScore} indicates strong stability characteristics`);
   } else if (metrics.stabilityScore < 30) {
     insights.push(`Stability score of ${metrics.stabilityScore} — portfolio is primarily market-linked, which may increase volatility`);
   }
-  
+
   if (creditRisk.riskLevel === 'High') {
     insights.push(`High credit risk exposure in debt instruments — review to understand potential impact`);
   }
-  
+
   if (retirement.percentage < 10 && summary.totalValue > 1000000) {
     insights.push(`${retirement.percentage.toFixed(0)}% in retirement instruments — review to understand potential tax efficiency benefits`);
   }
-  
+
   if (retirement.taxBenefits.eeeAssets > 0) {
     insights.push(`${((retirement.taxBenefits.eeeAssets / summary.totalValue) * 100).toFixed(1)}% in EEE assets (EPF/PPF) provides tax efficiency through long-term savings`);
   }
-  
+
   return {
     metrics,
     creditRisk,
     retirement,
-    insights: insights.slice(0, 5), // Max 5 insights
+    insights: insights.slice(0, 5),
+    topSectors,
     metadata: {
       calculatedAt: new Date().toISOString(),
       totalPortfolioValue: summary.totalValue,

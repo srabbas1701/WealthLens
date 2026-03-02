@@ -23,6 +23,14 @@ import {
   filterByRiskEngine,
   getNormalizedSummary,
 } from './asset-normalization';
+import {
+  classifyStockCap,
+  detectInternationalMF,
+  MF_EQUITY_RATIO_BY_CLASS,
+  MF_EQUITY_DEFAULT,
+  MF_CAP_SPLIT,
+  INTL_EQUITY_RATIO,
+} from './index-constituents';
 
 export type HealthGrade = 'Excellent' | 'Good' | 'Fair' | 'Poor';
 export type Severity = 'info' | 'low' | 'medium' | 'high';
@@ -418,12 +426,13 @@ function calculateDiversificationOverlapPillar(
 
 /**
  * Pillar 4: Market Cap Balance (15% weight)
- * 
+ *
  * Financial Logic:
  * - Only applies to market-driven assets
- * - Optimal: 50-60% Large, 25-35% Mid, 10-20% Small
- * - Too much large-cap = lower growth potential
- * - Too much small-cap = higher volatility
+ * - Direct stocks classified using Nifty 100 (Large) / Nifty Midcap 150 (Mid) lists
+ * - MF equity estimated using typical Indian fund cap split (68/22/10)
+ * - Optimal: 50-70% Large, 20-30% Mid, 10-20% Small
+ * - Too much small-cap = higher volatility; too little = lower growth potential
  */
 function calculateMarketCapBalancePillar(
   marketDrivenHoldings: NormalizedHolding[],
@@ -432,47 +441,118 @@ function calculateMarketCapBalancePillar(
   const deductions: Deduction[] = [];
   let score = 100;
 
-  // Only market-driven assets affect this
   if (marketDrivenHoldings.length === 0) {
     return {
       name: 'market_cap_balance',
       displayName: 'Market Cap Balance',
       score: 70,
       weight: PILLAR_WEIGHTS.market_cap_balance,
-      deductions: [{
-        reason: 'No market-driven assets to analyze',
-        impact: 0,
-        severity: 'info',
-        category: 'coverage',
-      }],
-      metadata: {
-        color: getScoreColor(70),
-        severity: 'low',
-        tooltip: 'Market cap analysis applies to stocks and equity funds',
-      },
+      deductions: [{ reason: 'No market-driven assets to analyze', impact: 0, severity: 'info', category: 'coverage' }],
+      metadata: { color: getScoreColor(70), severity: 'low', tooltip: 'Market cap analysis applies to stocks and equity funds' },
     };
   }
 
-  // Note: Actual market cap breakdown would require:
-  // 1. For stocks: Market cap data from stock master
-  // 2. For MFs: Factsheet data showing market cap allocation
-  // This is a placeholder - defaults to neutral score
+  const equityStocks = marketDrivenHoldings.filter(h => h.assetType === 'equity' || h.assetType === 'etf');
+  const mfHoldings = marketDrivenHoldings.filter(h => h.assetType === 'mutual_fund' || h.assetType === 'index_fund');
+
+  let largeCapValue = 0;
+  let midCapValue   = 0;
+  let smallCapValue = 0;
+
+  // Classify direct equity stocks using Nifty 100 / Midcap 150 lookup
+  equityStocks.forEach(h => {
+    const cap = classifyStockCap(h.symbol);
+    if (cap === 'Large Cap') largeCapValue += h.currentValue;
+    else if (cap === 'Mid Cap') midCapValue += h.currentValue;
+    else smallCapValue += h.currentValue;
+  });
+
+  // Estimate MF market cap distribution (68 large / 22 mid / 10 small)
+  mfHoldings.forEach(h => {
+    const equityRatio = MF_EQUITY_RATIO_BY_CLASS[h.assetClass ?? ''] ?? MF_EQUITY_DEFAULT;
+    const equityValue = h.currentValue * equityRatio;
+    largeCapValue += equityValue * MF_CAP_SPLIT['Large Cap'];
+    midCapValue   += equityValue * MF_CAP_SPLIT['Mid Cap'];
+    smallCapValue += equityValue * MF_CAP_SPLIT['Small Cap'];
+  });
+
+  const totalClassified = largeCapValue + midCapValue + smallCapValue;
+  if (totalClassified === 0) {
+    return {
+      name: 'market_cap_balance',
+      displayName: 'Market Cap Balance',
+      score: 70,
+      weight: PILLAR_WEIGHTS.market_cap_balance,
+      deductions: [{ reason: 'Could not classify market cap for equity holdings', impact: 0, severity: 'info', category: 'coverage' }],
+      metadata: { color: getScoreColor(70), severity: 'low', tooltip: 'Market cap analysis requires classifiable equity holdings' },
+    };
+  }
+
+  const largePct = (largeCapValue / totalClassified) * 100;
+  const midPct   = (midCapValue   / totalClassified) * 100;
+  const smallPct = (smallCapValue / totalClassified) * 100;
+
+  // Deduct for excessive small-cap (primary volatility risk)
+  if (smallPct > 25) {
+    const excess  = smallPct - 25;
+    const impact  = Math.min(excess * 1.2, 30);
+    score -= impact;
+    deductions.push({
+      reason: `High small-cap exposure (${smallPct.toFixed(0)}%) significantly increases portfolio volatility`,
+      impact,
+      severity: smallPct > 40 ? 'high' : 'medium',
+      category: 'market_cap',
+    });
+  } else if (smallPct > 20) {
+    const excess  = smallPct - 20;
+    const impact  = Math.min(excess * 0.8, 10);
+    score -= impact;
+    deductions.push({
+      reason: `Small-cap exposure (${smallPct.toFixed(0)}%) is above moderate range, adding some volatility`,
+      impact,
+      severity: 'low',
+      category: 'market_cap',
+    });
+  }
+
+  // Deduct for very low large-cap (stability anchor missing)
+  if (largePct < 40) {
+    const deficit = 40 - largePct;
+    const impact  = Math.min(deficit * 0.8, 20);
+    score -= impact;
+    deductions.push({
+      reason: `Low large-cap allocation (${largePct.toFixed(0)}%) reduces portfolio stability anchor`,
+      impact,
+      severity: largePct < 25 ? 'medium' : 'low',
+      category: 'market_cap',
+    });
+  }
+
+  // Mild deduction for over-concentration in large caps (limiting growth)
+  if (largePct > 80) {
+    const excess  = largePct - 80;
+    const impact  = Math.min(excess * 0.5, 10);
+    score -= impact;
+    deductions.push({
+      reason: `Very high large-cap concentration (${largePct.toFixed(0)}%) may limit mid/small-cap growth participation`,
+      impact,
+      severity: 'low',
+      category: 'market_cap',
+    });
+  }
+
+  score = Math.max(0, Math.min(100, score));
 
   return {
     name: 'market_cap_balance',
     displayName: 'Market Cap Balance',
-    score: 75, // Placeholder - would calculate from market cap data
+    score: Math.round(score),
     weight: PILLAR_WEIGHTS.market_cap_balance,
-    deductions: [{
-      reason: 'Market cap data not available (requires factsheet data)',
-      impact: 0,
-      severity: 'info',
-      category: 'data',
-    }],
+    deductions,
     metadata: {
-      color: getScoreColor(75),
-      severity: 'low',
-      tooltip: 'Market cap analysis requires fund factsheet data',
+      color: getScoreColor(score),
+      severity: getScoreSeverity(score),
+      tooltip: `Large: ${largePct.toFixed(0)}%, Mid: ${midPct.toFixed(0)}%, Small: ${smallPct.toFixed(0)}%`,
     },
   };
 }
@@ -557,66 +637,210 @@ function calculateSectorBalancePillar(
 
 /**
  * Pillar 6: Geography Balance (5% weight)
- * 
+ *
  * Financial Logic:
- * - Only applies to market-driven assets
- * - India vs International exposure
- * - Currency diversification benefit
+ * - Only applies to market-driven assets (equity + MFs)
+ * - Direct NSE/BSE stocks → 100% India
+ * - MFs classified as international via fund name patterns
+ * - Optimal: 5–30% international exposure for meaningful diversification
+ * - 0% international = full India concentration risk
+ * - >35% international = elevated currency risk
  */
 function calculateGeographyBalancePillar(
   marketDrivenHoldings: NormalizedHolding[],
   summary: ReturnType<typeof getNormalizedSummary>
 ): PillarScore {
-  // Placeholder - would require MF factsheet data for international exposure
+  const deductions: Deduction[] = [];
+  let score = 100;
+
+  if (marketDrivenHoldings.length === 0) {
+    return {
+      name: 'geography_balance',
+      displayName: 'Geography Balance',
+      score: 70,
+      weight: PILLAR_WEIGHTS.geography_balance,
+      deductions: [{ reason: 'No market-driven assets to analyze', impact: 0, severity: 'info', category: 'coverage' }],
+      metadata: { color: getScoreColor(70), severity: 'low', tooltip: 'Geography analysis applies to stocks and equity funds' },
+    };
+  }
+
+  // Direct stocks are always India
+  const directStocks = marketDrivenHoldings.filter(h => h.assetType === 'equity' || h.assetType === 'etf');
+  const mfHoldings   = marketDrivenHoldings.filter(h => h.assetType === 'mutual_fund' || h.assetType === 'index_fund');
+
+  let indiaEquityValue   = 0;
+  let intlEquityValue    = 0;
+
+  directStocks.forEach(h => { indiaEquityValue += h.currentValue; });
+
+  mfHoldings.forEach(h => {
+    const equityRatio = MF_EQUITY_RATIO_BY_CLASS[h.assetClass ?? ''] ?? MF_EQUITY_DEFAULT;
+    const equityValue = h.currentValue * equityRatio;
+    const confidence  = detectInternationalMF(h.name);
+    if (confidence) {
+      const intlFraction = INTL_EQUITY_RATIO[confidence];
+      intlEquityValue  += equityValue * intlFraction;
+      indiaEquityValue += equityValue * (1 - intlFraction);
+    } else {
+      indiaEquityValue += equityValue;
+    }
+  });
+
+  const totalEquity = indiaEquityValue + intlEquityValue;
+  if (totalEquity === 0) {
+    return {
+      name: 'geography_balance',
+      displayName: 'Geography Balance',
+      score: 70,
+      weight: PILLAR_WEIGHTS.geography_balance,
+      deductions: [{ reason: 'No classifiable equity holdings found', impact: 0, severity: 'info', category: 'coverage' }],
+      metadata: { color: getScoreColor(70), severity: 'low', tooltip: 'Geography analysis requires equity holdings' },
+    };
+  }
+
+  const intlPct  = (intlEquityValue  / totalEquity) * 100;
+  const indiaPct = (indiaEquityValue / totalEquity) * 100;
+
+  if (intlPct === 0) {
+    // No international exposure — portfolio is entirely India-focused
+    score -= 15;
+    deductions.push({
+      reason: `No international equity exposure — portfolio is 100% India-focused, missing global diversification`,
+      impact: 15,
+      severity: 'medium',
+      category: 'geography',
+    });
+  } else if (intlPct < 5) {
+    score -= 8;
+    deductions.push({
+      reason: `Minimal international exposure (${intlPct.toFixed(0)}%) — limited geographic diversification benefit`,
+      impact: 8,
+      severity: 'low',
+      category: 'geography',
+    });
+  } else if (intlPct > 40) {
+    const excess  = intlPct - 40;
+    const impact  = Math.min(excess * 0.8, 15);
+    score -= impact;
+    deductions.push({
+      reason: `High international exposure (${intlPct.toFixed(0)}%) — significant currency risk (INR vs USD/EUR)`,
+      impact,
+      severity: intlPct > 55 ? 'medium' : 'low',
+      category: 'geography',
+    });
+  }
+  // 5–40% international = healthy diversification range, no deduction
+
+  score = Math.max(0, Math.min(100, score));
+
   return {
     name: 'geography_balance',
     displayName: 'Geography Balance',
-    score: 75,
+    score: Math.round(score),
     weight: PILLAR_WEIGHTS.geography_balance,
-    deductions: [{
-      reason: 'Geography analysis requires fund factsheet data',
-      impact: 0,
-      severity: 'info',
-      category: 'data',
-    }],
+    deductions,
     metadata: {
-      color: getScoreColor(75),
-      severity: 'low',
-      tooltip: 'Geography analysis requires factsheet data',
+      color: getScoreColor(score),
+      severity: getScoreSeverity(score),
+      tooltip: `India: ${indiaPct.toFixed(0)}%, International: ${intlPct.toFixed(0)}%`,
     },
   };
 }
 
 /**
  * Pillar 7: Investment Quality (15% weight)
- * 
+ *
  * Financial Logic:
- * - Quality of individual holdings
- * - For stocks: Earnings consistency, ROE, debt levels
- * - For funds: Rolling returns, downside capture
- * - Placeholder for now
+ * - Quality assessed using available return and structural data
+ * - Gain/loss ratio: portfolio value in positive-return holdings vs total
+ * - Concentrated unrealised losses in large positions are high-severity signals
+ * - Government-backed assets (EPF/PPF) are treated as high-quality anchors
+ * - Stability-oriented assets with no negative return = quality positive
  */
 function calculateInvestmentQualityPillar(
   holdings: NormalizedHolding[],
   summary: ReturnType<typeof getNormalizedSummary>
 ): PillarScore {
-  // Placeholder - would require fundamental data for stocks,
-  // performance data for funds
+  const deductions: Deduction[] = [];
+  let score = 100;
+
+  const totalValue = summary.totalValue;
+  if (totalValue === 0 || holdings.length === 0) {
+    return getEmptyPillar('investment_quality', 'Investment Quality');
+  }
+
+  // Separate government-backed (always quality) from market-driven
+  const govBacked    = holdings.filter(h => h.assetType === 'epf' || h.assetType === 'ppf');
+  const otherHoldings = holdings.filter(h => h.assetType !== 'epf' && h.assetType !== 'ppf');
+
+  const govValue = govBacked.reduce((s, h) => s + h.currentValue, 0);
+
+  // Compute positive/negative return values from non-gov holdings
+  let positiveReturnValue = govValue; // Gov-backed always count as positive quality
+  let negativeReturnValue = 0;
+
+  otherHoldings.forEach(h => {
+    if (h.currentValue >= h.investedValue) {
+      positiveReturnValue += h.currentValue;
+    } else {
+      negativeReturnValue += h.currentValue;
+    }
+  });
+
+  const positiveReturnPct = (positiveReturnValue / totalValue) * 100;
+  const negativeReturnPct = (negativeReturnValue / totalValue) * 100;
+
+  // Score reduction based on proportion in negative-return holdings
+  if (negativeReturnPct > 30) {
+    const impact = Math.min((negativeReturnPct - 30) * 0.8, 25);
+    score -= impact;
+    deductions.push({
+      reason: `${negativeReturnPct.toFixed(0)}% of portfolio (by value) shows unrealised losses — indicates quality concerns`,
+      impact,
+      severity: negativeReturnPct > 50 ? 'high' : 'medium',
+      category: 'quality',
+    });
+  } else if (negativeReturnPct > 15) {
+    const impact = Math.min((negativeReturnPct - 15) * 0.6, 15);
+    score -= impact;
+    deductions.push({
+      reason: `${negativeReturnPct.toFixed(0)}% of portfolio is in holdings with unrealised losses`,
+      impact,
+      severity: 'low',
+      category: 'quality',
+    });
+  }
+
+  // Check for concentrated unrealised losses (large position in deep loss)
+  otherHoldings.forEach(h => {
+    if (h.investedValue > 0 && h.currentValue < h.investedValue) {
+      const holdingWeightPct = (h.currentValue / totalValue) * 100;
+      const lossPct = ((h.investedValue - h.currentValue) / h.investedValue) * 100;
+      if (holdingWeightPct > 10 && lossPct > 20) {
+        const impact = Math.min(lossPct * 0.25, 15);
+        score -= impact;
+        deductions.push({
+          reason: `${h.name} carries a ${lossPct.toFixed(0)}% unrealised loss with ${holdingWeightPct.toFixed(0)}% portfolio weight`,
+          impact,
+          severity: lossPct > 40 ? 'high' : 'medium',
+          category: 'quality',
+        });
+      }
+    }
+  });
+
+  score = Math.max(0, Math.min(100, score));
+
   return {
     name: 'investment_quality',
     displayName: 'Investment Quality',
-    score: 75,
+    score: Math.round(score),
     weight: PILLAR_WEIGHTS.investment_quality,
-    deductions: [{
-      reason: 'Quality analysis requires fundamental data',
-      impact: 0,
-      severity: 'info',
-      category: 'data',
-    }],
+    deductions,
     metadata: {
-      color: getScoreColor(75),
-      severity: 'low',
-      tooltip: 'Quality analysis requires additional data sources',
+      color: getScoreColor(score),
+      severity: getScoreSeverity(score),
+      tooltip: `${positiveReturnPct.toFixed(0)}% of portfolio value in positive-return holdings`,
     },
   };
 }

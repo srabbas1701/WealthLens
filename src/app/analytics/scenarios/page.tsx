@@ -22,7 +22,6 @@ import {
   SCENARIO_COPY,
   PAGE_TITLES,
   EMPTY_STATES,
-  COMMON_DISCLAIMERS,
 } from '@/constants/analyticsCopy';
 import type { StabilityAnalysis } from '@/lib/portfolio-intelligence/stability-analytics';
 import {
@@ -114,9 +113,14 @@ export default function ScenarioAnalyticsPage() {
   const marketDrawdown = calculateMarketDrawdownScenario(stabilityData);
   const rateShock = calculateRateShockScenario(stabilityData);
   const marketRecovery = calculateMarketRecoveryScenario(stabilityData);
-  
-  // For sector shock, use a default sector (in production, would come from sector analytics)
-  const sectorShock = calculateSectorShockScenario(stabilityData, 'Technology', 25);
+
+  // Use real top sector from stability analytics (falls back to Financial Services / 20%)
+  const topSector  = stabilityData.topSectors?.[0];
+  const sectorShock = calculateSectorShockScenario(
+    stabilityData,
+    topSector?.sector ?? 'Financial Services',
+    topSector?.percentage ?? 20
+  );
 
   const scenarios: Record<ScenarioType, ScenarioResult> = {
     marketDrawdown,

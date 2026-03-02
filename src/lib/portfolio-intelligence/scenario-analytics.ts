@@ -1,11 +1,11 @@
 /**
  * Scenario Analytics
- * 
+ *
  * V3: Scenario-Linked Analytics
- * 
+ *
  * Simulates how portfolio structure behaves under different hypothetical market conditions.
  * Educational and risk-understanding focused. NO predictions, NO investment advice.
- * 
+ *
  * Financial Logic:
  * - Uses current exposure and stability data only
  * - Focuses on relative impact and risk understanding
@@ -15,9 +15,9 @@
 import type { StabilityAnalysis } from './stability-analytics';
 
 export interface ScenarioImpact {
-  portfolioImpactPercent: number; // Estimated portfolio impact percentage
-  marketLinkedImpact: number; // Impact on market-linked assets
-  stabilityCushion: number; // Cushioning effect from stability assets
+  portfolioImpactPercent: number; // Estimated portfolio impact %
+  marketLinkedImpact: number;     // Impact magnitude on market-linked assets
+  stabilityCushion: number;       // % of portfolio cushioned by stability assets
   explanation: {
     what: string;
     why: string;
@@ -27,7 +27,7 @@ export interface ScenarioImpact {
 
 export interface MarketDrawdownScenario extends ScenarioImpact {
   scenarioType: 'marketDrawdown';
-  marketDeclinePercent: number; // e.g., -20
+  marketDeclinePercent: number;
   estimatedPortfolioDecline: number;
 }
 
@@ -41,27 +41,29 @@ export interface SectorShockScenario extends ScenarioImpact {
 
 export interface RateShockScenario extends ScenarioImpact {
   scenarioType: 'rateShock';
-  marketLinkedVolatility: number; // Estimated volatility impact
-  stabilityAssetImpact: number; // Estimated impact on stability assets
+  rateHikeBps: number;
+  marketLinkedVolatility: number;
+  stabilityAssetImpact: number;
 }
 
 export interface MarketRecoveryScenario extends ScenarioImpact {
   scenarioType: 'marketRecovery';
   equityExposurePercent: number;
-  estimatedRecoveryParticipation: number;
+  marketRecoveryPercent: number;
+  estimatedPortfolioGain: number;
 }
 
-export type ScenarioResult = 
-  | MarketDrawdownScenario 
-  | SectorShockScenario 
-  | RateShockScenario 
+export type ScenarioResult =
+  | MarketDrawdownScenario
+  | SectorShockScenario
+  | RateShockScenario
   | MarketRecoveryScenario;
 
 /**
  * Calculate Market Drawdown Scenario
- * 
+ *
  * Estimates portfolio impact if equity markets decline by a given percentage.
- * Uses market-linked exposure from stability analytics.
+ * stabilityCushion correctly uses the percentage value (not fraction).
  */
 export function calculateMarketDrawdownScenario(
   stabilityData: StabilityAnalysis,
@@ -69,40 +71,30 @@ export function calculateMarketDrawdownScenario(
 ): MarketDrawdownScenario {
   const { metrics } = stabilityData;
   const { marketLinked, capitalProtected } = metrics;
-  
-  // Market-linked assets are affected by market decline
-  // Stability-oriented assets provide cushioning (assume minimal impact)
-  const marketLinkedExposure = marketLinked.percentage / 100;
-  const stabilityExposure = capitalProtected.percentage / 100;
-  
-  // Estimate portfolio impact
-  // Market-linked assets decline by marketDeclinePercent
-  // Stability assets have minimal decline (assume 0% for simplicity)
-  const estimatedPortfolioDecline = marketLinkedExposure * Math.abs(marketDeclinePercent);
-  
-  const marketLinkedImpact = Math.abs(marketDeclinePercent);
-  const stabilityCushion = stabilityExposure; // Percentage of portfolio cushioned
-  
+
+  const marketLinkedFraction      = marketLinked.percentage / 100;
+  const estimatedPortfolioDecline = marketLinkedFraction * Math.abs(marketDeclinePercent);
+
   return {
     scenarioType: 'marketDrawdown',
     marketDeclinePercent,
     estimatedPortfolioDecline,
     portfolioImpactPercent: estimatedPortfolioDecline,
-    marketLinkedImpact,
-    stabilityCushion,
+    marketLinkedImpact: Math.abs(marketDeclinePercent),
+    stabilityCushion: capitalProtected.percentage,
     explanation: {
-      what: `In a ${Math.abs(marketDeclinePercent)}% market decline scenario, market-linked assets typically experience value changes, while stability-oriented assets provide cushioning.`,
-      why: `Your portfolio has ${marketLinked.percentage.toFixed(0)}% in market-linked assets, which means ${marketLinked.percentage.toFixed(0)}% of your portfolio value is exposed to equity market movements.`,
-      meaning: `Stability-oriented assets (${capitalProtected.percentage.toFixed(0)}%) provide downside protection during market stress, reducing overall portfolio impact compared to a fully equity portfolio.`,
+      what: `In a ${Math.abs(marketDeclinePercent)}% market decline scenario, market-linked assets typically experience value changes proportional to the decline, while stability-oriented assets provide downside cushioning.`,
+      why: `Your portfolio has ${marketLinked.percentage.toFixed(0)}% in market-linked assets, so only that portion is exposed to equity market movements. The remaining ${capitalProtected.percentage.toFixed(0)}% in stability-oriented assets acts as a buffer.`,
+      meaning: `With ${capitalProtected.percentage.toFixed(0)}% in stability-oriented assets, your portfolio is estimated to decline ${estimatedPortfolioDecline.toFixed(1)}% rather than the full ${Math.abs(marketDeclinePercent)}% a 100% equity portfolio would face.`,
     },
   };
 }
 
 /**
  * Calculate Sector Shock Scenario
- * 
- * Estimates impact if the largest sector exposure underperforms.
- * Requires sector exposure data (would need to integrate with sector analytics).
+ *
+ * Estimates impact if the largest sector exposure underperforms by 30%.
+ * Uses real sector data from stability analytics (topSectors field).
  */
 export function calculateSectorShockScenario(
   stabilityData: StabilityAnalysis,
@@ -110,93 +102,90 @@ export function calculateSectorShockScenario(
   sectorExposurePercent: number
 ): SectorShockScenario {
   const { metrics } = stabilityData;
-  
-  // Estimate impact if sector underperforms by 30%
-  const sectorShockPercent = -30;
-  const estimatedSectorImpact = (sectorExposurePercent / 100) * Math.abs(sectorShockPercent);
-  
-  // Portfolio impact is proportional to sector exposure
-  const portfolioImpactPercent = estimatedSectorImpact;
-  
+
+  const sectorShockPercent     = 30;
+  const portfolioImpactPercent = (sectorExposurePercent / 100) * sectorShockPercent;
+
   return {
     scenarioType: 'sectorShock',
     sector: largestSector,
     sectorExposurePercent,
-    estimatedSectorImpact,
-    sectorRank: 1, // Largest sector
+    estimatedSectorImpact: portfolioImpactPercent,
+    sectorRank: 1,
     portfolioImpactPercent,
-    marketLinkedImpact: Math.abs(sectorShockPercent),
+    marketLinkedImpact: sectorShockPercent,
     stabilityCushion: metrics.capitalProtected.percentage,
     explanation: {
-      what: `Sector-specific shocks occur when a particular industry faces challenges, affecting companies within that sector.`,
-      why: `Your largest sector exposure is ${largestSector} at ${sectorExposurePercent.toFixed(0)}%, meaning a significant portion of your portfolio is linked to this sector's performance.`,
-      meaning: `High sector concentration increases vulnerability to sector-specific risks, while diversified portfolios are less affected by individual sector movements.`,
+      what: `A ${sectorShockPercent}% sector-specific shock occurs when an industry faces concentrated headwinds — regulatory changes, commodity price swings, or sector-wide earnings misses.`,
+      why: `Your largest equity sector exposure is ${largestSector} at ${sectorExposurePercent.toFixed(0)}% of direct equity. A ${sectorShockPercent}% decline in this sector alone could reduce overall portfolio value by approximately ${portfolioImpactPercent.toFixed(1)}%.`,
+      meaning: `Sector concentration amplifies sector-specific risk. Portfolios spread across 6+ sectors typically show lower drawdown from any single sector shock. Stability-oriented assets (${metrics.capitalProtected.percentage.toFixed(0)}% of portfolio) are unaffected by equity sector movements.`,
     },
   };
 }
 
 /**
  * Calculate Interest Rate Shock Scenario
- * 
- * Explains impact on market-linked vs stability assets during rate changes.
+ *
+ * Models the impact of a 50 bps RBI rate hike.
+ * - Equity: ~6% P/E compression on rate-sensitive valuations
+ * - FDs/PPF/EPF: principal unaffected; FD renewals benefit from higher rates
  */
 export function calculateRateShockScenario(
   stabilityData: StabilityAnalysis
 ): RateShockScenario {
   const { metrics } = stabilityData;
   const { marketLinked, capitalProtected } = metrics;
-  
-  // Rate shocks affect both types but differently
-  // Market-linked: volatility through valuation changes
-  // Stability assets: minimal principal impact, return adjustments
-  const marketLinkedVolatility = 10; // Estimated volatility increase
-  const stabilityAssetImpact = 2; // Minimal impact on stability assets
-  
-  const portfolioImpactPercent = (marketLinked.percentage / 100) * marketLinkedVolatility;
-  
+
+  const rateHikeBps            = 50;
+  const equityVolatilityPct    = 6;
+  const stabilityImpactPct     = 0;
+
+  const portfolioImpactPercent = (marketLinked.percentage / 100) * equityVolatilityPct;
+
   return {
     scenarioType: 'rateShock',
-    marketLinkedVolatility,
-    stabilityAssetImpact,
+    rateHikeBps,
+    marketLinkedVolatility: equityVolatilityPct,
+    stabilityAssetImpact: stabilityImpactPct,
     portfolioImpactPercent,
-    marketLinkedImpact: marketLinkedVolatility,
+    marketLinkedImpact: equityVolatilityPct,
     stabilityCushion: capitalProtected.percentage,
     explanation: {
-      what: `Interest rate changes can affect both market-linked assets (through valuation) and stability-oriented assets (through returns).`,
-      why: `Market-linked assets may experience volatility due to changing valuations, while stability-oriented assets like FDs may see return adjustments but maintain principal stability.`,
-      meaning: `A balanced portfolio with both market-linked and stability-oriented assets may experience moderate volatility during rate changes compared to a single-asset-type portfolio.`,
+      what: `A ${rateHikeBps} basis point RBI rate hike typically causes equity market P/E compression, particularly for rate-sensitive sectors (real estate, NBFCs, utilities). Stability-oriented assets like FDs and PPF are largely unaffected in principal value.`,
+      why: `Your ${marketLinked.percentage.toFixed(0)}% in market-linked assets is exposed to equity valuation changes. The ${capitalProtected.percentage.toFixed(0)}% in stability-oriented assets (EPF, PPF, FDs) maintains principal stability — and FDs renewing post-hike may benefit from higher interest rates.`,
+      meaning: `Your portfolio is estimated to experience approximately ${portfolioImpactPercent.toFixed(1)}% impact from a ${rateHikeBps} bps rate shock, significantly less than a fully equity portfolio (${equityVolatilityPct}%). The stability allocation acts as a natural rate-shock buffer.`,
     },
   };
 }
 
 /**
  * Calculate Market Recovery Scenario
- * 
- * Illustrates participation in long-term market recovery.
+ *
+ * Models participation in a 20% market recovery.
+ * portfolioImpactPercent = equity% × recovery% (realistic gain, not full equity%).
  */
 export function calculateMarketRecoveryScenario(
-  stabilityData: StabilityAnalysis
+  stabilityData: StabilityAnalysis,
+  marketRecoveryPercent: number = 20
 ): MarketRecoveryScenario {
   const { metrics } = stabilityData;
-  const { marketLinked } = metrics;
-  
-  // Equity exposure equals market-linked exposure
-  const equityExposurePercent = marketLinked.percentage;
-  
-  // Recovery participation is proportional to equity exposure
-  const estimatedRecoveryParticipation = equityExposurePercent;
-  
+  const { marketLinked, capitalProtected } = metrics;
+
+  const equityExposurePercent  = marketLinked.percentage;
+  const estimatedPortfolioGain = (equityExposurePercent / 100) * marketRecoveryPercent;
+
   return {
     scenarioType: 'marketRecovery',
     equityExposurePercent,
-    estimatedRecoveryParticipation,
-    portfolioImpactPercent: estimatedRecoveryParticipation,
-    marketLinkedImpact: 100, // Full participation for equity
-    stabilityCushion: metrics.capitalProtected.percentage,
+    marketRecoveryPercent,
+    estimatedPortfolioGain,
+    portfolioImpactPercent: estimatedPortfolioGain,
+    marketLinkedImpact: marketRecoveryPercent,
+    stabilityCushion: capitalProtected.percentage,
     explanation: {
-      what: `During market recovery, equity markets typically see value appreciation, benefiting market-linked portfolios.`,
-      why: `Your ${equityExposurePercent.toFixed(0)}% equity exposure means your portfolio would participate in market recovery, while stability-oriented assets provide stability but lower participation.`,
-      meaning: `A portfolio with equity exposure participates in long-term market growth, while stability-oriented assets preserve capital but may have lower growth participation.`,
+      what: `In a ${marketRecoveryPercent}% equity market recovery, market-linked assets participate proportionally in the upswing. Stability-oriented assets preserve capital but participate less in equity-driven rallies.`,
+      why: `Your ${equityExposurePercent.toFixed(0)}% equity exposure means your portfolio captures approximately ${equityExposurePercent.toFixed(0)}% of the recovery benefit — estimated at ${estimatedPortfolioGain.toFixed(1)}% overall portfolio gain from a ${marketRecoveryPercent}% market rise.`,
+      meaning: `The ${capitalProtected.percentage.toFixed(0)}% in stability-oriented assets limits full participation in equity rallies, but this is the same cushion that protected you during the drawdown scenario. A balanced portfolio trades some upside for meaningful downside protection.`,
     },
   };
 }

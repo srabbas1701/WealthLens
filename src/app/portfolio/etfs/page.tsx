@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -16,6 +16,7 @@ import {
   FileIcon,
   CheckCircleIcon,
   InfoIcon,
+  LockIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   RefreshIcon,
@@ -24,6 +25,7 @@ import { useAuth } from '@/lib/auth';
 import { useCapabilities } from '@/lib/capabilities';
 import { FEATURE_ACCESS } from '@/config/feature-access';
 import PremiumDownloadModal from '@/components/PremiumDownloadModal';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
 import { Plus, Edit, Trash2, X } from 'lucide-react';
@@ -70,6 +72,7 @@ export default function ETFHoldingsPage() {
   const { formatCurrency } = useCurrency();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [showIntelligenceModal, setShowIntelligenceModal] = useState(false);
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
 
   const { data: marketDataStatus, loading: marketDataStatusLoading } = useMarketDataStatus();
@@ -122,6 +125,10 @@ export default function ETFHoldingsPage() {
   const [etfToDelete, setEtfToDelete] = useState<ETFHolding | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
+  // Intelligence state (premium)
+  const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -198,6 +205,22 @@ export default function ETFHoldingsPage() {
     } finally {
       setLoading(false);
       fetchingRef.current = false;
+    }
+  }, []);
+
+  // Fetch sparklines for ETF symbols (reuses stocks sparkline API — ETFs trade on NSE like stocks)
+  const fetchSparklines = useCallback(async (etfs: ETFHolding[]) => {
+    const symbols = etfs
+      .map(h => h.symbol)
+      .filter((s): s is string => !!s && s.trim().length > 0);
+    if (symbols.length === 0) return;
+    try {
+      const res = await fetch(`/api/stocks/sparklines?symbols=${symbols.join(',')}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.sparklines) setSparklines(data.sparklines);
+    } catch {
+      // sparklines are decorative — silently skip
     }
   }, []);
 
@@ -282,6 +305,13 @@ export default function ETFHoldingsPage() {
       }
     }
   }, [user?.id, fetchData]);
+
+  // Fetch sparklines once holdings load (premium only)
+  useEffect(() => {
+    if (holdings.length > 0 && !capabilitiesLoading && hasCapability(FEATURE_ACCESS.ANALYST_VIEW.capability)) {
+      fetchSparklines(holdings);
+    }
+  }, [holdings, capabilitiesLoading, hasCapability, fetchSparklines]);
 
   const handlePriceUpdate = async () => {
     setPriceUpdateLoading(true);
@@ -560,6 +590,84 @@ export default function ETFHoldingsPage() {
       : <ChevronDownIcon className="w-4 h-4 text-[#2563EB] dark:text-[#3B82F6]" />;
   };
 
+  // ---------------------------------------------------------------------------
+  // ETF Intelligence helpers (premium)
+  // ---------------------------------------------------------------------------
+  const hasPremium = !capabilitiesLoading && hasCapability(FEATURE_ACCESS.ANALYST_VIEW.capability);
+
+  const computeETFSignal = (returnPct: number): 'strong' | 'good' | 'steady' | 'loss' => {
+    if (returnPct >= 20) return 'strong';
+    if (returnPct >= 10) return 'good';
+    if (returnPct >= 0)  return 'steady';
+    return 'loss';
+  };
+
+  const ETF_SIGNAL_CONFIG = {
+    strong: { label: 'Strong Performer', color: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' },
+    good:   { label: 'Good Performer',   color: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400' },
+    steady: { label: 'Steady',           color: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' },
+    loss:   { label: 'In Loss',          color: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' },
+  } as const;
+
+  const ETF_TYPE_NOTES: Record<string, string> = {
+    Equity: 'Equity index ETF — tracks a stock market index (Nifty 50, Bank Nifty, etc.)',
+    Debt:   'Debt ETF — fixed income exposure, lower volatility than equity',
+    Gold:   'Gold ETF — inflation hedge, tracks physical gold prices',
+    Hybrid: 'Hybrid ETF — blends equity and debt for balanced exposure',
+    Cash:   'Liquid ETF — near-zero duration, capital preservation focus',
+    Other:  'Diversified ETF — review the underlying index for category details',
+  };
+
+  // Rank each holding within its category by absolute return
+  const categoryIntelligence = useMemo(() => {
+    const byCategory: Record<string, ETFHolding[]> = {};
+    for (const h of holdings) {
+      if (!byCategory[h.category]) byCategory[h.category] = [];
+      byCategory[h.category].push(h);
+    }
+    for (const cat of Object.keys(byCategory)) {
+      byCategory[cat].sort((a, b) => b.gainLossPercent - a.gainLossPercent);
+    }
+    const result: Record<string, { rank: number; total: number; categoryAvgReturn: number }> = {};
+    for (const members of Object.values(byCategory)) {
+      const avgReturn = members.reduce((s, h) => s + h.gainLossPercent, 0) / members.length;
+      members.forEach((h, i) => {
+        result[h.id] = { rank: i + 1, total: members.length, categoryAvgReturn: avgReturn };
+      });
+    }
+    return result;
+  }, [holdings]);
+
+  // Inline sparkline SVG
+  const ETFSparkline = ({ data, positive }: { data: number[]; positive: boolean }) => {
+    if (!data || data.length < 2) return null;
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+    const W = 80, H = 22;
+    const pts = data
+      .map((v, i) => {
+        const x = (i / (data.length - 1)) * W;
+        const y = H - ((v - min) / range) * (H - 4) - 2;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+    const color = positive ? '#16A34A' : '#DC2626';
+    return (
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
+        <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  };
+
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
   // Get most recent price date from holdings
   const mostRecentPriceDate = useMemo(() => {
     const dates = holdings
@@ -702,7 +810,7 @@ export default function ETFHoldingsPage() {
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <Link
                 href="/portfolio/etfs/add"
-                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-6 md:py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm md:text-base min-w-[44px] min-h-[44px]"
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm min-w-[44px] min-h-[44px]"
                 title="Add ETF"
               >
                 <Plus className="w-5 h-5 shrink-0" />
@@ -711,7 +819,7 @@ export default function ETFHoldingsPage() {
               <button
                 onClick={handlePriceUpdate}
                 disabled={priceUpdateLoading || priceUpdateDisabled || disableForRecentRun}
-                className={`inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] rounded-lg font-medium text-sm transition-colors ${
+                className={`inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] min-w-[44px] min-h-[44px] rounded-lg font-semibold text-sm transition-colors ${
                   priceUpdateLoading || priceUpdateDisabled || disableForRecentRun
                     ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
                     : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
@@ -825,7 +933,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                      className="px-3 py-3 text-left text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('category')}
                     >
                       <div className="flex items-center gap-2">
@@ -834,7 +942,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                      className="px-3 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('units')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -843,7 +951,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                      className="px-3 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('avgPrice')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -852,16 +960,16 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                      className="px-3 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('currentNAV')}
                     >
                       <div className="flex items-center justify-end gap-2">
-                        <span>Current NAV</span>
+                        <span>CMP</span>
                         <SortIcon field="currentNAV" />
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                      className="px-3 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('investedValue')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -870,7 +978,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                      className="px-3 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('currentValue')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -879,7 +987,7 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                      className="px-3 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('gainLoss')}
                     >
                       <div className="flex items-center justify-end gap-2">
@@ -888,15 +996,15 @@ export default function ETFHoldingsPage() {
                       </div>
                     </th>
                     <th 
-                      className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                      className="px-3 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                       onClick={() => handleSort('allocation')}
                     >
                       <div className="flex items-center justify-end gap-2">
-                        <span>Allocation %</span>
+                        <span>% Port</span>
                         <SortIcon field="allocation" />
                       </div>
                     </th>
-                    <th className="text-right px-6 py-4 text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider w-20">
+                    <th className="text-right px-3 py-3 text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider w-24">
                       Actions
                     </th>
                   </tr>
@@ -912,86 +1020,207 @@ export default function ETFHoldingsPage() {
                       </td>
                     </tr>
                   ) : (
-                    sortedHoldings.map((holding) => (
-                      <tr key={holding.id} className="group hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
-                        <td className="px-6 py-3.5">
-                          <div>
-                            <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.name}</p>
-                            {holding.symbol && (
-                              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">{holding.symbol}</p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
-                            holding.category === 'Equity' 
-                              ? 'bg-[#E0F2FE] dark:bg-[#0C4A6E] text-[#0369A1] dark:text-[#7DD3FC]'
-                              : holding.category === 'Debt'
-                              ? 'bg-[#F0FDF4] dark:bg-[#14532D] text-[#166534] dark:text-[#86EFAC]'
-                              : holding.category === 'Gold'
-                              ? 'bg-[#FEF3C7] dark:bg-[#78350F] text-[#92400E] dark:text-[#FDE047]'
-                              : 'bg-[#F3F4F6] dark:bg-[#475569] text-[#4B5563] dark:text-[#E5E7EB]'
-                          }`}>
-                            {holding.category}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
-                          {formatNumber(holding.units, 2)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
-                          ₹{formatNumber(holding.averagePrice, 2)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
-                          ₹{formatNumber(holding.currentNAV, 2)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
-                          {formatCurrency(holding.investedValue)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
-                          {formatCurrency(holding.currentValue)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right text-sm">
-                          <div>
-                            <div className={`font-medium ${
-                              holding.gainLoss >= 0 
-                                ? 'text-[#16A34A] dark:text-[#22C55E]' 
-                                : 'text-[#DC2626] dark:text-[#EF4444]'
-                            }`}>
-                              {holding.gainLoss >= 0 ? '+' : ''}{formatCurrency(holding.gainLoss)}
-                            </div>
-                            <div className={`text-xs ${
-                              holding.gainLossPercent >= 0 
-                                ? 'text-[#16A34A] dark:text-[#22C55E]' 
-                                : 'text-[#DC2626] dark:text-[#EF4444]'
-                            }`}>
-                              {holding.gainLossPercent >= 0 ? '+' : ''}{holding.gainLossPercent.toFixed(2)}%
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
-                          {holding.allocationPct.toFixed(1)}%
-                        </td>
-                        {/* ACTIONS COLUMN */}
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2 opacity-100 transition-opacity">
-                            <button 
-                              onClick={() => handleEditETF(holding)}
-                              className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center hover:bg-primary/10 text-primary rounded-lg transition-colors"
-                              title="Edit holding"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteETF(holding)}
-                              className="min-w-[44px] min-h-[44px] p-2 inline-flex items-center justify-center hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
-                              title="Delete holding"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                    sortedHoldings.map((holding) => {
+                      const sparkData = holding.symbol ? sparklines[holding.symbol] : undefined;
+                      const isPositiveTrend = sparkData && sparkData.length >= 2
+                        ? sparkData[sparkData.length - 1] >= sparkData[0]
+                        : holding.gainLoss >= 0;
+                      const isExpanded = expandedRows.has(holding.id);
+                      const intelligence = categoryIntelligence[holding.id];
+                      const signal = computeETFSignal(holding.gainLossPercent);
+                      const signalCfg = ETF_SIGNAL_CONFIG[signal];
+                      const returnPct = holding.gainLossPercent;
+                      const returnColorClass =
+                        returnPct >= 20 ? 'text-emerald-600 dark:text-emerald-400 font-semibold' :
+                        returnPct >= 10 ? 'text-blue-600 dark:text-blue-400 font-medium' :
+                        returnPct >= 0  ? 'text-amber-600 dark:text-amber-400' :
+                        'text-red-600 dark:text-red-400';
+
+                      return (
+                        <React.Fragment key={holding.id}>
+                          <tr className="group hover:bg-[#F9FAFB] dark:hover:bg-[#334155] transition-colors">
+                            {/* ETF Name + sparkline */}
+                            <td className="px-6 py-3.5">
+                              <div>
+                                <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">{holding.name}</p>
+                                {holding.symbol && (
+                                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">{holding.symbol}</p>
+                                )}
+                                <div className="mt-1">
+                                  {hasPremium ? (
+                                    sparkData ? (
+                                      <ETFSparkline data={sparkData} positive={isPositiveTrend} />
+                                    ) : (
+                                      <span className="text-xs text-[#9CA3AF] dark:text-[#64748B]">—</span>
+                                    )
+                                  ) : (
+                                    <button
+                                      onClick={() => setShowIntelligenceModal(true)}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-200 dark:hover:bg-amber-800/50 transition-colors"
+                                    >
+                                      <LockIcon className="w-2.5 h-2.5" />
+                                      1M Trend
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            {/* Category badge */}
+                            <td className="px-3 py-3.5">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
+                                holding.category === 'Equity'
+                                  ? 'bg-[#E0F2FE] dark:bg-[#0C4A6E] text-[#0369A1] dark:text-[#7DD3FC]'
+                                  : holding.category === 'Debt'
+                                  ? 'bg-[#F0FDF4] dark:bg-[#14532D] text-[#166534] dark:text-[#86EFAC]'
+                                  : holding.category === 'Gold'
+                                  ? 'bg-[#FEF3C7] dark:bg-[#78350F] text-[#92400E] dark:text-[#FDE047]'
+                                  : holding.category === 'Hybrid'
+                                  ? 'bg-[#F5F3FF] dark:bg-[#4C1D95] text-[#6D28D9] dark:text-[#C4B5FD]'
+                                  : 'bg-[#F3F4F6] dark:bg-[#475569] text-[#4B5563] dark:text-[#E5E7EB]'
+                              }`}>
+                                {holding.category}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
+                              {formatNumber(holding.units, 2)}
+                            </td>
+                            <td className="px-3 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
+                              ₹{formatNumber(holding.averagePrice, 2)}
+                            </td>
+                            <td className="px-3 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
+                              ₹{formatNumber(holding.currentNAV, 2)}
+                            </td>
+                            <td className="px-3 py-3.5 text-right text-sm text-[#0F172A] dark:text-[#F8FAFC]">
+                              {formatCurrency(holding.investedValue)}
+                            </td>
+                            <td className="px-3 py-3.5 text-right text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                              {formatCurrency(holding.currentValue)}
+                            </td>
+                            {/* Gain/Loss with color-coded % */}
+                            <td className="px-3 py-3.5 text-right text-sm">
+                              <div>
+                                <div className={`font-medium ${holding.gainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                                  {holding.gainLoss >= 0 ? '+' : ''}{formatCurrency(holding.gainLoss)}
+                                </div>
+                                <div className={`text-xs ${returnColorClass}`}>
+                                  {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3.5 text-right text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                              {holding.allocationPct.toFixed(1)}%
+                            </td>
+                            {/* ACTIONS COLUMN */}
+                            <td className="px-3 py-3.5 text-right">
+                              <div className="flex flex-col items-end gap-1.5">
+                                {/* Insights / Premium pill — matches MF Holdings style */}
+                                {hasPremium ? (
+                                  <button
+                                    onClick={() => toggleRow(holding.id)}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                                      isExpanded
+                                        ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-sm'
+                                        : 'bg-[#EFF6FF] dark:bg-[#1E3A8A]/40 text-[#2563EB] dark:text-[#93C5FD] border-[#BFDBFE] dark:border-[#1E40AF] hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB]'
+                                    }`}
+                                    title="Open ETF Intelligence panel"
+                                  >
+                                    <span className="text-[9px]">✦</span>
+                                    Insights
+                                    {isExpanded
+                                      ? <ChevronUpIcon className="w-2.5 h-2.5" />
+                                      : <ChevronDownIcon className="w-2.5 h-2.5" />}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => setShowIntelligenceModal(true)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors"
+                                    title="ETF Intelligence — upgrade to Premium to unlock"
+                                  >
+                                    <LockIcon className="w-2.5 h-2.5" />
+                                    Insights
+                                  </button>
+                                )}
+                                {/* Edit + Delete */}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleEditETF(holding)}
+                                    className="min-w-[32px] min-h-[32px] p-1.5 inline-flex items-center justify-center hover:bg-primary/10 text-primary rounded-lg transition-colors"
+                                    title="Edit holding"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteETF(holding)}
+                                    className="min-w-[32px] min-h-[32px] p-1.5 inline-flex items-center justify-center hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
+                                    title="Delete holding"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Expandable Intelligence Panel (premium only) */}
+                          {isExpanded && hasPremium && (
+                            <tr className="bg-[#EFF6FF] dark:bg-[#1E3A5F]/40">
+                              <td colSpan={10} className="px-6 py-4">
+                                <div className="flex flex-wrap items-start gap-4">
+                                  {/* Signal Badge */}
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-wide text-[#6B7280] dark:text-[#94A3B8] mb-1 font-semibold">Signal</p>
+                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${signalCfg.color}`}>
+                                      {signalCfg.label}
+                                    </span>
+                                  </div>
+
+                                  {/* Category Rank */}
+                                  {intelligence && intelligence.total > 1 && (
+                                    <div>
+                                      <p className="text-[10px] uppercase tracking-wide text-[#6B7280] dark:text-[#94A3B8] mb-1 font-semibold">Category Rank</p>
+                                      <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                                        #{intelligence.rank} of {intelligence.total} {holding.category} ETFs
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* Category Avg Return */}
+                                  {intelligence && (
+                                    <div>
+                                      <p className="text-[10px] uppercase tracking-wide text-[#6B7280] dark:text-[#94A3B8] mb-1 font-semibold">{holding.category} Avg Return</p>
+                                      <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                                        {intelligence.categoryAvgReturn >= 0 ? '+' : ''}{intelligence.categoryAvgReturn.toFixed(1)}%
+                                        <span className={`ml-1.5 text-xs ${(holding.gainLossPercent - intelligence.categoryAvgReturn) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                          ({(holding.gainLossPercent - intelligence.categoryAvgReturn) >= 0 ? '+' : ''}{(holding.gainLossPercent - intelligence.categoryAvgReturn).toFixed(1)}% vs avg)
+                                        </span>
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* Concentration Alert */}
+                                  {holding.allocationPct > 40 && (
+                                    <div>
+                                      <p className="text-[10px] uppercase tracking-wide text-[#6B7280] dark:text-[#94A3B8] mb-1 font-semibold">Concentration</p>
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
+                                        ⚠ Heavy — {holding.allocationPct.toFixed(1)}% of ETF portfolio
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {/* ETF Type Note */}
+                                  <div className="flex-1 min-w-[200px]">
+                                    <p className="text-[10px] uppercase tracking-wide text-[#6B7280] dark:text-[#94A3B8] mb-1 font-semibold">ETF Type</p>
+                                    <p className="text-xs text-[#475569] dark:text-[#CBD5E1]">
+                                      {ETF_TYPE_NOTES[holding.category] ?? ETF_TYPE_NOTES['Other']}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
                   )}
                 </tbody>
                 {sortedHoldings.length > 0 && (
@@ -1000,31 +1229,31 @@ export default function ETFHoldingsPage() {
                       <td className="px-6 py-3.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                         Total
                       </td>
-                      <td className="px-4 py-3.5"></td>
-                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                      <td className="px-3 py-3.5"></td>
+                      <td className="px-3 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatNumber(sortedHoldings.reduce((sum, h) => sum + h.units, 0), 2)}
                       </td>
-                      <td className="px-4 py-3.5"></td>
-                      <td className="px-4 py-3.5"></td>
-                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                      <td className="px-3 py-3.5"></td>
+                      <td className="px-3 py-3.5"></td>
+                      <td className="px-3 py-3.5 text-right text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatCurrency(totalInvested)}
                       </td>
-                      <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+                      <td className="px-3 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                         {formatCurrency(totalValue)}
                       </td>
-                      <td className="px-4 py-3.5 text-right text-sm">
+                      <td className="px-3 py-3.5 text-right text-sm">
                         <div className={`font-semibold ${
-                          (totalValue - totalInvested) >= 0 
-                            ? 'text-[#16A34A] dark:text-[#22C55E]' 
+                          (totalValue - totalInvested) >= 0
+                            ? 'text-[#16A34A] dark:text-[#22C55E]'
                             : 'text-[#DC2626] dark:text-[#EF4444]'
                         }`}>
                           {(totalValue - totalInvested) >= 0 ? '+' : ''}{formatCurrency(totalValue - totalInvested)}
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+                      <td className="px-3 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                         {portfolioPercentage.toFixed(1)}%
                       </td>
-                      <td className="px-4 py-3.5"></td>
+                      <td className="px-3 py-3.5"></td>
                     </tr>
                   </tfoot>
                 )}
@@ -1048,45 +1277,110 @@ export default function ETFHoldingsPage() {
           </div>
         </div>
 
-        {/* Optional AI Insights */}
-        {sortedHoldings.length > 0 && (
-          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
-              <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Portfolio Insights</h2>
-            </div>
-            <div className="space-y-4">
-              <div className="text-sm text-[#475569] dark:text-[#CBD5E1] leading-relaxed">
-                <p className="mb-2">
-                  <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Total ETF Holdings:</strong> {formatCurrency(totalValue)} ({portfolioPercentage.toFixed(1)}% of portfolio)
+        {/* Portfolio Insights */}
+        {sortedHoldings.length > 0 && (() => {
+          // Compute category breakdown
+          const categories = Array.from(new Set(sortedHoldings.map(h => h.category)));
+          const catData = categories.map(cat => {
+            const items = sortedHoldings.filter(h => h.category === cat);
+            const value = items.reduce((s, h) => s + h.currentValue, 0);
+            return { cat, value, pct: totalValue > 0 ? (value / totalValue) * 100 : 0 };
+          }).sort((a, b) => b.value - a.value);
+
+          const top3Pct = sortedHoldings.slice(0, Math.min(3, sortedHoldings.length)).reduce((s, h) => s + h.allocationPct, 0);
+          const overallReturnPct = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested) * 100 : 0;
+          const bestEtf = [...sortedHoldings].sort((a, b) => b.gainLossPercent - a.gainLossPercent)[0];
+          const worstEtf = [...sortedHoldings].sort((a, b) => a.gainLossPercent - b.gainLossPercent)[0];
+
+          const CAT_COLORS: Record<string, string> = {
+            Equity: 'bg-blue-500',
+            Debt:   'bg-emerald-500',
+            Gold:   'bg-amber-500',
+            Hybrid: 'bg-violet-500',
+            Cash:   'bg-cyan-500',
+            Other:  'bg-slate-400',
+          };
+
+          return (
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <InfoIcon className="w-5 h-5 text-[#6B7280] dark:text-[#94A3B8]" />
+                <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Portfolio Insights</h2>
+              </div>
+
+              {/* KPI row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                <div className="bg-[#F9FAFB] dark:bg-[#0F172A] rounded-lg p-3">
+                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Total Value</p>
+                  <p className="text-base font-bold text-[#0F172A] dark:text-[#F8FAFC]">{formatCurrency(totalValue)}</p>
+                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{portfolioPercentage.toFixed(1)}% of portfolio</p>
+                </div>
+                <div className="bg-[#F9FAFB] dark:bg-[#0F172A] rounded-lg p-3">
+                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Overall Return</p>
+                  <p className={`text-base font-bold ${overallReturnPct >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                    {overallReturnPct >= 0 ? '+' : ''}{overallReturnPct.toFixed(2)}%
+                  </p>
+                  <p className={`text-xs ${(totalValue - totalInvested) >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+                    {(totalValue - totalInvested) >= 0 ? '+' : ''}{formatCurrency(totalValue - totalInvested)}
+                  </p>
+                </div>
+                <div className="bg-[#F9FAFB] dark:bg-[#0F172A] rounded-lg p-3">
+                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Best Performer</p>
+                  <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] truncate">{bestEtf.name}</p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">+{bestEtf.gainLossPercent.toFixed(2)}%</p>
+                </div>
+                <div className="bg-[#F9FAFB] dark:bg-[#0F172A] rounded-lg p-3">
+                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Needs Review</p>
+                  <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] truncate">{worstEtf.name}</p>
+                  <p className={`text-xs ${worstEtf.gainLossPercent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {worstEtf.gainLossPercent >= 0 ? '+' : ''}{worstEtf.gainLossPercent.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+
+              {/* Category breakdown */}
+              <div>
+                <p className="text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wide mb-3">Category Breakdown</p>
+                <div className="flex gap-1 h-2 rounded-full overflow-hidden mb-3">
+                  {catData.map(({ cat, pct }) => (
+                    <div
+                      key={cat}
+                      className={`${CAT_COLORS[cat] || 'bg-slate-400'} transition-all`}
+                      style={{ width: `${pct}%` }}
+                      title={`${cat}: ${pct.toFixed(1)}%`}
+                    />
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {catData.map(({ cat, value, pct }) => (
+                    <div key={cat} className="flex items-center gap-1.5">
+                      <div className={`w-2.5 h-2.5 rounded-full ${CAT_COLORS[cat] || 'bg-slate-400'}`} />
+                      <span className="text-xs text-[#475569] dark:text-[#CBD5E1]">
+                        {cat} <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{pct.toFixed(1)}%</span>
+                        <span className="text-[#9CA3AF] dark:text-[#64748B] ml-1">({formatCurrency(value)})</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Concentration note */}
+              {sortedHoldings.length >= 3 && (
+                <p className="mt-4 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                  Top 3 holdings represent <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{top3Pct.toFixed(1)}%</span> of your ETF portfolio
+                  {top3Pct > 70 && <span className="ml-1 text-amber-600 dark:text-amber-400">— consider diversifying</span>}
                 </p>
-                {sortedHoldings.length > 0 && (
-                  <>
-                    <p className="mb-2">
-                      <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Category Distribution:</strong>{' '}
-                      {Array.from(new Set(sortedHoldings.map(h => h.category))).map(cat => {
-                        const catValue = sortedHoldings
-                          .filter(h => h.category === cat)
-                          .reduce((sum, h) => sum + h.currentValue, 0);
-                        const catPct = (catValue / totalValue) * 100;
-                        return `${cat} (${catPct.toFixed(1)}%)`;
-                      }).join(', ')}
-                    </p>
-                    <p className="mb-2">
-                      <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Top Holding:</strong> {sortedHoldings[0].name} ({sortedHoldings[0].allocationPct.toFixed(1)}% of ETF holdings)
-                    </p>
-                    {sortedHoldings.length >= 3 && (
-                      <p>
-                        <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Concentration:</strong> Top 3 holdings represent{' '}
-                        {sortedHoldings.slice(0, 3).reduce((sum, h) => sum + h.allocationPct, 0).toFixed(1)}% of ETF portfolio
-                      </p>
-                    )}
-                  </>
-                )}
+              )}
+
+              {/* Footer notes */}
+              <div className="mt-5 pt-4 border-t border-[#E5E7EB] dark:border-[#334155] flex flex-wrap gap-3 text-[11px] text-[#9CA3AF] dark:text-[#64748B]">
+                <span>● Return % is absolute (current vs invested value)</span>
+                <span>● ✦ Insights available for Premium users</span>
+                <span>● CMP = Current Market Price (NSE live/EOD)</span>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </main>
 
       {/* ADD ETF MODAL */}
@@ -1140,6 +1434,20 @@ export default function ETFHoldingsPage() {
       )}
 
       <PremiumDownloadModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
+
+      <UpgradeModal
+        isOpen={showIntelligenceModal}
+        onClose={() => setShowIntelligenceModal(false)}
+        requiredPlan="Premium"
+        featureTitle="ETF Intelligence"
+        featureDescription="Analyse each ETF's price trend, category rank, signal strength, and get type-specific insights."
+        benefits={[
+          '1-month price sparkline per ETF',
+          'Category rank vs peer ETFs in your portfolio',
+          'Signal classification: Strong, Good, Steady, or In Loss',
+          'ETF type notes (Equity, Debt, Gold, Hybrid & more)',
+        ]}
+      />
     </div>
   );
 }

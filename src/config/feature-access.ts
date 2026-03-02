@@ -96,6 +96,18 @@ export const FEATURE_ACCESS = {
     tagline: 'Ask questions and get answers about your portfolio.',
     valueProps: ['Natural language queries', 'Portfolio analysis', 'Actionable recommendations'],
   },
+  ANALYST_VIEW: {
+    capability: 'view_premium_analytics',
+    upgradePlan: 'Premium' as UpgradePlan,
+    title: 'See what analysts say about your stocks',
+    tagline: 'Get Buy/Hold/Sell consensus and target prices from market analysts.',
+    valueProps: [
+      'Analyst Buy/Hold/Sell consensus',
+      'Target price range (high, mean, low)',
+      'Number of analyst opinions',
+      'Highlighted on loss-making positions',
+    ],
+  },
 } as const;
 
 export type FeatureAccessKey = keyof typeof FEATURE_ACCESS;

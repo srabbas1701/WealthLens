@@ -116,6 +116,7 @@ export async function GET(request: NextRequest) {
             taxBenefits: { eeeAssets: 0, eetAssets: 0 },
           },
           insights: ['Add holdings to analyze stability'],
+          topSectors: [],
           metadata: {
             calculatedAt: new Date().toISOString(),
             totalPortfolioValue: 0,
@@ -124,49 +125,43 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    // 3. Update current values for equity/ETF (from stock prices)
+    // 3 & 4. Fetch stock prices and MF NAVs in parallel
     const equityHoldings = rawHoldings.filter((h: any) => {
       const asset = h.assets as any;
       return (asset?.asset_type === 'equity' || asset?.asset_type === 'etf') && asset?.symbol;
     });
-    
-    if (equityHoldings.length > 0) {
-      const symbols = equityHoldings.map((h: any) => (h.assets as any).symbol).filter(Boolean);
-      const stockPrices = await getStockPrices(symbols);
-      
-      equityHoldings.forEach((holding: any) => {
-        const asset = holding.assets as any;
-        const symbol = asset?.symbol;
-        if (symbol) {
-          const priceData = stockPrices.get(symbol.toUpperCase());
-          if (priceData?.price && priceData.price > 0) {
-            holding.current_value = (holding.quantity || 0) * priceData.price;
-          }
-        }
-      });
-    }
-    
-    // 4. Update current values for MF (from NAVs)
     const mfHoldings = rawHoldings.filter((h: any) => {
       const asset = h.assets as any;
       return (asset?.asset_type === 'mutual_fund' || asset?.asset_type === 'index_fund') && asset?.isin;
     });
-    
-    if (mfHoldings.length > 0) {
-      const isins = mfHoldings.map((h: any) => (h.assets as any).isin).filter(Boolean);
-      const mfNavs = await getMFNavsByISIN(isins);
-      
-      mfHoldings.forEach((holding: any) => {
-        const asset = holding.assets as any;
-        const isin = asset?.isin;
-        if (isin) {
-          const navData = mfNavs.get(isin.toUpperCase());
-          if (navData?.nav && navData.nav > 0) {
-            holding.current_value = (holding.quantity || 0) * navData.nav;
-          }
+
+    const symbols = equityHoldings.map((h: any) => (h.assets as any).symbol).filter(Boolean);
+    const isins   = mfHoldings.map((h: any) => (h.assets as any).isin).filter(Boolean);
+
+    const [stockPrices, mfNavs] = await Promise.all([
+      symbols.length > 0 ? getStockPrices(symbols) : Promise.resolve(new Map()),
+      isins.length   > 0 ? getMFNavsByISIN(isins)   : Promise.resolve(new Map()),
+    ]);
+
+    equityHoldings.forEach((holding: any) => {
+      const symbol = (holding.assets as any)?.symbol;
+      if (symbol) {
+        const priceData = stockPrices.get(symbol.toUpperCase());
+        if (priceData?.price && priceData.price > 0) {
+          holding.current_value = (holding.quantity || 0) * priceData.price;
         }
-      });
-    }
+      }
+    });
+
+    mfHoldings.forEach((holding: any) => {
+      const isin = (holding.assets as any)?.isin;
+      if (isin) {
+        const navData = mfNavs.get(isin.toUpperCase());
+        if (navData?.nav && navData.nav > 0) {
+          holding.current_value = (holding.quantity || 0) * navData.nav;
+        }
+      }
+    });
     
     // 5. Normalize holdings
     const normalizedHoldings = normalizeHoldings(rawHoldings);

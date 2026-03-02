@@ -25,12 +25,13 @@ import { useAuth } from '@/lib/auth';
 import { useCapabilities } from '@/lib/capabilities';
 import { FEATURE_ACCESS } from '@/config/feature-access';
 import PremiumDownloadModal from '@/components/PremiumDownloadModal';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
 import { useToast } from '@/components/Toast';
 import { generateStocksPDF } from '@/lib/pdf/generateStocksPDF';
-import { Plus, Edit, Trash2, X, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Search, BarChart2 } from 'lucide-react';
 import { useMarketDataStatus } from '@/hooks/useMarketDataStatus';
 import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
 
@@ -55,12 +56,33 @@ interface EquityHolding {
   priceDate: string | null; // Price date (YYYY-MM-DD)
 }
 
+interface AnalystData {
+  recommendationKey: string;
+  recommendationMean: number | null;
+  targetMeanPrice: number | null;
+  targetHighPrice: number | null;
+  targetLowPrice: number | null;
+  numberOfAnalystOpinions: number;
+}
+
+interface AnalystPopoverState {
+  holdingId: string;
+  symbol: string;
+  name: string;
+  data: AnalystData | null;
+  loading: boolean;
+  error: string | null;
+  x: number;
+  y: number;
+}
+
 export default function EquityHoldingsPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [showAnalystUpgradeModal, setShowAnalystUpgradeModal] = useState(false);
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
 
   const { data: marketDataStatus, loading: marketDataStatusLoading } = useMarketDataStatus();
@@ -115,7 +137,13 @@ export default function EquityHoldingsPage() {
   const [selectedStock, setSelectedStock] = useState<EquityHolding | null>(null);
   const [stockToDelete, setStockToDelete] = useState<EquityHolding | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
+
+  // Sparkline state
+  const [sparklineData, setSparklineData] = useState<Record<string, number[]>>({});
+
+  // Analyst popover state
+  const [analystPopover, setAnalystPopover] = useState<AnalystPopoverState | null>(null);
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -475,6 +503,19 @@ export default function EquityHoldingsPage() {
     }
   }, [user?.id, fetchData]);
 
+  // Fetch sparklines lazily after holdings load
+  useEffect(() => {
+    if (holdings.length === 0) return;
+    const symbols = holdings
+      .map((h) => h.symbol?.replace(/^(NSE|BSE):\s*/i, '').trim())
+      .filter((s): s is string => Boolean(s));
+    if (symbols.length === 0) return;
+    fetch(`/api/stocks/sparklines?symbols=${symbols.join(',')}`)
+      .then((r) => r.json())
+      .then((data) => { if (data.sparklines) setSparklineData(data.sparklines); })
+      .catch(() => {}); // Sparklines are decorative — silent fail OK
+  }, [holdings]);
+
   // Get most recent price date across all holdings
   const mostRecentPriceDate = useMemo(() => {
     const dates = holdings
@@ -684,6 +725,50 @@ export default function EquityHoldingsPage() {
     }
   }, [holdings, sortField, sortDirection, groupBy, totalValue, totalInvested, portfolioPercentage, mostRecentPriceDate, formatCurrency, showToast, hasCapability, capabilitiesLoading]);
 
+  const handleAnalystClick = async (holding: EquityHolding, event: React.MouseEvent<HTMLButtonElement>) => {
+    // Premium gate — analyst view requires Premium plan
+    if (!hasCapability(FEATURE_ACCESS.ANALYST_VIEW.capability)) {
+      setShowAnalystUpgradeModal(true);
+      return;
+    }
+
+    const symbol = holding.symbol?.replace(/^(NSE|BSE):\s*/i, '').trim() || '';
+    if (!symbol) return;
+
+    // If same popover already open, close it
+    if (analystPopover?.holdingId === holding.id) {
+      setAnalystPopover(null);
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    setAnalystPopover({
+      holdingId: holding.id,
+      symbol,
+      name: holding.name,
+      data: null,
+      loading: true,
+      error: null,
+      x: rect.left + rect.width / 2,
+      y: rect.bottom + 8,
+    });
+
+    try {
+      const response = await fetch(`/api/stocks/analyst?symbol=${encodeURIComponent(symbol)}`);
+      const result = await response.json();
+      setAnalystPopover((prev) => {
+        if (!prev || prev.holdingId !== holding.id) return prev;
+        return response.ok && result.data
+          ? { ...prev, data: result.data, loading: false }
+          : { ...prev, error: result.error || 'No analyst data available', loading: false };
+      });
+    } catch {
+      setAnalystPopover((prev) =>
+        prev?.holdingId === holding.id ? { ...prev, error: 'Failed to load', loading: false } : prev
+      );
+    }
+  };
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -792,9 +877,51 @@ export default function EquityHoldingsPage() {
     if (sortField !== field) {
       return <ChevronDownIcon className="w-4 h-4 text-[#9CA3AF] opacity-0 group-hover:opacity-100 transition-opacity" />;
     }
-    return sortDirection === 'asc' 
+    return sortDirection === 'asc'
       ? <ChevronUpIcon className="w-4 h-4 text-[#2563EB]" />
       : <ChevronDownIcon className="w-4 h-4 text-[#2563EB]" />;
+  };
+
+  // Tiny inline column sparkline (pure SVG, no library)
+  const StockSparkline = ({ prices }: { prices: number[] }) => {
+    if (prices.length < 2) return null;
+    const W = 56, H = 16;
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = max - min || 1;
+    const isUp = prices[prices.length - 1] >= prices[0];
+    const color = isUp ? '#16A34A' : '#DC2626';
+    const step = W / prices.length;
+    return (
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mt-0.5 block">
+        {prices.map((p, i) => {
+          const barH = Math.max(2, ((p - min) / range) * (H - 2));
+          return (
+            <rect
+              key={i}
+              x={(i * step + step * 0.15).toFixed(1)}
+              y={(H - barH).toFixed(1)}
+              width={(step * 0.7).toFixed(1)}
+              height={barH.toFixed(1)}
+              fill={color}
+              rx="0.5"
+            />
+          );
+        })}
+      </svg>
+    );
+  };
+
+  // Analyst label + colour for a Yahoo recommendation key
+  const getAnalystLabel = (key: string): { label: string; color: string; bg: string } => {
+    switch (key.toLowerCase()) {
+      case 'strong_buy':  return { label: 'STRONG BUY',  color: '#15803D', bg: '#DCFCE7' };
+      case 'buy':         return { label: 'BUY',          color: '#16A34A', bg: '#F0FDF4' };
+      case 'hold':        return { label: 'HOLD',         color: '#B45309', bg: '#FEF3C7' };
+      case 'underperform':return { label: 'UNDERPERFORM', color: '#C2410C', bg: '#FFF7ED' };
+      case 'sell':        return { label: 'SELL',         color: '#DC2626', bg: '#FEF2F2' };
+      default:            return { label: 'N/A',          color: '#6B7280', bg: '#F3F4F6' };
+    }
   };
 
   // GUARD: Show loading while auth state is being determined
@@ -841,7 +968,7 @@ export default function EquityHoldingsPage() {
               {/* ADD STOCK BUTTON */}
               <button 
                 onClick={handleAddStock}
-                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-6 md:py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold min-w-[44px] min-h-[44px]"
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm min-w-[44px] min-h-[44px]"
                 title="Add Stock"
               >
                 <Plus className="w-5 h-5 shrink-0" />
@@ -852,7 +979,7 @@ export default function EquityHoldingsPage() {
               <button
                 onClick={handlePriceUpdate}
                 disabled={priceUpdateLoading || priceUpdateDisabled || disableForRecentRun}
-                className={`inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] rounded-lg font-medium text-sm transition-colors ${
+                className={`inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] min-w-[44px] min-h-[44px] rounded-lg font-semibold text-sm transition-colors ${
                   priceUpdateLoading || priceUpdateDisabled || disableForRecentRun
                     ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
                     : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
@@ -1017,7 +1144,7 @@ export default function EquityHoldingsPage() {
                     onClick={() => handleSort('quantity')}
                   >
                     <div className="flex items-center justify-end gap-2">
-                      <span>Quantity</span>
+                      <span>Qty</span>
                       <SortIcon field="quantity" />
                     </div>
                   </th>
@@ -1057,8 +1184,8 @@ export default function EquityHoldingsPage() {
                       <SortIcon field="currentValue" />
                     </div>
                   </th>
-                  <th 
-                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
+                  <th
+                    className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group min-w-[140px]"
                     onClick={() => handleSort('gainLoss')}
                   >
                     <div className="flex items-center justify-end gap-2">
@@ -1066,12 +1193,21 @@ export default function EquityHoldingsPage() {
                       <SortIcon field="gainLoss" />
                     </div>
                   </th>
-                  <th 
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider w-20">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span>Analyst</span>
+                      <div className="flex items-center justify-center gap-1 leading-none">
+                        <BarChart2 className="w-3 h-3 text-purple-500 dark:text-purple-400" />
+                        <span className="text-[9px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider normal-case">(Premium)</span>
+                      </div>
+                    </div>
+                  </th>
+                  <th
                     className="px-4 py-3 text-right text-xs font-semibold text-[#475569] dark:text-[#CBD5E1] uppercase tracking-wider cursor-pointer hover:bg-[#F1F5F9] dark:hover:bg-[#475569] transition-colors group"
                     onClick={() => handleSort('allocation')}
                   >
                     <div className="flex items-center justify-end gap-2">
-                      <span>Allocation %</span>
+                      <span>Alloc</span>
                       <SortIcon field="allocation" />
                     </div>
                   </th>
@@ -1083,7 +1219,7 @@ export default function EquityHoldingsPage() {
               <tbody className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
                 {groupedHoldings.length === 0 || (groupedHoldings[0].holdings.length === 0 && groupBy === 'none') ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center">
+                    <td colSpan={10} className="px-6 py-12 text-center">
                       <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">No stocks holdings found</p>
                       <p className="text-xs text-[#9CA3AF] dark:text-[#64748B]">Upload your portfolio to see stocks holdings</p>
                     </td>
@@ -1093,7 +1229,7 @@ export default function EquityHoldingsPage() {
                     <React.Fragment key={group.key}>
                       {groupBy !== 'none' && (
                         <tr className="bg-[#F9FAFB] dark:bg-[#334155]">
-                          <td colSpan={9} className="px-6 py-2.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                          <td colSpan={10} className="px-6 py-2.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                             {group.label}
                             <span className="ml-2 text-[#6B7280] dark:text-[#94A3B8] font-medium">
                               ({group.holdings.length} holding{group.holdings.length !== 1 ? 's' : ''}, {
@@ -1111,6 +1247,12 @@ export default function EquityHoldingsPage() {
                               {holding.symbol && (
                                 <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">NSE: {holding.symbol}</p>
                               )}
+                              {(() => {
+                                const sym = holding.symbol?.replace(/^(NSE|BSE):\s*/i, '').trim();
+                                return sym && sparklineData[sym]
+                                  ? <StockSparkline prices={sparklineData[sym]} />
+                                  : null;
+                              })()}
                             </div>
                           </td>
                           <td className="px-4 py-3.5 text-right text-[#0F172A] dark:text-[#F8FAFC] font-medium number-emphasis text-sm">
@@ -1128,7 +1270,7 @@ export default function EquityHoldingsPage() {
                       <td className="px-4 py-3.5 text-right text-[#0F172A] dark:text-[#F8FAFC] font-semibold number-emphasis text-sm">
                         {formatCurrency(holding.currentValue)}
                       </td>
-                      <td className="px-4 py-3.5 text-right text-sm">
+                      <td className="px-4 py-3.5 text-right text-sm whitespace-nowrap">
                         <div className={`font-semibold number-emphasis ${
                           holding.gainLoss >= 0 ? 'text-[#16A34A] dark:text-[#22C55E]' : 'text-[#DC2626] dark:text-[#EF4444]'
                         }`}>
@@ -1139,6 +1281,26 @@ export default function EquityHoldingsPage() {
                         }`}>
                           ({holding.gainLoss >= 0 ? '+' : ''}{holding.gainLossPercent.toFixed(2)}%)
                         </div>
+                      </td>
+                      {/* ANALYST COLUMN */}
+                      <td className="px-4 py-3.5 text-center">
+                        <button
+                          onClick={(e) => handleAnalystClick(holding, e)}
+                          title="Analyst consensus (Premium)"
+                          className={`relative inline-flex items-center justify-center w-7 h-7 rounded-lg transition-colors
+                            ${analystPopover?.holdingId === holding.id
+                              ? 'bg-[#2563EB]/10 text-[#2563EB] dark:text-[#3B82F6]'
+                              : holding.gainLoss < 0
+                                ? 'text-[#DC2626] dark:text-[#EF4444] hover:bg-[#FEF2F2] dark:hover:bg-[#DC2626]/10'
+                                : 'text-[#16A34A]/50 dark:text-[#22C55E]/40 hover:text-[#16A34A] dark:hover:text-[#22C55E] hover:bg-[#F0FDF4] dark:hover:bg-[#16A34A]/10'
+                            }`}
+                        >
+                          <BarChart2 className="w-3.5 h-3.5" />
+                          {/* Dot indicator for loss stocks */}
+                          {holding.gainLoss < 0 && (
+                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#DC2626] dark:bg-[#EF4444]" />
+                          )}
+                        </button>
                       </td>
                       <td className="px-4 py-3.5 text-right">
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F1F5F9] dark:bg-[#334155] text-[#475569] dark:text-[#CBD5E1] border border-[#E5E7EB] dark:border-[#334155]">
@@ -1206,6 +1368,7 @@ export default function EquityHoldingsPage() {
                         ({totalGainLoss >= 0 ? '+' : ''}{totalGainLossPercent.toFixed(2)}%)
                       </div>
                     </td>
+                    <td className="px-4 py-3.5"></td>
                     <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                       {portfolioPercentage.toFixed(1)}%
                     </td>
@@ -1321,6 +1484,105 @@ export default function EquityHoldingsPage() {
       )}
 
       <PremiumDownloadModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
+
+      <UpgradeModal
+        isOpen={showAnalystUpgradeModal}
+        onClose={() => setShowAnalystUpgradeModal(false)}
+        requiredPlan="Premium"
+        featureTitle="See what analysts say about your stocks"
+        featureDescription="Get Buy/Hold/Sell consensus and price targets from market analysts — especially useful for stocks in the red."
+        benefits={[
+          'Analyst Buy/Hold/Sell consensus',
+          'Target price range (high, mean, low)',
+          'Number of analyst opinions',
+          'Highlighted on loss-making positions',
+        ]}
+      />
+
+      {/* ANALYST POPOVER — fixed position, outside table overflow */}
+      {analystPopover && (
+        <>
+          {/* Backdrop to close on outside click */}
+          <div className="fixed inset-0 z-40" onClick={() => setAnalystPopover(null)} />
+          <div
+            className="fixed z-50 w-64 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-xl shadow-xl p-4"
+            style={{ left: Math.min(analystPopover.x - 128, window.innerWidth - 272), top: analystPopover.y }}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between mb-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC] truncate">{analystPopover.name}</p>
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{analystPopover.symbol} · Analyst View</p>
+              </div>
+              <button
+                onClick={() => setAnalystPopover(null)}
+                className="ml-2 p-0.5 rounded hover:bg-[#F1F5F9] dark:hover:bg-[#334155] text-[#9CA3AF] shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {analystPopover.loading && (
+              <div className="flex items-center justify-center py-4">
+                <div className="w-5 h-5 border-2 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] rounded-full animate-spin" />
+              </div>
+            )}
+
+            {analystPopover.error && !analystPopover.loading && (
+              <p className="text-xs text-[#9CA3AF] dark:text-[#64748B] text-center py-2">{analystPopover.error}</p>
+            )}
+
+            {analystPopover.data && !analystPopover.loading && (() => {
+              const { data } = analystPopover;
+              const { label, color, bg } = getAnalystLabel(data.recommendationKey);
+              return (
+                <div className="space-y-2.5">
+                  {/* Consensus badge */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Consensus</span>
+                    <span
+                      className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ color, backgroundColor: bg }}
+                    >
+                      {label}
+                    </span>
+                  </div>
+                  {/* Analyst count */}
+                  {data.numberOfAnalystOpinions > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Analysts</span>
+                      <span className="text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{data.numberOfAnalystOpinions}</span>
+                    </div>
+                  )}
+                  {/* Target price */}
+                  {data.targetMeanPrice && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Target (avg)</span>
+                      <span className="text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                        ₹{data.targetMeanPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  )}
+                  {/* Target range */}
+                  {data.targetLowPrice && data.targetHighPrice && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Target range</span>
+                      <span className="text-xs text-[#475569] dark:text-[#CBD5E1]">
+                        ₹{data.targetLowPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        {' – '}
+                        ₹{data.targetHighPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-[#9CA3AF] dark:text-[#64748B] pt-1 border-t border-[#F1F5F9] dark:border-[#334155]">
+                    Source: Yahoo Finance · Not investment advice
+                  </p>
+                </div>
+              );
+            })()}
+          </div>
+        </>
+      )}
     </div>
   );
 }

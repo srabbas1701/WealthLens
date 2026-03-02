@@ -137,10 +137,10 @@ export function ScenarioVisualization({ scenario, stabilityData }: ScenarioVisua
       {scenario.scenarioType === 'rateShock' && (
         <div className="bg-purple-50 dark:bg-purple-950/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800/30">
           <div className="text-sm text-purple-900 dark:text-purple-100">
-            <strong>Volatility Impact:</strong> Market-linked assets may experience {scenario.marketLinkedVolatility}% volatility
+            <strong>Rate Hike:</strong> {scenario.rateHikeBps} bps — equity P/E compression ~{scenario.marketLinkedVolatility}%
           </div>
           <div className="text-xs text-purple-800 dark:text-purple-200 mt-1">
-            Stability-oriented assets ({scenario.stabilityCushion.toFixed(0)}%) have minimal impact ({scenario.stabilityAssetImpact}%)
+            Stability-oriented assets ({scenario.stabilityCushion.toFixed(0)}%) have no principal impact — FD renewals may benefit from higher rates
           </div>
         </div>
       )}
@@ -148,10 +148,10 @@ export function ScenarioVisualization({ scenario, stabilityData }: ScenarioVisua
       {scenario.scenarioType === 'marketRecovery' && (
         <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-4 border border-green-200 dark:border-green-800/30">
           <div className="text-sm text-green-900 dark:text-green-100">
-            <strong>Recovery Participation:</strong> {scenario.equityExposurePercent.toFixed(0)}% equity exposure
+            <strong>Market Recovery:</strong> {scenario.marketRecoveryPercent}% — portfolio captures {scenario.equityExposurePercent.toFixed(0)}% of that gain
           </div>
           <div className="text-xs text-green-800 dark:text-green-200 mt-1">
-            Portfolio would participate in market recovery proportional to equity exposure
+            Estimated portfolio gain: {scenario.estimatedPortfolioGain.toFixed(1)}% ({scenario.stabilityCushion.toFixed(0)}% stability assets participate less in equity upside)
           </div>
         </div>
       )}

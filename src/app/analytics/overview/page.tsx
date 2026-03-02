@@ -714,10 +714,10 @@ export default function AnalyticsOverviewPage() {
                 iconBg="bg-emerald-50 dark:bg-emerald-950/20"
                 title="Stability & Downside Protection"
                 teaser="What happens in a market crash?"
-                description="Portfolio resilience score, credit risk, and liquidity analysis to understand how your portfolio holds up during market stress."
+                description="Portfolio stability score, credit risk exposure, and retirement allocation breakdown to understand how your portfolio holds up during market stress."
                 onLock={(e) => handleLockedClick(e, 'Premium', 'Stability & Downside Protection',
                   'Understand how resilient your portfolio is during market stress, rate hikes, and economic downturns.',
-                  ['Portfolio stability score', 'Credit risk assessment', 'Liquidity analysis', 'Downside protection rating']
+                  ['Portfolio stability score', 'Credit risk exposure breakdown', 'Retirement allocation analysis', 'Downside cushion from stability assets']
                 )}
               />
               <AnalyticsCard
@@ -728,10 +728,10 @@ export default function AnalyticsOverviewPage() {
                 iconBg="bg-purple-50 dark:bg-purple-950/20"
                 title="Scenario Impact Analysis"
                 teaser="If Nifty drops 30%, you lose ₹___?"
-                description="Simulate your portfolio under real scenarios — 2008 crash, COVID sell-off, rate hikes, sector shocks. Know your downside before the market shows you."
+                description="Simulate your portfolio under 4 scenarios — market drawdown, sector shock, rate hike, and recovery — with estimated rupee impact and detailed reasoning."
                 onLock={(e) => handleLockedClick(e, 'Premium', 'Scenario Impact Analysis',
                   'See how your portfolio would perform under market drawdowns, rate shocks, sector crashes, and recovery scenarios.',
-                  ['Market drawdown simulation', 'Rate shock & sector shock', 'Recovery projections', 'Portfolio stress testing']
+                  ['Market drawdown simulation', 'Sector shock analysis', 'Interest rate shock impact', 'Market recovery participation']
                 )}
               />
             </div>

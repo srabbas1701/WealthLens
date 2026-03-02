@@ -704,7 +704,7 @@ export default function StocksHoldingsPage() {
               {/* ADD STOCK - navigates to add page */}
               <Link
                 href="/portfolio/stocks/add"
-                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-6 md:py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm md:text-base min-w-[44px] min-h-[44px]"
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm min-w-[44px] min-h-[44px]"
                 title="Add Stock"
               >
                 <Plus className="w-5 h-5 shrink-0" />
@@ -724,7 +724,7 @@ export default function StocksHoldingsPage() {
               <button
                 onClick={handlePriceUpdate}
                 disabled={priceUpdateLoading || priceUpdateDisabled}
-                className={`inline-flex items-center justify-center gap-2 p-2.5 md:px-4 md:py-2 min-w-[44px] min-h-[44px] rounded-lg font-medium text-sm transition-colors ${
+                className={`inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] min-w-[44px] min-h-[44px] rounded-lg font-semibold text-sm transition-colors ${
                   priceUpdateLoading || priceUpdateDisabled
                     ? 'bg-[#E5E7EB] dark:bg-[#334155] text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed'
                     : 'bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB]'
