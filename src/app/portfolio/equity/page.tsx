@@ -726,9 +726,6 @@ export default function EquityHoldingsPage() {
 
   const totalGainLoss = totalValue - totalInvested;
   const totalGainLossPercent = totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0;
-  const avgCurrentPrice = holdings.length > 0 && totalValue > 0 
-    ? totalValue / holdings.reduce((sum, h) => sum + h.quantity, 0)
-    : 0;
 
   // Format price date for display
   const formatPriceDate = (dateStr: string | null) => {
@@ -1185,14 +1182,14 @@ export default function EquityHoldingsPage() {
                     <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                       {holdings.reduce((sum, h) => sum + h.quantity, 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                     </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
-                      {formatPrice(holdings.length > 0 ? totalInvested / holdings.reduce((sum, h) => sum + h.quantity, 0) : 0)}
+                    <td className="px-4 py-3.5 text-right text-sm text-[#9CA3AF] dark:text-[#64748B]">
+                      —
                     </td>
                     <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                       {formatCurrency(totalInvested)}
                     </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
-                      {formatPrice(avgCurrentPrice)}
+                    <td className="px-4 py-3.5 text-right text-sm text-[#9CA3AF] dark:text-[#64748B]">
+                      —
                     </td>
                     <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
                       {formatCurrency(totalValue)}
@@ -1230,7 +1227,7 @@ export default function EquityHoldingsPage() {
                 Verification: Total matches dashboard stocks value ({formatCurrency(totalValue)}) ✓
               </p>
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                All values computed from Quantity × Average Price. Current values match invested values (MVP - no live price sync).
+                Current prices sourced from Yahoo Finance (NSE). Use &quot;Update Prices&quot; to fetch the latest market data.
               </p>
             </div>
           </div>

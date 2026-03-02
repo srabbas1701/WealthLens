@@ -1,185 +1,214 @@
 /**
  * Mutual Fund Exposure Analytics Page
- * 
+ *
  * Shows what your mutual funds are invested in (equity, debt, other).
- * Clearly separates ownership from exposure.
+ * Key insight: your TRUE equity exposure = direct stocks + equity inside MFs.
  */
 
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import React from 'react';
-import { 
-  ArrowLeftIcon,
-  InfoIcon,
-  CheckCircleIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-} from '@/components/icons';
+import { InfoIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { useCapabilities } from '@/lib/capabilities';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 
-interface MFExposure {
-  equity: number;
-  debt: number;
-  other: number;
-  total: number;
-}
+// ─── Types ──────────────────────────────────────────────────────────────────
 
-interface SchemeExposure {
+type FundCategory = 'equity' | 'hybrid' | 'debt';
+
+interface FundBreakdown {
   id: string;
   name: string;
-  value: number;
-  equity: number;
-  debt: number;
-  other: number;
-  equityPct: number;
-  debtPct: number;
-  otherPct: number;
-  dataSource: 'factsheet' | 'estimated';
-  asOfDate?: string;
+  currentValue: number;
+  investedValue: number;
+  category: FundCategory;
 }
 
-interface CombinedView {
-  assetType: string;
-  directHoldings: number;
-  exposureViaMF: number;
-  combinedView: number;
+interface ExposureSummary {
+  totalMFValue: number;
+  equityExposure: number;
+  debtExposure: number;
+  otherExposure: number;
+  equityCount: number;
+  hybridCount: number;
+  debtCount: number;
 }
+
+interface Insight {
+  level: 'info' | 'warn' | 'good';
+  text: string;
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const FUND_RATIOS: Record<FundCategory, { equity: number; debt: number; other: number }> = {
+  equity:  { equity: 0.85, debt: 0.12, other: 0.03 },
+  hybrid:  { equity: 0.50, debt: 0.45, other: 0.05 },
+  debt:    { equity: 0.10, debt: 0.85, other: 0.05 },
+};
+
+const CATEGORY_LABELS: Record<FundCategory, string> = {
+  equity: 'Equity',
+  hybrid: 'Hybrid',
+  debt:   'Debt',
+};
+
+const CATEGORY_COLORS: Record<FundCategory, { bg: string; text: string }> = {
+  equity: { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300' },
+  hybrid: { bg: 'bg-purple-100 dark:bg-purple-900/40', text: 'text-purple-700 dark:text-purple-300' },
+  debt:   { bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-700 dark:text-emerald-300' },
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function classifyFund(assetClass: string | null): FundCategory {
+  if (assetClass === 'FixedIncome') return 'debt';
+  if (assetClass === 'Hybrid') return 'hybrid';
+  return 'equity';
+}
+
+function buildInsights(
+  summary: ExposureSummary,
+  directEquity: number,
+  portfolioTotal: number,
+): Insight[] {
+  const insights: Insight[] = [];
+  const equityPct = summary.totalMFValue > 0 ? (summary.equityExposure / summary.totalMFValue) * 100 : 0;
+  const combinedEquity = directEquity + summary.equityExposure;
+  const combinedEquityPct = portfolioTotal > 0 ? (combinedEquity / portfolioTotal) * 100 : 0;
+
+  if (equityPct > 80) {
+    insights.push({
+      level: 'warn',
+      text: `Your MF portfolio is ${equityPct.toFixed(0)}% equity-oriented. This gives strong long-term growth but will feel volatile in market downturns. Ensure you won't need this money for at least 5 years.`,
+    });
+  } else if (equityPct < 30) {
+    insights.push({
+      level: 'info',
+      text: `Your MF portfolio is mostly debt/conservative (${(100 - equityPct).toFixed(0)}% debt). If you have long-term goals (5+ years), adding equity-oriented funds can improve returns significantly.`,
+    });
+  } else {
+    insights.push({
+      level: 'good',
+      text: `Your MF portfolio is balanced — ${equityPct.toFixed(0)}% equity and ${(100 - equityPct).toFixed(0)}% debt/other. This blends growth potential with some stability. Review annually to stay aligned with your goals.`,
+    });
+  }
+
+  if (summary.debtCount === 0 && summary.totalMFValue > 0) {
+    insights.push({
+      level: 'info',
+      text: `You have no debt mutual funds. For short-term goals (1–3 years), debt funds can be a tax-efficient alternative to FDs.`,
+    });
+  }
+
+  if (summary.hybridCount === 0 && summary.equityCount > 2) {
+    insights.push({
+      level: 'info',
+      text: `You have ${summary.equityCount} pure equity funds but no hybrid fund. A hybrid fund automatically rebalances between equity and debt — useful for medium-term goals (3–5 years).`,
+    });
+  }
+
+  if (combinedEquityPct > 70) {
+    insights.push({
+      level: 'warn',
+      text: `Including your direct stocks, your combined equity exposure is ${combinedEquityPct.toFixed(0)}% of your portfolio. This is a high-growth, high-volatility portfolio. Make sure you have 6–12 months of expenses in safer instruments.`,
+    });
+  }
+
+  if (summary.equityCount >= 4) {
+    insights.push({
+      level: 'info',
+      text: `You hold ${summary.equityCount} equity mutual funds. Many investors over-diversify within MFs — if two funds track similar indices or large-cap stocks, they likely overlap heavily. Consider consolidating.`,
+    });
+  }
+
+  return insights.slice(0, 3); // Show at most 3 insights
+}
+
+// ─── Page Component ──────────────────────────────────────────────────────────
 
 export default function MFExposurePage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const { formatCurrency } = useCurrency();
-  
+
   const [loading, setLoading] = useState(true);
-  const [totalMFValue, setTotalMFValue] = useState(0);
-  const [exposure, setExposure] = useState<MFExposure | null>(null);
-  const [schemes, setSchemes] = useState<SchemeExposure[]>([]);
+  const [funds, setFunds] = useState<FundBreakdown[]>([]);
+  const [summary, setSummary] = useState<ExposureSummary | null>(null);
   const [directEquity, setDirectEquity] = useState(0);
-  const [expandedSchemes, setExpandedSchemes] = useState<Set<string>>(new Set());
   const [portfolioTotal, setPortfolioTotal] = useState(0);
 
   const fetchData = useCallback(async (userId: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ user_id: userId });
-      const response = await fetch(`/api/portfolio/data?${params}`);
-      
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data) {
-          const portfolioData = result.data;
-          
-          // Filter MF holdings using new classification system
-          // MFs can be in Growth bucket (Equity MFs) or IncomeAllocation bucket (Debt/Hybrid MFs)
-          const mfHoldings = portfolioData.holdings.filter((h: any) => 
-            h.assetType === 'Mutual Funds' || h.assetType === 'Index Funds'
-          );
-          
-          // Direct equity holdings (Stocks/Equity)
-          const equityHoldings = portfolioData.holdings.filter((h: any) => 
-            h.assetType === 'Equity' || h.assetType === 'Stocks'
-          );
-          
-          const totalMF = mfHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || h.investedValue), 0);
-          const totalEquity = equityHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || h.investedValue), 0);
-          
-          setTotalMFValue(totalMF);
-          setDirectEquity(totalEquity);
-          setPortfolioTotal(portfolioData.metrics.netWorth);
+      const res = await fetch(`/api/portfolio/data?user_id=${userId}`);
+      if (!res.ok) return;
+      const result = await res.json();
+      if (!result.success || !result.data) return;
 
-          // Calculate exposure based on asset_class from new classification system
-          // Use proper exposure calculation with asset_class
-          let equityExposure = 0;
-          let debtExposure = 0;
-          let otherExposure = 0;
-          
-          mfHoldings.forEach((h: any) => {
-            const value = h.currentValue || h.investedValue;
-            const assetClass = h.assetClass || '';
-            
-            if (assetClass === 'FixedIncome') {
-              // Debt funds: 10% equity, 85% debt, 5% other
-              equityExposure += value * 0.10;
-              debtExposure += value * 0.85;
-              otherExposure += value * 0.05;
-            } else if (assetClass === 'Hybrid') {
-              // Hybrid funds: 50% equity, 45% debt, 5% other
-              equityExposure += value * 0.50;
-              debtExposure += value * 0.45;
-              otherExposure += value * 0.05;
-            } else {
-              // Equity funds (default): 85% equity, 12% debt, 3% other
-              equityExposure += value * 0.85;
-              debtExposure += value * 0.12;
-              otherExposure += value * 0.03;
-            }
-          });
+      const allHoldings = result.data.holdings as any[];
 
-          setExposure({
-            equity: equityExposure,
-            debt: debtExposure,
-            other: otherExposure,
-            total: totalMF,
-          });
+      const mfHoldings = allHoldings.filter(
+        (h) => h.assetType === 'Mutual Funds' || h.assetType === 'Index Funds',
+      );
+      const equityHoldings = allHoldings.filter(
+        (h) => h.assetType === 'Equity' || h.assetType === 'Stocks',
+      );
 
-          // Generate scheme-wise breakdown based on asset_class
-          const schemeBreakdown: SchemeExposure[] = mfHoldings.map((h: any, idx: number) => {
-            const value = h.currentValue || h.investedValue;
-            const assetClass = h.assetClass || '';
-            
-            // Determine exposure percentages based on asset_class
-            let equityPct: number;
-            let debtPct: number;
-            let otherPct: number;
-            
-            if (assetClass === 'FixedIncome') {
-              equityPct = 10;
-              debtPct = 85;
-              otherPct = 5;
-            } else if (assetClass === 'Hybrid') {
-              equityPct = 50;
-              debtPct = 45;
-              otherPct = 5;
-            } else {
-              // Equity funds (default)
-              equityPct = 85;
-              debtPct = 12;
-              otherPct = 3;
-            }
-            
-            return {
-              id: h.id,
-              name: h.name,
-              value,
-              equity: value * (equityPct / 100),
-              debt: value * (debtPct / 100),
-              other: value * (otherPct / 100),
-              equityPct,
-              debtPct,
-              otherPct,
-              dataSource: 'estimated', // Will be 'factsheet' when factsheet data is available
-              asOfDate: undefined,
-            };
-          });
+      const totalDirectEquity = equityHoldings.reduce((s, h) => s + (h.currentValue || h.investedValue || 0), 0);
+      const totalPortfolio = result.data.metrics.netWorth || 0;
 
-          setSchemes(schemeBreakdown);
-        }
+      // Build per-fund breakdown
+      const fundList: FundBreakdown[] = mfHoldings.map((h: any) => {
+        const val = h.currentValue || h.investedValue || 0;
+        return {
+          id: h.id,
+          name: h.name,
+          currentValue: val,
+          investedValue: h.investedValue || 0,
+          category: classifyFund(h.assetClass),
+        };
+      }).sort((a, b) => b.currentValue - a.currentValue);
+
+      // Aggregate summary
+      let equityExp = 0, debtExp = 0, otherExp = 0;
+      let eqCount = 0, hyCount = 0, dtCount = 0;
+      let totalMF = 0;
+
+      for (const f of fundList) {
+        totalMF += f.currentValue;
+        const ratios = FUND_RATIOS[f.category];
+        equityExp += f.currentValue * ratios.equity;
+        debtExp += f.currentValue * ratios.debt;
+        otherExp += f.currentValue * ratios.other;
+        if (f.category === 'equity') eqCount++;
+        else if (f.category === 'hybrid') hyCount++;
+        else dtCount++;
       }
-    } catch (error) {
-      console.error('Failed to fetch MF exposure data:', error);
+
+      setFunds(fundList);
+      setSummary({
+        totalMFValue: totalMF,
+        equityExposure: equityExp,
+        debtExposure: debtExp,
+        otherExposure: otherExp,
+        equityCount: eqCount,
+        hybridCount: hyCount,
+        debtCount: dtCount,
+      });
+      setDirectEquity(totalDirectEquity);
+      setPortfolioTotal(totalPortfolio);
+    } catch (err) {
+      console.error('MF exposure fetch error:', err);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // GUARD: Redirect if not authenticated
-  // RULE: Never redirect while authStatus === 'loading'
+  // Auth guards
   useEffect(() => {
     if (authStatus === 'loading') return;
     if (authStatus === 'unauthenticated') {
@@ -188,426 +217,346 @@ export default function MFExposurePage() {
   }, [authStatus, router]);
 
   useEffect(() => {
-    if (user?.id && hasCapability('view_advanced_analytics')) {
+    if (user?.id && hasCapability('view_basic_analytics')) {
       fetchData(user.id);
+    } else if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability('view_basic_analytics')) {
+      router.replace('/analytics/overview');
     }
-  }, [user?.id, fetchData, hasCapability]);
+  }, [user?.id, fetchData, hasCapability, authStatus, capabilitiesLoading, router]);
 
-  const toggleScheme = (schemeId: string) => {
-    const newExpanded = new Set(expandedSchemes);
-    if (newExpanded.has(schemeId)) {
-      newExpanded.delete(schemeId);
-    } else {
-      newExpanded.add(schemeId);
-    }
-    setExpandedSchemes(newExpanded);
-  };
-
-
-  const combinedView: CombinedView[] = [
-    {
-      assetType: 'Stocks',
-      directHoldings: directEquity,
-      exposureViaMF: exposure?.equity || 0,
-      combinedView: directEquity + (exposure?.equity || 0),
-    },
-    {
-      assetType: 'Debt',
-      directHoldings: 0,
-      exposureViaMF: exposure?.debt || 0,
-      combinedView: exposure?.debt || 0,
-    },
-  ];
-
-  // GUARD: Show loading while auth state is being determined
-  if (authStatus === 'loading') {
+  // ── Loading ──
+  if (authStatus === 'loading' || (loading && authStatus === 'authenticated')) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  // GUARD: Redirect if not authenticated (only after loading is complete)
-  if (authStatus === 'unauthenticated') {
-    return null; // Redirect happens in useEffect
-  }
-
-  if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability('view_advanced_analytics')) {
-    router.replace('/analytics/overview');
-    return null;
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-[#6B7280]">Loading MF exposure analytics...</p>
+          <div className="w-8 h-8 border-4 border-[#E5E7EB] border-t-[#2563EB] rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Analysing your mutual funds…</p>
         </div>
       </div>
     );
   }
 
-  if (!exposure) {
+  if (authStatus === 'unauthenticated') return null;
+
+  // ── Empty state ──
+  if (!summary || summary.totalMFValue === 0) {
     return (
-      <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-[#475569] mb-4">Failed to load exposure data</p>
-          <button
-            onClick={() => user?.id && fetchData(user.id)}
-            className="px-4 py-2 bg-[#2563EB] text-white rounded-lg text-sm font-medium hover:bg-[#1E40AF]"
-          >
-            Retry
-          </button>
-        </div>
+      <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
+        <AppHeader showBackButton backHref="/analytics/overview" backLabel="Back to Analytics" />
+        <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24 text-center">
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-12">
+            <p className="text-4xl mb-4">📊</p>
+            <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">No Mutual Fund Holdings</h2>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+              Add mutual funds to your portfolio to see what's inside them — equity, debt, and more.
+            </p>
+          </div>
+        </main>
       </div>
     );
   }
+
+  // ── Computed values ──
+  const { totalMFValue, equityExposure, debtExposure, otherExposure } = summary;
+  const equityPct = (equityExposure / totalMFValue) * 100;
+  const debtPct = (debtExposure / totalMFValue) * 100;
+  const otherPct = (otherExposure / totalMFValue) * 100;
+
+  const combinedEquity = directEquity + equityExposure;
+  const combinedEquityPct = portfolioTotal > 0 ? (combinedEquity / portfolioTotal) * 100 : 0;
+  const directEquityPct = portfolioTotal > 0 ? (directEquity / portfolioTotal) * 100 : 0;
+  const equityViaMFPct = portfolioTotal > 0 ? (equityExposure / portfolioTotal) * 100 : 0;
+
+  const insights = buildInsights(summary, directEquity, portfolioTotal);
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB]">
-      <AppHeader 
-        showBackButton={true}
-        backHref="/analytics/overview"
-        backLabel="Back to Analytics"
-      />
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
+      <AppHeader showBackButton backHref="/analytics/overview" backLabel="Back to Analytics" />
 
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
-        {/* Page Title */}
+      <main className="max-w-[900px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
+
+        {/* ── Page Title ───────────────────────────────────────────────── */}
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A] mb-2">Mutual Fund Exposure Analytics</h1>
-          <p className="text-sm text-[#6B7280]">
-            Understanding what your mutual funds are invested in
+          <h1 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Mutual Fund Exposure</h1>
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
+            What&apos;s actually inside your {summary.equityCount + summary.hybridCount + summary.debtCount} mutual fund{summary.equityCount + summary.hybridCount + summary.debtCount !== 1 ? 's' : ''}
           </p>
         </div>
 
-        {/* Exposure Analysis Context - informational */}
-        <div className="bg-[#EFF6FF] dark:bg-[#1E3A8A]/20 border border-[#2563EB]/20 dark:border-[#3B82F6]/30 rounded-xl p-4 mb-6">
-          <div className="flex items-start gap-3">
-            <InfoIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-[#1E40AF] dark:text-[#93C5FD] mb-1">
-                Exposure Analysis
-              </p>
-              <p className="text-sm text-[#1E40AF]/90 dark:text-[#93C5FD]/90">
-                This view shows exposure analysis, not asset ownership. Values here may differ from 
-                dashboard and holdings screens. Dashboard values remain authoritative.
-              </p>
+        {/* ── Section 1: Exposure Hero ─────────────────────────────────── */}
+        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 mb-5">
+
+          {/* Headline */}
+          <div className="flex items-baseline gap-2 mb-5">
+            <span className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
+              {formatCurrency(totalMFValue)}
+            </span>
+            <span className="text-sm text-[#6B7280] dark:text-[#94A3B8]">invested across your mutual funds</span>
+          </div>
+
+          {/* Stacked bar */}
+          <div className="mb-4">
+            <div className="flex h-5 rounded-full overflow-hidden gap-px">
+              <div style={{ width: `${equityPct}%` }} className="bg-[#2563EB] transition-all" />
+              <div style={{ width: `${debtPct}%` }} className="bg-[#10B981] transition-all" />
+              <div style={{ width: `${otherPct}%` }} className="bg-[#94A3B8] transition-all" />
+            </div>
+            {/* Legend */}
+            <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-xs text-[#475569] dark:text-[#CBD5E1]">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#2563EB]" />
+                Equity &nbsp;·&nbsp; {equityPct.toFixed(0)}%
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#10B981]" />
+                Debt &nbsp;·&nbsp; {debtPct.toFixed(0)}%
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#94A3B8]" />
+                Cash/Other &nbsp;·&nbsp; {otherPct.toFixed(0)}%
+              </span>
             </div>
           </div>
-        </div>
 
-        {/* Your Mutual Fund Holdings */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] p-8 mb-6">
-          <h2 className="text-lg font-semibold text-[#0F172A] mb-4">Your Mutual Fund Holdings (Asset Ownership)</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <p className="text-sm text-[#6B7280] font-medium mb-2">Total Mutual Fund Value</p>
-              <p className="text-3xl font-semibold text-[#0F172A] number-emphasis">
-                {formatCurrency(totalMFValue)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-[#6B7280] font-medium mb-2">Number of Schemes</p>
-              <p className="text-3xl font-semibold text-[#0F172A] number-emphasis">
-                {schemes.length}
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2">
-            <CheckCircleIcon className="w-4 h-4 text-[#16A34A]" />
-            <p className="text-sm text-[#6B7280]">This is what you OWN. ✓</p>
-          </div>
-        </section>
-
-        {/* Exposure Breakdown */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] p-8 mb-6">
-          <h2 className="text-lg font-semibold text-[#0F172A] mb-6">Exposure Breakdown (What your MFs invest in)</h2>
-          
-          <div className="overflow-x-auto mb-6">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider">
-                    Asset Class
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
-                    Exposure Value
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
-                    % of MF Holdings
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
-                    % of Portfolio
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E5E7EB]">
-                <tr>
-                  <td className="px-6 py-3.5">
-                    <div>
-                      <p className="font-semibold text-[#0F172A] text-sm">Equity</p>
-                      <p className="text-xs text-[#6B7280] mt-0.5">(via Mutual Funds)</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
-                    {formatCurrency(exposure.equity)}
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] number-emphasis">
-                    {((exposure.equity / totalMFValue) * 100).toFixed(1)}%
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] number-emphasis">
-                    {((exposure.equity / portfolioTotal) * 100).toFixed(1)}%
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-3.5">
-                    <div>
-                      <p className="font-semibold text-[#0F172A] text-sm">Debt</p>
-                      <p className="text-xs text-[#6B7280] mt-0.5">(via Mutual Funds)</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
-                    {formatCurrency(exposure.debt)}
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] number-emphasis">
-                    {((exposure.debt / totalMFValue) * 100).toFixed(1)}%
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] number-emphasis">
-                    {((exposure.debt / portfolioTotal) * 100).toFixed(1)}%
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-3.5">
-                    <div>
-                      <p className="font-semibold text-[#0F172A] text-sm">Cash/Others</p>
-                      <p className="text-xs text-[#6B7280] mt-0.5">(via Mutual Funds)</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
-                    {formatCurrency(exposure.other)}
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] number-emphasis">
-                    {((exposure.other / totalMFValue) * 100).toFixed(1)}%
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#0F172A] number-emphasis">
-                    {((exposure.other / portfolioTotal) * 100).toFixed(1)}%
-                  </td>
-                </tr>
-              </tbody>
-              <tfoot>
-                <tr className="bg-[#F9FAFB] border-t-2 border-[#0F172A]">
-                  <td className="px-6 py-3.5 text-sm font-bold text-[#0F172A]">TOTAL</td>
-                  <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A] number-emphasis">
-                    {formatCurrency(exposure.total)}
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A]">100.0%</td>
-                  <td className="px-4 py-3.5 text-right text-sm font-bold text-[#0F172A]">
-                    {((exposure.total / portfolioTotal) * 100).toFixed(1)}%
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <CheckCircleIcon className="w-4 h-4 text-[#16A34A]" />
-            <p className="text-sm text-[#6B7280]">
-              Total: {formatCurrency(exposure.total)} (matches your MF holdings) ✓
-            </p>
-          </div>
-        </section>
-
-        {/* Combined View */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] p-8 mb-6">
-          <h2 className="text-lg font-semibold text-[#0F172A] mb-4">Combined View (Ownership + Exposure)</h2>
-          <div className="bg-[#FEF3C7] border border-[#F59E0B]/20 rounded-lg p-4 mb-6">
-            <p className="text-sm text-[#92400E]">
-              <strong>⚠ For reference only.</strong> Dashboard values remain unchanged.
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wider">
-                    Asset Type
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
-                    Direct Holdings
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
-                    Exposure (via MF)
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wider">
-                    Combined View
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E5E7EB]">
-                {combinedView.map((item) => (
-                  <tr key={item.assetType}>
-                    <td className="px-6 py-3.5">
-                      <div>
-                        <p className="font-semibold text-[#0F172A] text-sm">{item.assetType}</p>
-                        <p className="text-xs text-[#6B7280] mt-0.5">
-                          {item.assetType === 'Stocks' ? '(owned)' : '(owned)'}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-medium text-[#0F172A] number-emphasis">
-                      {item.directHoldings > 0 ? formatCurrency(item.directHoldings) : '—'}
-                    </td>
-                    <td className="px-4 py-3.5 text-right text-sm text-[#6B7280] number-emphasis">
-                      {item.exposureViaMF > 0 ? (
-                        <>
-                          {formatCurrency(item.exposureViaMF)}
-                          <span className="text-xs text-[#6B7280] block mt-0.5">(via MF)</span>
-                        </>
-                      ) : '—'}
-                    </td>
-                    <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
-                      {item.combinedView > 0 ? (
-                        <>
-                          {formatCurrency(item.combinedView)}
-                          <span className="text-xs text-[#6B7280] block mt-0.5">(total exp)</span>
-                        </>
-                      ) : '—'}
-                    </td>
-                  </tr>
-                ))}
-                <tr>
-                  <td className="px-6 py-3.5">
-                    <div>
-                      <p className="font-semibold text-[#0F172A] text-sm">Mutual Funds</p>
-                      <p className="text-xs text-[#6B7280] mt-0.5">(as asset class)</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm font-semibold text-[#0F172A] number-emphasis">
-                    {formatCurrency(totalMFValue)}
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280]">—</td>
-                  <td className="px-4 py-3.5 text-right text-sm text-[#6B7280]">—</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-6 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB] p-4">
-            <div className="flex items-start gap-3">
-              <InfoIcon className="w-5 h-5 text-[#2563EB] flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-[#0F172A] mb-1">
-                  This "Combined View" is for analytics only.
-                </p>
-                <p className="text-xs text-[#6B7280]">
-                  Your dashboard continues to show: Stocks {formatCurrency(directEquity)} (direct holdings), 
-                  Mutual Funds {formatCurrency(totalMFValue)} (total MF value).
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Scheme-wise Breakdown */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden mb-6">
-          <div className="px-8 py-6 border-b border-[#E5E7EB]">
-            <h2 className="text-lg font-semibold text-[#0F172A]">Scheme-wise Exposure Breakdown</h2>
-          </div>
-
-          <div className="divide-y divide-[#E5E7EB]">
-            {schemes.slice(0, 10).map((scheme) => (
-              <div key={scheme.id}>
-                <button
-                  onClick={() => toggleScheme(scheme.id)}
-                  className="w-full px-8 py-5 flex items-center justify-between hover:bg-[#F9FAFB] transition-colors text-left"
-                >
-                  <div className="flex items-center gap-4 flex-1">
-                    {expandedSchemes.has(scheme.id) ? (
-                      <ChevronDownIcon className="w-5 h-5 text-[#6B7280]" />
-                    ) : (
-                      <ChevronUpIcon className="w-5 h-5 text-[#6B7280] rotate-90" />
-                    )}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-base font-semibold text-[#0F172A]">{scheme.name}</h3>
-                        <span className="text-xs text-[#6B7280]">({formatCurrency(scheme.value)})</span>
-                        {scheme.dataSource === 'factsheet' && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#D1FAE5] text-[#065F46] border border-[#16A34A]/20">
-                            Factsheet
-                          </span>
-                        )}
-                        {scheme.dataSource === 'estimated' && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#FEF3C7] text-[#92400E] border border-[#F59E0B]/20">
-                            Estimated
-                          </span>
-                        )}
-                      </div>
-                      {scheme.asOfDate && (
-                        <p className="text-xs text-[#6B7280] mt-1">
-                          Source: Fund factsheet as of {new Date(scheme.asOfDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </button>
-
-                {expandedSchemes.has(scheme.id) && (
-                  <div className="px-8 py-4 bg-[#F9FAFB] border-t border-[#E5E7EB]">
-                    <div className="grid grid-cols-3 gap-6">
-                      <div>
-                        <p className="text-xs text-[#6B7280] font-medium mb-1">Equity</p>
-                        <p className="text-sm font-semibold text-[#0F172A] number-emphasis">
-                          {formatCurrency(scheme.equity)}
-                        </p>
-                        <p className="text-xs text-[#6B7280] mt-0.5">({scheme.equityPct.toFixed(1)}%)</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-[#6B7280] font-medium mb-1">Debt</p>
-                        <p className="text-sm font-semibold text-[#0F172A] number-emphasis">
-                          {formatCurrency(scheme.debt)}
-                        </p>
-                        <p className="text-xs text-[#6B7280] mt-0.5">({scheme.debtPct.toFixed(1)}%)</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-[#6B7280] font-medium mb-1">Cash/Other</p>
-                        <p className="text-sm font-semibold text-[#0F172A] number-emphasis">
-                          {formatCurrency(scheme.other)}
-                        </p>
-                        <p className="text-xs text-[#6B7280] mt-0.5">({scheme.otherPct.toFixed(1)}%)</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+          {/* 3 stat chips */}
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            {[
+              { label: 'Equity exposure', value: equityExposure, pct: equityPct, color: 'text-[#2563EB] dark:text-[#3B82F6]', bg: 'bg-blue-50 dark:bg-blue-950/30' },
+              { label: 'Debt exposure', value: debtExposure, pct: debtPct, color: 'text-[#10B981] dark:text-[#34D399]', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
+              { label: 'Cash / Other', value: otherExposure, pct: otherPct, color: 'text-[#64748B] dark:text-[#94A3B8]', bg: 'bg-slate-50 dark:bg-slate-900/30' },
+            ].map((chip) => (
+              <div key={chip.label} className={`${chip.bg} rounded-lg p-3 border border-[#E5E7EB] dark:border-[#334155]`}>
+                <p className={`text-base font-bold number-emphasis ${chip.color}`}>~{formatCurrency(chip.value)}</p>
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">{chip.label}</p>
+                <p className={`text-xs font-medium ${chip.color} mt-0.5`}>{chip.pct.toFixed(0)}% of MFs</p>
               </div>
             ))}
           </div>
-        </section>
 
-        {/* Data Source */}
-        <section className="bg-white rounded-xl border border-[#E5E7EB] p-6">
-          <h3 className="text-base font-semibold text-[#0F172A] mb-4">Data Source & Accuracy</h3>
-          <div className="space-y-3 text-sm text-[#475569]">
-            <p>
-              <strong>Exposure data from:</strong> Fund factsheets (as of Nov 30, 2024)
-            </p>
-            <p>
-              <strong>Update frequency:</strong> Monthly
-            </p>
-            <p>
-              <strong>Accuracy:</strong> ±2% (fund allocations change daily)
-            </p>
-            <div className="bg-[#FEF3C7] border border-[#F59E0B]/20 rounded-lg p-3 mt-4">
-              <p className="text-xs text-[#92400E]">
-                <strong>⚠ Exposure percentages are approximate.</strong> For exact holdings, refer to individual fund factsheets.
-              </p>
+          {/* Fund type summary */}
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="text-[#6B7280] dark:text-[#94A3B8]">Fund types:</span>
+            {summary.equityCount > 0 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium">
+                {summary.equityCount} Equity
+              </span>
+            )}
+            {summary.hybridCount > 0 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-medium">
+                {summary.hybridCount} Hybrid
+              </span>
+            )}
+            {summary.debtCount > 0 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-medium">
+                {summary.debtCount} Debt
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* ── Section 2: True Equity Picture ──────────────────────────── */}
+        {(directEquity > 0 || equityExposure > 0) && (
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 mb-5">
+            <div className="flex items-start gap-2 mb-4">
+              <div>
+                <h2 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Your True Equity Exposure</h2>
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
+                  Direct stocks + what your MFs invest in equity = your actual equity risk
+                </p>
+              </div>
+            </div>
+
+            {/* Combined equity bar */}
+            <div className="space-y-3 mb-5">
+              {/* Direct stocks row */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#475569] dark:text-[#CBD5E1]">Direct Stocks</span>
+                  <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
+                    {formatCurrency(directEquity)} &nbsp;·&nbsp; {directEquityPct.toFixed(1)}% of portfolio
+                  </span>
+                </div>
+                <div className="h-3 bg-[#E5E7EB] dark:bg-[#334155] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#2563EB] rounded-full"
+                    style={{ width: `${Math.min(directEquityPct, 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Equity via MFs row */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#475569] dark:text-[#CBD5E1]">Equity via Mutual Funds <span className="text-[#9CA3AF] dark:text-[#64748B]">(estimated)</span></span>
+                  <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
+                    ~{formatCurrency(equityExposure)} &nbsp;·&nbsp; {equityViaMFPct.toFixed(1)}% of portfolio
+                  </span>
+                </div>
+                <div className="h-3 bg-[#E5E7EB] dark:bg-[#334155] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#93C5FD] dark:bg-[#1D4ED8] rounded-full"
+                    style={{ width: `${Math.min(equityViaMFPct, 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-dashed border-[#E5E7EB] dark:border-[#334155] pt-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Total Equity Exposure</p>
+                    <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Direct + via MFs combined</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-[#2563EB] dark:text-[#3B82F6] number-emphasis">
+                      ~{formatCurrency(combinedEquity)}
+                    </p>
+                    <p className="text-xs font-medium text-[#2563EB] dark:text-[#3B82F6]">
+                      {combinedEquityPct.toFixed(1)}% of portfolio
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Stacked combined bar */}
+            <div>
+              <div className="flex h-2.5 rounded-full overflow-hidden gap-px">
+                {directEquityPct > 0 && (
+                  <div
+                    title={`Direct stocks: ${directEquityPct.toFixed(1)}%`}
+                    style={{ width: `${directEquityPct}%` }}
+                    className="bg-[#2563EB]"
+                  />
+                )}
+                {equityViaMFPct > 0 && (
+                  <div
+                    title={`Via MFs: ${equityViaMFPct.toFixed(1)}%`}
+                    style={{ width: `${equityViaMFPct}%` }}
+                    className="bg-[#93C5FD] dark:bg-[#1D4ED8]"
+                  />
+                )}
+                <div className="flex-1 bg-[#E5E7EB] dark:bg-[#334155]" />
+              </div>
+              <div className="flex gap-4 mt-1.5 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#2563EB] inline-block" />Direct</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#93C5FD] dark:bg-[#1D4ED8] inline-block" />Via MFs</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#E5E7EB] dark:bg-[#334155] inline-block" />Rest of portfolio</span>
+              </div>
             </div>
           </div>
-        </section>
+        )}
+
+        {/* ── Section 3: Fund-by-Fund Breakdown ───────────────────────── */}
+        <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] overflow-hidden mb-5">
+          <div className="px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
+            <h2 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Your Mutual Funds</h2>
+            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
+              Fund type determines how much equity vs debt is likely inside
+            </p>
+          </div>
+
+          {/* Category legend */}
+          <div className="px-6 py-3 bg-[#F9FAFB] dark:bg-[#0F172A] border-b border-[#E5E7EB] dark:border-[#334155]">
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-xs text-[#475569] dark:text-[#94A3B8]">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#2563EB] inline-block" />
+                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Equity fund</strong> — typically ~85% stocks, ~12% debt
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#7C3AED] inline-block" />
+                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Hybrid fund</strong> — typically ~50% stocks, ~45% debt
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#10B981] inline-block" />
+                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Debt fund</strong> — typically ~10% stocks, ~85% debt
+              </span>
+            </div>
+          </div>
+
+          <div className="divide-y divide-[#E5E7EB] dark:divide-[#334155]">
+            {funds.map((fund) => {
+              const catColors = CATEGORY_COLORS[fund.category];
+              const gainLoss = fund.currentValue - fund.investedValue;
+              const gainLossPct = fund.investedValue > 0 ? (gainLoss / fund.investedValue) * 100 : 0;
+              const allocationPct = totalMFValue > 0 ? (fund.currentValue / totalMFValue) * 100 : 0;
+
+              return (
+                <div key={fund.id} className="px-6 py-4 hover:bg-[#F9FAFB] dark:hover:bg-[#0F172A]/50 transition-colors">
+                  <div className="flex items-center justify-between gap-4">
+                    {/* Left: name + badge */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
+                          {fund.name}
+                        </span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${catColors.bg} ${catColors.text}`}>
+                          {CATEGORY_LABELS[fund.category]}
+                        </span>
+                      </div>
+                      {/* Share of MF portfolio bar */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 max-w-[140px] h-1.5 bg-[#E5E7EB] dark:bg-[#334155] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-[#2563EB] rounded-full"
+                            style={{ width: `${Math.min(allocationPct, 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{allocationPct.toFixed(1)}% of your MFs</span>
+                      </div>
+                    </div>
+
+                    {/* Right: value + gain */}
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">
+                        {formatCurrency(fund.currentValue)}
+                      </p>
+                      <p className={`text-xs number-emphasis ${gainLoss >= 0 ? 'text-[#16A34A] dark:text-[#4ADE80]' : 'text-[#DC2626] dark:text-[#F87171]'}`}>
+                        {gainLoss >= 0 ? '+' : ''}{gainLossPct.toFixed(1)}%
+                        <span className="text-[#9CA3AF] dark:text-[#64748B]"> ({gainLoss >= 0 ? '+' : ''}{formatCurrency(gainLoss)})</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Section 4: Insights ──────────────────────────────────────── */}
+        {insights.length > 0 && (
+          <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 mb-5">
+            <h2 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">What This Means For You</h2>
+            <div className="space-y-3">
+              {insights.map((ins, i) => {
+                const style =
+                  ins.level === 'good'
+                    ? { bg: 'bg-emerald-50 dark:bg-emerald-950/20', border: 'border-emerald-200 dark:border-emerald-800', icon: '✓', iconColor: 'text-emerald-600 dark:text-emerald-400' }
+                    : ins.level === 'warn'
+                    ? { bg: 'bg-amber-50 dark:bg-amber-950/20', border: 'border-amber-200 dark:border-amber-800', icon: '!', iconColor: 'text-amber-600 dark:text-amber-400' }
+                    : { bg: 'bg-blue-50 dark:bg-blue-950/20', border: 'border-blue-200 dark:border-blue-800', icon: 'i', iconColor: 'text-blue-600 dark:text-blue-400' };
+                return (
+                  <div key={i} className={`flex gap-3 p-3.5 rounded-lg border ${style.bg} ${style.border}`}>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 ${style.iconColor}`}>
+                      {style.icon}
+                    </span>
+                    <p className="text-sm text-[#475569] dark:text-[#CBD5E1] leading-relaxed">{ins.text}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Footer: Disclaimer ───────────────────────────────────────── */}
+        <div className="flex items-start gap-2 px-4 py-3 rounded-lg bg-[#F9FAFB] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155]">
+          <InfoIcon className="w-4 h-4 text-[#6B7280] dark:text-[#94A3B8] flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] leading-relaxed">
+            Exposure values are <strong>estimated</strong> based on fund category (equity/hybrid/debt). Actual composition varies by fund and changes monthly. For exact breakdown, check each fund&apos;s factsheet on AMFI or your fund house&apos;s website.
+          </p>
+        </div>
+
       </main>
     </div>
   );
 }
-

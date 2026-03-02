@@ -1,11 +1,86 @@
 /**
  * Stock Helper Functions
- * 
+ *
  * Utility functions for stock operations (price fetching, name resolution, etc.)
  */
 
 import { createAdminClient } from '@/lib/supabase/server';
 import { getStockPrice } from '@/lib/stock-prices';
+
+// ─── Sector Enrichment ───────────────────────────────────────────────────────
+
+export interface StockSectorInfo {
+  sector: string | null;
+  subSector: string | null;
+}
+
+/**
+ * Fetch sector and industry for an NSE stock.
+ *
+ * Uses Yahoo Finance v1/finance/search — the autocomplete/typeahead API.
+ * This endpoint requires no authentication (it powers the search box on
+ * finance.yahoo.com) and returns sector + industry in the quotes array.
+ *
+ * The v10/finance/quoteSummary and v7/finance/quote endpoints require
+ * cookie+crumb auth since mid-2024 and return empty results without it.
+ *
+ * Response mapped as:
+ *   quote.sector / quote.sectorDisp   → assets.sector
+ *   quote.industry / quote.industryDisp → assets.sub_sector
+ */
+export async function fetchStockSector(symbol: string): Promise<StockSectorInfo | null> {
+  try {
+    const cleanSymbol = symbol.replace(/^(NSE|BSE):\s*/i, '').trim().toUpperCase();
+    const yahooSymbol = `${cleanSymbol}.NS`;
+
+    // v1/finance/search — autocomplete API, no auth required
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(yahooSymbol)}&quotesCount=3&newsCount=0&enableFuzzyQuery=false`;
+
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`[Stock Helpers] Sector search HTTP ${response.status} for ${symbol}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const quotes: any[] = data?.quotes ?? [];
+
+    // Find exact symbol match first; fall back to first equity result
+    const quote = quotes.find((q: any) => q.symbol?.toUpperCase() === yahooSymbol.toUpperCase())
+      ?? quotes.find((q: any) => q.quoteType === 'EQUITY')
+      ?? quotes[0];
+
+    if (!quote) {
+      console.warn(`[Stock Helpers] No search result for ${symbol}. Response: ${JSON.stringify(data).slice(0, 300)}`);
+      return null;
+    }
+
+    const sector = (typeof quote.sector === 'string' && quote.sector.trim()) ? quote.sector.trim()
+      : (typeof quote.sectorDisp === 'string' && quote.sectorDisp.trim()) ? quote.sectorDisp.trim()
+      : null;
+
+    const subSector = (typeof quote.industry === 'string' && quote.industry.trim()) ? quote.industry.trim()
+      : (typeof quote.industryDisp === 'string' && quote.industryDisp.trim()) ? quote.industryDisp.trim()
+      : null;
+
+    if (!sector && !subSector) {
+      console.warn(`[Stock Helpers] No sector/industry for ${symbol}. Quote keys: ${Object.keys(quote).join(', ')}`);
+      return null;
+    }
+
+    console.log(`[Stock Helpers] Sector enriched for ${symbol}: sector="${sector}" industry="${subSector}"`);
+    return { sector, subSector };
+  } catch (error) {
+    console.warn(`[Stock Helpers] fetchStockSector failed for ${symbol}:`, error);
+    return null;
+  }
+}
 
 /**
  * Fetch current stock price

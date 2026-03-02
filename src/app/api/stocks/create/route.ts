@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import { fetchStockPrice, fetchStockName } from '@/lib/stock-helpers';
+import { fetchStockPrice, fetchStockName, fetchStockSector } from '@/lib/stock-helpers';
 import { classifyAsset } from '@/lib/asset-classification';
 
 // Helper: Get or create user's primary portfolio
@@ -57,10 +57,10 @@ async function createOrGetStockAsset(symbol: string, supabase: any) {
 
   // Create new asset
   const stockName = await fetchStockName(symbol);
-  
+
   // Use new classification system
   const classification = classifyAsset('equity');
-  
+
   const { data: newAsset, error } = await supabase
     .from('assets')
     .insert({
@@ -80,6 +80,21 @@ async function createOrGetStockAsset(symbol: string, supabase: any) {
   if (error) {
     throw new Error('Failed to create asset');
   }
+
+  // Fire-and-forget sector enrichment — never blocks or fails the main request
+  fetchStockSector(symbol).then(sectorInfo => {
+    if (sectorInfo?.sector) {
+      supabase
+        .from('assets')
+        .update({ sector: sectorInfo.sector, sub_sector: sectorInfo.subSector })
+        .eq('id', newAsset.id)
+        .then(({ error: updateErr }) => {
+          if (updateErr) {
+            console.warn(`[Stock Create] Sector update failed for ${symbol}:`, updateErr.message);
+          }
+        });
+    }
+  }).catch(() => { /* non-critical — ignore */ });
 
   return newAsset.id;
 }

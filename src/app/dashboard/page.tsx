@@ -1681,16 +1681,17 @@ function DashboardContent() {
         {/* NON-INVESTMENT OVERVIEW — Liabilities + Insurance (separate from asset allocation) */}
         {/* ============================================================================ */}
         <section className="mb-8">
-          <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Liabilities & Protection</h2>
-          <p className="text-sm text-muted-foreground mb-4">Loans, EMIs, and insurance coverage that impact your financial safety.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Card 1: Liabilities — informational, uses existing liability totals */}
+            {/* Card 1: Liabilities */}
             {(() => {
               const liabilityTotalsOverview = getLiabilityTotals(liabilitiesData);
               return (
-                <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
-                  <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Liabilities</h3>
-                  <div className="space-y-2 mb-4">
+                <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 flex flex-col">
+                  <div className="flex items-baseline gap-2 mb-4">
+                    <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Liabilities</h3>
+                    <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Loans & EMIs impacting your net worth</span>
+                  </div>
+                  <div className="space-y-2 mb-4 flex-1">
                     <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
                       Total Outstanding: <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">{formatCurrency(liabilityTotalsOverview.totalOutstanding)}</span>
                     </p>
@@ -1701,7 +1702,7 @@ function DashboardContent() {
                   {hasCapability('manage_liabilities') ? (
                     <Link
                       href="/liabilities"
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors w-fit"
                     >
                       Manage Liabilities
                     </Link>
@@ -1719,7 +1720,7 @@ function DashboardContent() {
                           'Debt-free timeline planning',
                         ],
                       })}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 border-2 border-emerald-600 dark:border-emerald-500 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors w-fit"
                     >
                       Manage Liabilities
                     </button>
@@ -1729,35 +1730,53 @@ function DashboardContent() {
             })()}
 
             {/* Card 2: Insurance */}
-            <div
-              onClick={() => {
-                if (hasCapability('manage_insurance')) {
-                  router.push('/portfolio/insurance');
-                } else {
-                  setUpgradeModal({
-                    open: true,
-                    plan: 'Pro',
-                    title: 'Insurance Management',
-                    description: 'Track all your insurance policies, coverage amounts, and renewal dates in one dashboard.',
-                    benefits: [
-                      'Life, health & other policies',
-                      'Coverage summaries & renewal alerts',
-                      'Protection gap analysis',
-                      'Family security overview',
-                    ],
-                  });
-                }
-              }}
-              className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-colors cursor-pointer h-full"
-            >
-                <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Insurance</h3>
-                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-4">
-                  Manage your life, health, and other insurance policies
-                </p>
-                <div className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 border-2 border-blue-600 dark:border-blue-500 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
-                  View Insurance
+            {(() => {
+              const policies = insurance as Array<{ category: string; sum_assured?: number }>;
+              const lifeTotal = policies.filter(p => p.category === 'LIFE').reduce((s, p) => s + (p.sum_assured || 0), 0);
+              const healthTotal = policies.filter(p => p.category === 'HEALTH').reduce((s, p) => s + (p.sum_assured || 0), 0);
+              return (
+                <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6 flex flex-col">
+                  <div className="flex items-baseline gap-2 mb-4">
+                    <h3 className="text-base font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Insurance</h3>
+                    <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Manage your life, health & other policies</span>
+                  </div>
+                  <div className="space-y-2 mb-4 flex-1">
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      Life Insurance Total: <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">{lifeTotal > 0 ? formatCurrency(lifeTotal) : '—'}</span>
+                    </p>
+                    <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                      Health Insurance Total: <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] number-emphasis">{healthTotal > 0 ? formatCurrency(healthTotal) : '—'}</span>
+                    </p>
+                  </div>
+                  {hasCapability('manage_insurance') ? (
+                    <Link
+                      href="/portfolio/insurance"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 border-2 border-blue-600 dark:border-blue-500 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors w-fit"
+                    >
+                      View Insurance
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => setUpgradeModal({
+                        open: true,
+                        plan: 'Pro',
+                        title: 'Insurance Management',
+                        description: 'Track all your insurance policies, coverage amounts, and renewal dates in one dashboard.',
+                        benefits: [
+                          'Life, health & other policies',
+                          'Coverage summaries & renewal alerts',
+                          'Protection gap analysis',
+                          'Family security overview',
+                        ],
+                      })}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 border-2 border-blue-600 dark:border-blue-500 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors w-fit"
+                    >
+                      View Insurance
+                    </button>
+                  )}
                 </div>
-            </div>
+              );
+            })()}
           </div>
         </section>
 
