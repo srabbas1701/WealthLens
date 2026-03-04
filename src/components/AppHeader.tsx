@@ -7,6 +7,7 @@ import { FileIcon, UserIcon, LogOutIcon, ChevronDownIcon, ShieldCheckIcon, XIcon
 import { useAuthSession, useAuthAppData } from '@/lib/auth';
 import { useSubscription } from '@/hooks/useSubscription';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
+import { UpgradeModal } from './UpgradeModal';
 import { type CurrencyFormat } from '@/lib/currency/formatCurrency';
 import { useCurrency } from '@/lib/currency/useCurrency';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -117,6 +118,7 @@ export function AppHeader({
     : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showAIUpgradeModal, setShowAIUpgradeModal] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -197,15 +199,23 @@ export function AppHeader({
 
           {/* Center: Navigation Links */}
           <nav className="hidden md:flex items-center gap-5">
-            <a href="#features" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
-              Features
-            </a>
-            <a href="#trust" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
-              Trust
-            </a>
-            <a href="#pricing" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
-              Pricing
-            </a>
+            {isInDemoMode ? (
+              <span className="px-4 py-1.5 rounded-full bg-[#2563EB]/10 dark:bg-[#3B82F6]/20 text-[#2563EB] dark:text-[#60A5FA] text-sm font-bold tracking-widest uppercase">
+                Demo
+              </span>
+            ) : (
+              <>
+                <a href="#features" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
+                  Features
+                </a>
+                <a href="#trust" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
+                  Trust
+                </a>
+                <a href="#pricing" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
+                  Pricing
+                </a>
+              </>
+            )}
           </nav>
 
           {/* Right: Navigation and Actions */}
@@ -534,6 +544,10 @@ export function AppHeader({
               {/* AI Analyst Button — AI-powered portfolio intelligence */}
               <button
                 onClick={() => {
+                  if (!showPlanBadge) {
+                    setShowAIUpgradeModal(true);
+                    return;
+                  }
                   window.dispatchEvent(new CustomEvent('openCopilot'));
                   if (!pathname?.startsWith('/dashboard')) {
                     // CRITICAL FIX: Mark navigation source to prevent redirect loops
@@ -655,6 +669,10 @@ export function AppHeader({
                     type="button"
                     onClick={() => {
                       setIsMobileMenuOpen(false);
+                      if (!showPlanBadge) {
+                        setShowAIUpgradeModal(true);
+                        return;
+                      }
                       window.dispatchEvent(new CustomEvent('openCopilot'));
                       if (!pathname?.startsWith('/dashboard')) {
                         sessionStorage.setItem('navigation_source', 'header');
@@ -725,6 +743,22 @@ export function AppHeader({
         isOpen={showLogoutModal}
         onClose={handleCloseLogoutModal}
         onConfirm={handleLogout}
+      />
+
+      {/* AI Analyst Upgrade Modal — shown to free users */}
+      <UpgradeModal
+        isOpen={showAIUpgradeModal}
+        onClose={() => setShowAIUpgradeModal(false)}
+        requiredPlan="Pro"
+        featureTitle="AI Portfolio Analyst"
+        featureDescription="Ask questions about your portfolio and get instant, personalised AI-powered insights."
+        benefits={[
+          'Up to 15 AI queries per month on Pro',
+          'Up to 50 AI queries per month on Premium',
+          'Portfolio health, risk & diversification analysis',
+          'Goal tracking and market context',
+          'Multi-turn conversation memory',
+        ]}
       />
     </header>
   );
