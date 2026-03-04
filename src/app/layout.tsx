@@ -7,6 +7,7 @@ import { CurrencyProvider } from "@/components/AppHeader";
 import { SessionTimeoutProvider } from "@/components/SessionTimeoutProvider";
 import { ThemeProvider } from "@/lib/theme/ThemeProvider";
 import { ToastProvider } from "@/components/Toast";
+import { ProductionGuard } from "@/components/ProductionGuard";
 
 // Force dynamic rendering to prevent build-time Supabase client creation
 export const dynamic = 'force-dynamic';
@@ -80,6 +81,8 @@ export default function RootLayout({
         */}
       </head>
       <body className={`${inter.variable} antialiased`} suppressHydrationWarning>
+
+        <ProductionGuard />
 
         {/* Theme provider - wraps everything */}
         <ThemeProvider>
