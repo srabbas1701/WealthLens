@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { BrainIcon, XIcon, SendIcon, CheckCircleIcon, AlertTriangleIcon, MaximizeIcon, MinimizeIcon, NeuralIcon } from './icons';
+import { XIcon, SendIcon, CheckCircleIcon, AlertTriangleIcon, MaximizeIcon, MinimizeIcon, NeuralIcon } from './icons';
 import type {
   CopilotQueryRequest,
   CopilotQueryResponse,
@@ -11,7 +11,7 @@ import type {
 } from '@/types/copilot';
 
 /**
- * Floating AI Portfolio Analyst
+ * Floating Naira — AI Portfolio Analyst
  *
  * Non-intrusive, always accessible.
  * Opens a chat panel for portfolio questions.
@@ -56,7 +56,7 @@ interface Message {
 }
 
 function generateSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
 function detectIntent(question: string): Intent {
@@ -319,6 +319,87 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 // =============================================================================
+// QUOTA EXHAUSTED BANNER
+// =============================================================================
+
+function formatResetDate(dateStr?: string): string {
+  if (!dateStr) return 'next month';
+  try {
+    return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}
+
+interface QuotaBannerProps {
+  planTier?: string;
+  queryLimit?: number;
+  resetDate?: string;
+}
+
+function QuotaBanner({ planTier, queryLimit, resetDate }: QuotaBannerProps) {
+  const resetOn = formatResetDate(resetDate);
+
+  let title = 'Monthly limit reached';
+  let message = '';
+  let upgradeHint: React.ReactNode = null;
+
+  if (planTier === 'free' || !planTier) {
+    title = `You've used all ${queryLimit ?? 5} free queries this month`;
+    message = `Your quota resets on ${resetOn}.`;
+    upgradeHint = (
+      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+        Upgrade to{' '}
+        <a href="/pricing" className="font-semibold text-blue-600 dark:text-blue-400 hover:underline">Pro</a>
+        {' '}for 20 queries/mo or{' '}
+        <a href="/pricing" className="font-semibold text-purple-600 dark:text-purple-400 hover:underline">Premium</a>
+        {' '}for 50 queries/mo.
+      </p>
+    );
+  } else if (planTier === 'pro') {
+    title = `You've used all ${queryLimit ?? 20} Pro queries this month`;
+    message = `Your quota resets on ${resetOn}.`;
+    upgradeHint = (
+      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+        Upgrade to{' '}
+        <a href="/pricing" className="font-semibold text-purple-600 dark:text-purple-400 hover:underline">Premium</a>
+        {' '}for 50 queries/month.
+      </p>
+    );
+  } else if (planTier === 'premium') {
+    title = `You've used all ${queryLimit ?? 50} Premium queries this month`;
+    message = `Your quota resets on ${resetOn}.`;
+  } else if (planTier === 'trial') {
+    title = `You've used all ${queryLimit ?? 15} trial queries this month`;
+    message = `Your quota resets on ${resetOn}.`;
+    upgradeHint = (
+      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+        Upgrade to{' '}
+        <a href="/pricing" className="font-semibold text-blue-600 dark:text-blue-400 hover:underline">Pro</a>
+        {' '}for 20 queries/mo or{' '}
+        <a href="/pricing" className="font-semibold text-purple-600 dark:text-purple-400 hover:underline">Premium</a>
+        {' '}for 50 queries/mo.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mx-4 mb-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50">
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <AlertTriangleIcon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">{title}</p>
+          <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">{message}</p>
+          {upgradeHint}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
@@ -350,9 +431,14 @@ export default function FloatingCopilot({
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId] = useState(generateSessionId);
   const [remainingQueries, setRemainingQueries] = useState<number | undefined>(undefined);
+  const [queryLimit, setQueryLimit] = useState<number | undefined>(undefined);
+  const [resetDate, setResetDate] = useState<string | undefined>(undefined);
+  const [planTier, setPlanTier] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initialMessageSentRef = useRef(false);
+
+  const isQuotaExhausted = typeof remainingQueries === 'number' && remainingQueries <= 0;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -367,6 +453,30 @@ export default function FloatingCopilot({
     if (isOpen && !isLoading) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
+  }, [isOpen]);
+
+  // Fetch live entitlements every time the panel opens.
+  // cache: 'no-store' bypasses browser cache so we always get the real DB count,
+  // not a 5-minute-stale cached response.
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch('/api/entitlements', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (typeof data.ai_remaining === 'number') {
+          setRemainingQueries(data.ai_remaining);
+        }
+        if (typeof data.ai_query_limit === 'number') {
+          setQueryLimit(data.ai_query_limit);
+        }
+        if (typeof data.ai_reset_date === 'string') {
+          setResetDate(data.ai_reset_date);
+        }
+        if (typeof data.plan_tier === 'string') {
+          setPlanTier(data.plan_tier);
+        }
+      })
+      .catch(() => {});
   }, [isOpen]);
 
   // Listen for custom event to open copilot from header button
@@ -405,7 +515,7 @@ export default function FloatingCopilot({
 
   const handleSubmit = async (questionOverride?: string) => {
     const question = questionOverride || input.trim();
-    if (!question || isLoading) return;
+    if (!question || isLoading || isQuotaExhausted) return;
 
     setInput('');
     const detectedIntent = detectIntent(question);
@@ -440,22 +550,28 @@ export default function FloatingCopilot({
         if (response.status === 429) {
           const isTrialLimit = errorData?.error === 'Trial limit exceeded';
           const isPaidLimit = errorData?.error === 'Monthly limit reached';
-          const planTier: string | null = errorData?.plan_tier ?? null;
+          const tier: string | null = errorData?.plan_tier ?? null;
+          const limit: number | null = errorData?.query_limit ?? null;
+          const reset: string | null = errorData?.reset_date ?? null;
+          const resetOn = formatResetDate(reset ?? undefined);
+
+          // Update local state so banner shows immediately
+          setRemainingQueries(0);
+          if (reset) setResetDate(reset);
+          if (tier) setPlanTier(tier);
+          if (limit) setQueryLimit(limit);
+
           let limitMsg: string;
-          if (isTrialLimit) {
-            limitMsg =
-              "You've used all 15 free AI queries for this month. Upgrade to Pro (15/mo) or Premium (50/mo) to continue using the AI Portfolio Analyst.";
-          } else if (isPaidLimit && planTier === 'premium') {
-            limitMsg =
-              "You've used all 50 AI queries for this month on your Premium plan. Your limit resets at the start of next month.";
-          } else if (isPaidLimit && planTier === 'pro') {
-            limitMsg =
-              "You've used all 15 AI queries for this month on your Pro plan. Upgrade to Premium for 50 queries/month, or your limit resets at the start of next month.";
-          } else if (isPaidLimit) {
-            limitMsg =
-              "You've reached your monthly AI query limit. Your limit resets at the start of next month.";
+          if (isTrialLimit || tier === 'trial') {
+            limitMsg = `You've used all ${limit ?? 15} trial queries for this month. Your quota resets on ${resetOn}. Upgrade to Pro (20/mo) or Premium (50/mo) for more access.`;
+          } else if (tier === 'free') {
+            limitMsg = `You've used all ${limit ?? 5} free queries for this month. Your quota resets on ${resetOn}. Upgrade to Pro (20/mo) or Premium (50/mo) to get more access to Naira.`;
+          } else if (isPaidLimit && tier === 'premium') {
+            limitMsg = `You've used all ${limit ?? 50} queries for this month on your Premium plan. Your quota resets on ${resetOn}.`;
+          } else if (isPaidLimit && tier === 'pro') {
+            limitMsg = `You've used all ${limit ?? 20} queries for this month on your Pro plan. Your quota resets on ${resetOn}. Upgrade to Premium for 50 queries/month.`;
           } else {
-            limitMsg = "You're sending messages too quickly. Please wait a moment and try again.";
+            limitMsg = `You've reached your monthly Naira query limit. Your quota resets on ${resetOn}.`;
           }
           setMessages((prev) => [
             ...prev,
@@ -475,7 +591,7 @@ export default function FloatingCopilot({
             {
               role: 'assistant',
               content:
-                'The AI Portfolio Analyst is a premium feature. Upgrade your plan to unlock AI-powered portfolio intelligence.',
+                'Naira is not available for your account. Please sign in or contact support.',
               status: 'attention_required',
               intent: detectedIntent,
             },
@@ -488,9 +604,17 @@ export default function FloatingCopilot({
 
       const data: CopilotQueryResponse = await response.json();
 
-      // Update remaining queries counter from response
-      if (typeof data.remaining_queries === 'number') {
-        setRemainingQueries(data.remaining_queries);
+      // Always decrement locally by 1 for immediate in-session accuracy.
+      // This ensures "3 of 20 used" after 3 queries even if the DB write from
+      // the previous query hasn't completed yet (timing/race condition).
+      setRemainingQueries((prev) => (typeof prev === 'number' ? Math.max(0, prev - 1) : prev));
+
+      // Use server values to update limit and reset date (these don't change per-query)
+      if (typeof data.query_limit === 'number') {
+        setQueryLimit(data.query_limit);
+      }
+      if (typeof data.reset_date === 'string') {
+        setResetDate(data.reset_date);
       }
 
       const assistantContent = data.explanation
@@ -542,10 +666,12 @@ export default function FloatingCopilot({
       <button
         onClick={() => setIsOpen(true)}
         className={`fixed ${position === 'top-right' ? 'top-20 right-6' : 'bottom-6 right-6'} z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-emerald-600 dark:bg-emerald-600 text-white shadow-lg hover:bg-emerald-700 dark:hover:bg-emerald-700 hover:shadow-xl hover:scale-105 transition-all relative`}
-        aria-label="Open AI Portfolio Analyst"
+        aria-label="Open Naira — AI Portfolio Analyst"
       >
         <NeuralIcon className="w-5 h-5 text-[#FCD34D]" />
-        <span className="font-medium text-sm hidden sm:inline">AI Analyst</span>
+        <span className="font-semibold text-sm hidden sm:inline tracking-wide">
+          Ask N<span className="text-[#FCD34D] font-bold">ai</span>ra
+        </span>
         {issueCount > 0 && (
           <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">
             {issueCount}
@@ -554,6 +680,16 @@ export default function FloatingCopilot({
       </button>
     );
   }
+
+  // ── Counter display helpers ─────────────────────────────────────────────────
+  const usedQueries =
+    typeof remainingQueries === 'number' && typeof queryLimit === 'number'
+      ? queryLimit - remainingQueries
+      : undefined;
+  const isNearLimit =
+    typeof remainingQueries === 'number' && typeof queryLimit === 'number'
+      ? remainingQueries <= Math.max(1, Math.floor(queryLimit * 0.2))
+      : false;
 
   return (
     <>
@@ -573,13 +709,15 @@ export default function FloatingCopilot({
         <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-              <BrainIcon className="w-5 h-5 text-white" />
+              <NeuralIcon className="w-5 h-5 text-[#FCD34D]" />
             </div>
             <div>
-              <p className="font-semibold text-sm text-white">AI Portfolio Analyst</p>
+              <p className="font-semibold text-sm text-white tracking-wide">
+                N<span className="text-[#FCD34D]">ai</span>ra
+              </p>
               <p className="text-xs text-emerald-100">
                 {messages.length === 0
-                  ? 'Powered by AI · Your portfolio, explained'
+                  ? 'Your AI Portfolio Analyst'
                   : `${messages.filter((m) => m.role === 'assistant').length} response${messages.filter((m) => m.role === 'assistant').length !== 1 ? 's' : ''} this session`}
               </p>
             </div>
@@ -617,11 +755,11 @@ export default function FloatingCopilot({
               <div className="bg-white dark:bg-[#1E293B] p-4 rounded-xl border border-[#E5E7EB] dark:border-[#334155]">
                 <div className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <BrainIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <NeuralIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-1">
-                      Hello! I&apos;m your AI Portfolio Analyst.
+                      Hello! I&apos;m N<span className="text-emerald-600 dark:text-emerald-400 font-bold">ai</span>ra, your AI Portfolio Analyst.
                     </p>
                     <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] leading-relaxed">
                       I can explain your portfolio&apos;s risk, performance, diversification, and
@@ -638,7 +776,8 @@ export default function FloatingCopilot({
                   <button
                     key={cap.label}
                     onClick={() => handleFollowUp(cap.question)}
-                    className="px-2.5 py-1 text-xs font-medium bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full border border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 hover:border-emerald-400 dark:hover:border-emerald-500 transition-colors cursor-pointer"
+                    disabled={isQuotaExhausted}
+                    className="px-2.5 py-1 text-xs font-medium bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full border border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 hover:border-emerald-400 dark:hover:border-emerald-500 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {cap.label}
                   </button>
@@ -655,7 +794,8 @@ export default function FloatingCopilot({
                     <button
                       key={i}
                       onClick={() => handleFollowUp(q.text)}
-                      className="w-full text-left px-3 py-2.5 text-sm text-[#374151] dark:text-[#CBD5E1] bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155] hover:border-emerald-400 dark:hover:border-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                      disabled={isQuotaExhausted}
+                      className="w-full text-left px-3 py-2.5 text-sm text-[#374151] dark:text-[#CBD5E1] bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155] hover:border-emerald-400 dark:hover:border-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {q.text}
                     </button>
@@ -677,7 +817,7 @@ export default function FloatingCopilot({
                   {/* Assistant avatar */}
                   {msg.role === 'assistant' && (
                     <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0 mr-2 mt-1">
-                      <BrainIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <NeuralIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     </div>
                   )}
                   <div
@@ -698,11 +838,12 @@ export default function FloatingCopilot({
                   </div>
                 )}
 
-                {/* Follow-up suggestions — only on last assistant message */}
+                {/* Follow-up suggestions — only on last assistant message, and only when not quota exhausted */}
                 {msg.role === 'assistant' &&
                   msg.followUps &&
                   msg.followUps.length > 0 &&
-                  i === messages.length - 1 && (
+                  i === messages.length - 1 &&
+                  !isQuotaExhausted && (
                     <div className="flex flex-wrap gap-2 pl-9 pt-1">
                       {msg.followUps.map((followUp, j) => (
                         <button
@@ -723,7 +864,7 @@ export default function FloatingCopilot({
           {isLoading && (
             <div className="flex justify-start items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center flex-shrink-0">
-                <BrainIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <NeuralIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div className="bg-white dark:bg-[#1E293B] px-4 py-3 rounded-2xl rounded-bl-md border border-[#E5E7EB] dark:border-[#334155] shadow-sm">
                 <div className="flex items-center gap-1.5">
@@ -747,6 +888,15 @@ export default function FloatingCopilot({
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Quota exhausted banner — shown above input when limit is reached */}
+        {isQuotaExhausted && (
+          <QuotaBanner
+            planTier={planTier}
+            queryLimit={queryLimit}
+            resetDate={resetDate}
+          />
+        )}
+
         {/* Input */}
         <form
           onSubmit={(e) => {
@@ -761,13 +911,13 @@ export default function FloatingCopilot({
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about your portfolio..."
-              disabled={isLoading}
+              placeholder={isQuotaExhausted ? 'Monthly limit reached — quota resets soon' : 'Ask about your portfolio...'}
+              disabled={isLoading || isQuotaExhausted}
               className="flex-1 px-4 py-2.5 rounded-xl bg-[#F9FAFB] dark:bg-[#0F172A] text-sm text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] border border-[#E5E7EB] dark:border-[#334155] outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 dark:focus:border-emerald-600 disabled:opacity-50 transition-all"
             />
             <button
               type="submit"
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || isLoading || isQuotaExhausted}
               className="w-10 h-10 rounded-xl bg-emerald-600 dark:bg-emerald-600 flex items-center justify-center text-white hover:bg-emerald-700 dark:hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
             >
               <SendIcon className="w-4 h-4" />
@@ -777,15 +927,17 @@ export default function FloatingCopilot({
             <p className="text-xs text-[#9CA3AF] dark:text-[#64748B]">
               For educational purposes only · Not financial advice
             </p>
-            {typeof remainingQueries === 'number' && (
+            {typeof usedQueries === 'number' && typeof queryLimit === 'number' && (
               <p
-                className={`text-xs font-medium ${
-                  remainingQueries <= 2
-                    ? 'text-amber-600 dark:text-amber-400'
-                    : 'text-[#9CA3AF] dark:text-[#64748B]'
+                className={`text-xs font-semibold ${
+                  isQuotaExhausted
+                    ? 'text-red-500 dark:text-red-400'
+                    : isNearLimit
+                    ? 'text-amber-500 dark:text-amber-400'
+                    : 'text-[#6B7280] dark:text-[#94A3B8]'
                 }`}
               >
-                {remainingQueries} {remainingQueries === 1 ? 'query' : 'queries'} left
+                {usedQueries} of {queryLimit} used
               </p>
             )}
           </div>
@@ -797,7 +949,7 @@ export default function FloatingCopilot({
         <button
           onClick={() => setIsOpen(false)}
           className={`fixed ${position === 'top-right' ? 'top-20 right-6' : 'bottom-6 right-6'} z-40 flex items-center justify-center w-10 h-10 rounded-full bg-[#374151] dark:bg-[#334155] text-white shadow-lg hover:bg-[#1F2937] dark:hover:bg-[#475569] transition-all`}
-          aria-label="Close AI Analyst"
+          aria-label="Close Naira"
         >
           <XIcon className="w-5 h-5" />
         </button>

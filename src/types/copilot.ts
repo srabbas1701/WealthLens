@@ -66,10 +66,12 @@ export interface CopilotQueryResponse {
   explanation?: string;
   confidence_level: ConfidenceLevel;
   follow_up_suggestions?: string[];
-  /** Remaining AI queries this month (for Pro/Premium/Trial users with monthly caps) */
+  /** Remaining AI queries this month (for all users with monthly caps) */
   remaining_queries?: number;
-  /** Monthly query limit for this user's plan */
+  /** Monthly query limit for this user's plan (free=5, trial=15, pro=20, premium=50) */
   query_limit?: number;
+  /** Date when usage counter resets (billing cycle end or first of next month) */
+  reset_date?: string;
 }
 
 // =============================================================================

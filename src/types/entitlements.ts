@@ -17,10 +17,14 @@ export interface UserEntitlements {
   [capabilityKey: string]: boolean | number | string | EntitlementsTrial | undefined;
   /** Remaining AI (e.g. analyst) uses this period; set when trial or limited plan */
   ai_remaining?: number;
+  /** Monthly query limit for this user's plan (free=5, trial=15, pro=20, premium=50) */
+  ai_query_limit?: number;
+  /** Date when AI usage counter resets (billing cycle end for paid, first of next month for free/trial) */
+  ai_reset_date?: string;
   /** Remaining scenario views this period; set when trial or limited plan */
   scenario_remaining?: number;
   /** Set when user has an active trial */
   trial?: EntitlementsTrial;
-  /** Active paid plan tier, e.g. 'pro' | 'premium'. Undefined for free/trial-only users. */
+  /** Active paid plan tier: 'free' | 'pro' | 'premium'. 'free' for unauthenticated/no-plan users. */
   plan_tier?: string;
 }

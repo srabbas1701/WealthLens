@@ -831,7 +831,7 @@ export async function POST(request: NextRequest) {
     };
     const followUps = intentFollowUps[detectedIntent] ?? intentFollowUps['general_question'];
 
-    // Step 6: Build structured response (include remaining_queries if applicable)
+    // Step 6: Build structured response (include remaining_queries, query_limit, reset_date)
     const aiRemaining = guard.entitlements?.ai_remaining;
     // ai_remaining was read before this request; subtract 1 for the current query
     const remainingAfterThis = typeof aiRemaining === 'number' ? Math.max(0, aiRemaining - 1) : undefined;
@@ -844,6 +844,8 @@ export async function POST(request: NextRequest) {
       confidence_level: generatedResponse.confidence,
       follow_up_suggestions: followUps,
       remaining_queries: remainingAfterThis,
+      query_limit: guard.entitlements?.ai_query_limit ?? undefined,
+      reset_date: guard.entitlements?.ai_reset_date ?? undefined,
     };
     
     // Step 6: Log session to Supabase

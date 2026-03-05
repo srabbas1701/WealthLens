@@ -123,6 +123,7 @@ export async function requirePaidAction(
     // ai_remaining is set for trial users (limit 15) and paid plan users (Pro: 10, Premium: 25).
     if (typeof remaining === 'number' && remaining <= 0) {
       const isTrialUser = !!entitlements.trial;
+      const planTier = entitlements.plan_tier ?? (isTrialUser ? 'trial' : 'free');
       return {
         ok: false,
         response: NextResponse.json(
@@ -130,7 +131,9 @@ export async function requirePaidAction(
             error: isTrialUser ? 'Trial limit exceeded' : 'Monthly limit reached',
             details: `No ${remainingKey} remaining this period`,
             is_trial: isTrialUser,
-            plan_tier: entitlements.plan_tier ?? null,
+            plan_tier: planTier,
+            query_limit: entitlements.ai_query_limit ?? null,
+            reset_date: entitlements.ai_reset_date ?? null,
           },
           { status: 429 }
         ),

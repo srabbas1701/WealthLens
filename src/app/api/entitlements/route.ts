@@ -24,7 +24,10 @@ export async function GET(request: NextRequest) {
     const entitlements = await getUserEntitlements(user.id, supabase);
     return NextResponse.json(entitlements, {
       headers: {
-        'Cache-Control': 'private, max-age=300, stale-while-revalidate=60',
+        // No caching — always return live usage counts so the Naira counter
+        // reflects actual DB state immediately after a query or hard refresh.
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
       },
     });
   } catch (error) {

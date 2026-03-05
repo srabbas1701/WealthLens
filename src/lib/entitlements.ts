@@ -4,7 +4,8 @@
  * 1. Fetch active plan from user_subscriptions
  * 2. Fetch enabled capabilities from plan_capabilities
  * 3. If user_trials is active and not expired: temporarily enable all Premium capabilities, return usage counters (AI, scenarios)
- * 4. Return flat map: { view_holdings: true, use_ai_help: true, ai_remaining: 8, scenario_remaining: 2, trial?, ... }
+ * 4. Free users (no plan, no trial): granted use_ai_help with FREE_USER_AI_LIMIT queries/month
+ * 5. Return flat map: { view_holdings: true, use_ai_help: true, ai_remaining: 8, ai_query_limit: 20, ai_reset_date: '2026-04-15', scenario_remaining: 2, trial?, ... }
  *
  * Wrapped in React cache() so multiple callers in the same request share one result (no DB spam).
  */
@@ -16,17 +17,58 @@ import type { TrialLimits } from '@/types/capabilities';
 
 export type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
+/** Free user monthly AI limit */
+const FREE_USER_AI_LIMIT = 5;
+
 /** Trial limits: AI 15, scenarios 5. Block when used >= limit. */
 const DEFAULT_TRIAL_LIMITS: TrialLimits = {
   analyst_queries_per_month: 15,
   scenario_views_per_month: 5,
 };
 
-/** Paid plan AI query limits per month. Pro=15, Premium=50. */
+/** Paid plan AI query limits per month. Pro=20, Premium=50. */
 const PAID_PLAN_AI_LIMITS: Record<string, number> = {
-  pro: 15,
+  pro: 20,
   premium: 50,
 };
+
+/** All plan query limits – exported for API/UI use. */
+export const AI_PLAN_LIMITS: Record<string, number> = {
+  free: FREE_USER_AI_LIMIT,
+  trial: DEFAULT_TRIAL_LIMITS.analyst_queries_per_month ?? 15,
+  pro: PAID_PLAN_AI_LIMITS.pro,
+  premium: PAID_PLAN_AI_LIMITS.premium,
+};
+
+/**
+ * Get the period start date for usage tracking.
+ * For paid users: billing cycle start date (current_period_start).
+ * For free/trial users: first of the current calendar month.
+ */
+function getPeriodStart(billingPeriodStart?: string | null): string {
+  if (billingPeriodStart) {
+    return billingPeriodStart.slice(0, 10);
+  }
+  const start = new Date();
+  start.setUTCDate(1);
+  start.setUTCHours(0, 0, 0, 0);
+  return start.toISOString().slice(0, 10);
+}
+
+/**
+ * Get the date when the usage counter will reset.
+ * For paid users: current_period_end (billing renewal date).
+ * For free/trial users: first of next calendar month.
+ */
+function getResetDate(currentPeriodEnd?: string | null): string {
+  if (currentPeriodEnd) {
+    return currentPeriodEnd.slice(0, 10);
+  }
+  const next = new Date();
+  next.setUTCMonth(next.getUTCMonth() + 1, 1);
+  next.setUTCHours(0, 0, 0, 0);
+  return next.toISOString().slice(0, 10);
+}
 
 async function getUserEntitlementsUncached(
   userId: string,
@@ -41,10 +83,12 @@ async function getUserEntitlementsUncached(
   const allKeys = (allCaps ?? []).map((r: { key: string }) => r.key);
 
   // 2. User's active plan from user_subscriptions
+  // NOTE: current_period_end is confirmed to exist (used in WHERE); current_period_start
+  // is selected for reset date only — fetch safely after confirming tier.
   const now = new Date().toISOString();
   const { data: sub } = await db
     .from('user_subscriptions')
-    .select('tier')
+    .select('tier, current_period_end')
     .eq('user_id', userId)
     .eq('status', 'active')
     .gt('current_period_end', now)
@@ -84,6 +128,7 @@ async function getUserEntitlementsUncached(
     .maybeSingle();
 
   if (trial?.ends_at) {
+    // Trial user: grant all premium caps, calendar month period
     const premiumKeys = await getPremiumCapabilityKeys(db);
     for (const key of premiumKeys) {
       entitlements[key] = true;
@@ -91,20 +136,37 @@ async function getUserEntitlementsUncached(
     const limits = { ...DEFAULT_TRIAL_LIMITS };
     const aiLimit = limits.analyst_queries_per_month ?? 15;
     const scenarioLimit = limits.scenario_views_per_month ?? 5;
-    const usage = await getUsageCounters(db, userId, limits);
+    const periodStart = getPeriodStart(); // calendar month for trial
+    const usage = await getUsageCounters(db, userId, periodStart);
     entitlements.ai_remaining = Math.max(0, aiLimit - (usage.ai_used ?? 0));
+    entitlements.ai_query_limit = aiLimit;
+    entitlements.ai_reset_date = getResetDate(); // next calendar month
     entitlements.scenario_remaining = Math.max(0, scenarioLimit - (usage.scenario_used ?? 0));
     entitlements.trial = { active: true, ends_at: trial.ends_at, limits };
   } else if (planId && PAID_PLAN_AI_LIMITS[planId] !== undefined) {
-    // Paid plan (Pro/Premium): enforce monthly AI query limit.
-    // Also explicitly grant use_ai_help — paid plans may be missing this row in
-    // plan_capabilities (e.g. premium), but the PAID_PLAN_AI_LIMITS entry IS the
-    // source of truth that this plan has AI access.
+    // Paid plan (Pro/Premium): use billing cycle for period tracking.
+    // Explicitly grant use_ai_help — paid plans may be missing this row in
+    // plan_capabilities, but the PAID_PLAN_AI_LIMITS entry IS the source of truth.
     entitlements['use_ai_help'] = true;
     entitlements.plan_tier = planId;
     const paidAiLimit = PAID_PLAN_AI_LIMITS[planId];
-    const usage = await getUsageCounters(db, userId, DEFAULT_TRIAL_LIMITS);
+    // Use calendar month as the usage period key (safe — avoids dependency on
+    // current_period_start which may not exist in all DB environments).
+    // Reset date uses current_period_end from subscription for accurate display.
+    const periodStart = getPeriodStart(); // calendar month
+    const usage = await getUsageCounters(db, userId, periodStart);
     entitlements.ai_remaining = Math.max(0, paidAiLimit - (usage.ai_used ?? 0));
+    entitlements.ai_query_limit = paidAiLimit;
+    entitlements.ai_reset_date = getResetDate(sub?.current_period_end);
+  } else {
+    // Free user (no active trial, no paid plan): grant limited AI access.
+    entitlements['use_ai_help'] = true;
+    entitlements.plan_tier = 'free';
+    const periodStart = getPeriodStart(); // calendar month for free users
+    const usage = await getUsageCounters(db, userId, periodStart);
+    entitlements.ai_remaining = Math.max(0, FREE_USER_AI_LIMIT - (usage.ai_used ?? 0));
+    entitlements.ai_query_limit = FREE_USER_AI_LIMIT;
+    entitlements.ai_reset_date = getResetDate(); // next calendar month
   }
 
   return entitlements;
@@ -136,27 +198,18 @@ async function getPremiumCapabilityKeys(db: SupabaseClient): Promise<string[]> {
   return Array.from(keys);
 }
 
-function getMonthStart(): string {
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setUTCHours(0, 0, 0, 0);
-  return startOfMonth.toISOString().slice(0, 10);
-}
-
-/** Get current period usage for AI and scenarios (subscription_usage if present). */
+/** Get current period usage for AI and scenarios from subscription_usage. */
 async function getUsageCounters(
   db: SupabaseClient,
   userId: string,
-  _limits: TrialLimits
+  periodStart: string
 ): Promise<{ ai_used: number; scenario_used: number }> {
   try {
-    const monthStart = getMonthStart();
-
     const { data: usage, error } = await db
       .from('subscription_usage')
       .select('analyst_queries, analytics_views')
       .eq('user_id', userId)
-      .eq('month', monthStart)
+      .eq('month', periodStart)
       .maybeSingle();
 
     if (error || !usage) return { ai_used: 0, scenario_used: 0 };
@@ -194,14 +247,14 @@ export async function incrementTrialUsage(
     .maybeSingle();
   if (!trial?.ends_at) return;
 
-  const monthStart = getMonthStart();
+  const periodStart = getPeriodStart(); // trial uses calendar month
   const column = type === 'ai' ? 'analyst_queries' : 'analytics_views';
 
   const { data: row, error: fetchError } = await db
     .from('subscription_usage')
     .select(column)
     .eq('user_id', userId)
-    .eq('month', monthStart)
+    .eq('month', periodStart)
     .maybeSingle();
 
   if (fetchError) {
@@ -217,12 +270,12 @@ export async function incrementTrialUsage(
       .from('subscription_usage')
       .update({ [column]: next })
       .eq('user_id', userId)
-      .eq('month', monthStart);
+      .eq('month', periodStart);
     if (updateError) console.error('[incrementTrialUsage] update error:', updateError);
   } else {
     const { error: insertError } = await db.from('subscription_usage').insert({
       user_id: userId,
-      month: monthStart,
+      month: periodStart,
       analyst_queries: type === 'ai' ? 1 : 0,
       analytics_views: type === 'scenario' ? 1 : 0,
     });
@@ -231,47 +284,28 @@ export async function incrementTrialUsage(
 }
 
 /**
- * Increment AI usage for any user type (trial OR paid plan).
+ * Increment AI usage for any user type (trial, paid plan, or free).
  * Replaces incrementTrialUsage for the AI analyst endpoint.
- * - Trial users: increments if trial is active
- * - Pro/Premium users: always increments (limit was pre-checked by requirePaidAction)
+ * - Trial users: increments if trial is active (calendar month period)
+ * - Pro/Premium users: always increments (billing cycle period)
+ * - Free users: always increments (calendar month period)
  */
 export async function incrementAIUsage(
   db: SupabaseClient,
   userId: string
 ): Promise<void> {
-  const now = new Date().toISOString();
-  const monthStart = getMonthStart();
   const column = 'analyst_queries';
 
-  // Check if user is on an active trial
-  const { data: trial } = await db
-    .from('user_trials')
-    .select('ends_at')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .gt('ends_at', now)
-    .limit(1)
-    .maybeSingle();
-
-  // Check if user is on an active paid plan
-  const { data: sub } = await db
-    .from('user_subscriptions')
-    .select('tier')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .gt('current_period_end', now)
-    .limit(1)
-    .maybeSingle();
-
-  const shouldIncrement = !!trial?.ends_at || !!(sub?.tier && PAID_PLAN_AI_LIMITS[sub.tier] !== undefined);
-  if (!shouldIncrement) return;
+  // All user types (free, trial, paid) use calendar month as the period key,
+  // consistent with getUsageCounters. This avoids dependency on columns
+  // (current_period_start) that may not exist in all DB environments.
+  const periodStart = getPeriodStart();
 
   const { data: row, error: fetchError } = await db
     .from('subscription_usage')
     .select(column)
     .eq('user_id', userId)
-    .eq('month', monthStart)
+    .eq('month', periodStart)
     .maybeSingle();
 
   if (fetchError) {
@@ -287,12 +321,12 @@ export async function incrementAIUsage(
       .from('subscription_usage')
       .update({ [column]: next })
       .eq('user_id', userId)
-      .eq('month', monthStart);
+      .eq('month', periodStart);
     if (updateError) console.error('[incrementAIUsage] update error:', updateError);
   } else {
     const { error: insertError } = await db.from('subscription_usage').insert({
       user_id: userId,
-      month: monthStart,
+      month: periodStart,
       analyst_queries: 1,
       analytics_views: 0,
     });

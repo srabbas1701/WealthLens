@@ -155,35 +155,27 @@ export default function HomePage() {
       )}
 
       {/* Hero Section */}
-      <section className="relative h-screen flex items-center justify-center overflow-hidden bg-[#F6F8FB] dark:bg-[#0F172A]">
-        
-        <div className="container mx-auto px-4 sm:px-6 pt-32 sm:pt-40 md:pt-44 lg:pt-52 pb-8 sm:pb-12 md:pb-16 lg:pb-20 relative z-10 h-full flex items-center">
-          <div className="grid lg:grid-cols-2 gap-6 md:gap-8 lg:gap-12 items-center w-full">
-            {/* Left - Value Proposition (z-10 ensures heading stays visible above card) */}
-            <div className="relative z-10 space-y-4 sm:space-y-5 md:space-y-6 text-center lg:text-left">
-              <div className="space-y-3 sm:space-y-4">
-                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-bold text-[#0F172A] dark:text-[#F8FAFC] leading-[1.15] tracking-tight">
-                  Stop Juggling
-                  <br />
-                  Investment Accounts.
-                  <br />
-                  See Your Complete
-                  <br />
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E]">Financial Picture</span>
-                  <br />
-                  in One Dashboard.
-                </h1>
-                
-                <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[#6B7280] dark:text-[#94A3B8] leading-relaxed max-w-2xl mx-auto lg:mx-0 px-2 sm:px-0">
-                  Upload your statements. Organize every asset. View consolidated summaries across stocks, mutual funds, EPF, NPS, PPF, fixed deposits, real estate, gold, and more — all in one secure place.
-                </p>
-                <p className="text-base sm:text-lg text-[#6B7280] dark:text-[#94A3B8] leading-relaxed max-w-2xl mx-auto lg:mx-0 px-2 sm:px-0">
-                  Automated price updates after market hours. Simple. Clear. Organized.
-                </p>
-              </div>
+      <section className="relative min-h-[90vh] flex items-center pt-24 pb-20 overflow-hidden bg-[#F6F8FB] dark:bg-[#0F172A]">
+
+        <div className="max-w-7xl mx-auto px-6 w-full relative z-10">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            {/* Left - Value Proposition */}
+            <div className="max-w-xl">
+              <h1 className="text-5xl lg:text-6xl font-bold text-[#0F172A] dark:text-[#F8FAFC] leading-tight mb-6">
+                Stop Juggling Investment Accounts.
+                <br />
+                See Your Complete{" "}
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E]">Financial Picture</span>
+                <br />
+                in One Dashboard.
+              </h1>
+
+              <p className="text-lg text-[#6B7280] dark:text-[#94A3B8] leading-relaxed mb-8">
+                Upload statements or enter manually. We organize everything — giving you one consolidated, real-time view of your complete financial picture, securely hosted in India.
+              </p>
 
               {/* CTA */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 justify-center lg:justify-start">
+              <div className="flex flex-wrap gap-4 mb-8">
                 {user ? (
                   <Link
                     href="/dashboard"
@@ -217,59 +209,94 @@ export default function HomePage() {
               </div>
 
               {/* Trust Badges */}
-              <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3 md:gap-4 justify-center lg:justify-start text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] mt-4 sm:mt-5 pt-4 sm:pt-5 border-t border-[#E5E7EB] dark:border-[#334155]">
-                <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2">
-                  <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0" />
-                  <span>India-hosted data</span>
+              <div className="flex flex-wrap gap-6 text-sm text-[#6B7280] dark:text-[#94A3B8]">
+                <div className="flex items-center gap-2">
+                  <CheckCircleIcon className="w-4 h-4 text-[#16A34A] dark:text-[#22C55E]" />
+                  India-hosted data
                 </div>
-                <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2">
-                  <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0" />
-                  <span>Automated price updates</span>
+                <div className="flex items-center gap-2">
+                  <CheckCircleIcon className="w-4 h-4 text-[#16A34A] dark:text-[#22C55E]" />
+                  Automated price updates
                 </div>
-                <div className="flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2">
-                  <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0" />
-                  <span>Built for Indian investors</span>
+                <div className="flex items-center gap-2">
+                  <CheckCircleIcon className="w-4 h-4 text-[#16A34A] dark:text-[#22C55E]" />
+                  Built for Indian investors
                 </div>
               </div>
             </div>
 
-            {/* Right - Dashboard Preview */}
-            <div className="hidden lg:block relative">
-              <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-[#E5E7EB] dark:border-[#334155] shadow-2xl p-6 animate-float">
-                <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg overflow-hidden">
-                  <div className="px-6 py-4 bg-[#EFF6FF] dark:bg-[#1E3A8A] border-b border-[#E5E7EB] dark:border-[#334155]">
-                    <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Complete Wealth Overview</h2>
-                  </div>
-                  
-                  <div className="p-6 space-y-6">
-                    <div className="bg-[#F6F8FB] dark:bg-[#334155] rounded-xl border border-[#E5E7EB] dark:border-[#334155] p-6">
-                      <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] font-medium mb-4 text-center">Total Net Worth</p>
-                      <div className="text-center">
-                        <span className="text-4xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">₹24,50,000</span>
-                        <p className="text-sm text-[#16A34A] dark:text-[#22C55E] mt-2">+12.5% overall</p>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155] p-4">
-                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Equity</p>
-                        <p className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">₹12,45,000</p>
-                      </div>
-                      <div className="bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155] p-4">
-                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Retirement</p>
-                        <p className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">₹8,20,000</p>
-                      </div>
-                      <div className="bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155] p-4">
-                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Fixed Income</p>
-                        <p className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">₹3,85,000</p>
-                      </div>
-                      <div className="bg-white dark:bg-[#1E293B] rounded-lg border border-[#E5E7EB] dark:border-[#334155] p-4">
-                        <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mb-1">Real Assets</p>
-                        <p className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">₹0</p>
-                      </div>
-                    </div>
-                  </div>
+            {/* Right - Asset Cloud */}
+            <div className="hidden lg:flex flex-col items-center justify-center">
+              <div className="relative w-[520px] h-[520px] mx-auto flex items-center justify-center">
+
+                {/* Ambient glow */}
+                <div className="absolute w-80 h-80 bg-violet-400/10 dark:bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute w-52 h-52 bg-blue-400/8 dark:bg-blue-500/8 rounded-full blur-2xl pointer-events-none" />
+
+                {/* CENTER: LensOnWealth brand */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center gap-3">
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[260px] h-[260px] rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
+                  <Logo size="w-12 h-12 relative z-10 flex-shrink-0" showText={false} />
+                  <span className="text-4xl font-semibold tracking-wide text-[#0F172A] dark:text-[#F8FAFC] relative z-10 select-none whitespace-nowrap">LensOnWealth</span>
                 </div>
+
+                {/* Inner ring r=90px — AI Naira at top, Insurance & Reports flanking */}
+                {([
+                  { label: "✦ AI Naira", cls: "text-3xl font-semibold bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] bg-clip-text text-transparent", angle: -90 },
+                  { label: "Reports",    cls: "text-base font-semibold text-[#16A34A] dark:text-[#86EFAC]",                                                                               angle:  28 },
+                ] as { label: string; cls: string; angle: number }[]).map(({ label, cls, angle }) => (
+                  <div key={label} className="absolute opacity-100" style={{ transform: `rotate(${angle}deg) translate(90px) rotate(${-angle}deg)` }}>
+                    <span className={`whitespace-nowrap ${cls} hover:scale-105 transition-transform duration-200 cursor-default select-none block`}>{label}</span>
+                  </div>
+                ))}
+
+                {/* Middle ring r=160px — explicit angles, opacity-90 */}
+                {([
+                  { label: "Stocks", cls: "text-3xl font-black text-[#2563EB] dark:text-[#3B82F6]", angle: -90 },
+                  { label: "ETF",    cls: "text-3xl font-black text-[#2563EB] dark:text-[#3B82F6]", angle: -33 },
+                  { label: "NPS",    cls: "text-2xl font-bold text-[#16A34A] dark:text-[#22C55E]",  angle: 148 },
+                  { label: "PPF",    cls: "text-2xl font-bold text-[#16A34A] dark:text-[#22C55E]",  angle: 225 },
+                ] as { label: string; cls: string; angle: number }[]).map(({ label, cls, angle }) => (
+                  <div key={label} className="absolute opacity-90" style={{ transform: `rotate(${angle}deg) translate(160px) rotate(${-angle}deg)` }}>
+                    <span className={`whitespace-nowrap ${cls} hover:scale-105 transition-transform duration-200 cursor-default select-none block`}>{label}</span>
+                  </div>
+                ))}
+
+                {/* Outer ring — explicit angles + radius, opacity-75 */}
+                {([
+                  { label: "Insurance",          cls: "text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]",    r:  48, a: -130 },
+                  { label: "EPF",                cls: "text-2xl font-bold text-[#16A34A] dark:text-[#22C55E]",    r:  95, a:  153 },
+                  { label: "Mutual Funds",       cls: "text-3xl font-black text-[#2563EB] dark:text-[#3B82F6]",   r: 178, a:   63 },
+                  { label: "Advanced Analytics", cls: "text-base font-medium text-[#0F172A] dark:text-[#F8FAFC]", r: 121, a:   49 },
+                  { label: "Analytics",          cls: "text-xs font-medium text-[#0F172A] dark:text-[#F8FAFC]",   r: 230, a:  -90 },
+                  { label: "Health Score",       cls: "text-xs font-medium text-[#0F172A] dark:text-[#F8FAFC]",   r: 230, a:  -66 },
+                  { label: "Tax Cal",            cls: "text-base font-semibold text-[#16A34A] dark:text-[#86EFAC]", r: 230, a: -42 },
+                  { label: "Real Estate",        cls: "text-xl font-bold text-[#1E40AF] dark:text-[#60A5FA]",     r: 230, a:  -10 },
+                  { label: "Automated Updates",  cls: "text-xs font-medium text-[#0F172A] dark:text-[#F8FAFC]",   r: 230, a:    6 },
+                  { label: "Gold",               cls: "text-lg font-semibold text-[#166534] dark:text-[#86EFAC]", r: 230, a:   15 },
+                  { label: "Fixed Deposits",     cls: "text-xl font-bold text-[#1E40AF] dark:text-[#60A5FA]",     r: 223, a:   69 },
+                  { label: "Manual Entry",       cls: "text-base font-semibold text-[#16A34A] dark:text-[#86EFAC]", r: 230, a: 135 },
+                  { label: "Liabilities",        cls: "text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]",   r: 230, a:  102 },
+                  { label: "Silver",             cls: "text-lg font-semibold text-[#166534] dark:text-[#86EFAC]", r: 280, a:   45 },
+                  { label: "India Hosted Data",  cls: "text-xs font-medium text-[#0F172A] dark:text-[#F8FAFC]",   r: 230, a:  150 },
+                  { label: "Bonds",              cls: "text-lg font-semibold text-[#166534] dark:text-[#86EFAC]", r: 230, a:  174 },
+                  { label: "Direct Uploads",     cls: "text-base font-semibold text-[#16A34A] dark:text-[#86EFAC]", r: 230, a: 198 },
+                  { label: "AES-256 Encryption", cls: "text-xs font-medium text-[#0F172A] dark:text-[#F8FAFC]",   r: 230, a:  222 },
+                  { label: "Cash",               cls: "text-base font-semibold text-[#6B7280] dark:text-[#94A3B8]", r: 230, a: 246 },
+                ] as { label: string; cls: string; r: number; a: number }[]).map(({ label, cls, r, a }) => (
+                  <div key={label} className="absolute opacity-75" style={{ transform: `rotate(${a}deg) translate(${r}px) rotate(${-a}deg)` }}>
+                    <span className={`whitespace-nowrap ${cls} hover:scale-105 transition-transform duration-200 cursor-default select-none block`}>{label}</span>
+                  </div>
+                ))}
+
+              </div>
+              {/* Tagline + AI Naira badge */}
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] text-center mt-2 tracking-wide">
+                Your complete financial universe — tracked, organized, clear.
+              </p>
+              <div className="flex items-center justify-center gap-1.5 mt-1.5 text-xs sm:text-sm">
+                <span className="text-[#2563EB] dark:text-[#3B82F6]">✦</span>
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] font-semibold">AI Naira — Portfolio Analyst</span>
               </div>
             </div>
           </div>

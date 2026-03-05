@@ -541,7 +541,7 @@ export function AppHeader({
                 Dashboard
               </Link>
               
-              {/* AI Analyst Button — AI-powered portfolio intelligence */}
+              {/* Ask Naira Button — AI-powered portfolio intelligence */}
               <button
                 onClick={() => {
                   if (!showPlanBadge) {
@@ -556,12 +556,12 @@ export function AppHeader({
                     router.push('/dashboard?openHelp=true');
                   }
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 dark:bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 dark:hover:bg-emerald-700 transition-colors shadow-sm hover:shadow-md"
-                aria-label="Open AI Portfolio Analyst"
-                title="AI-powered portfolio intelligence"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 dark:bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 dark:hover:bg-emerald-700 transition-colors shadow-sm hover:shadow-md tracking-wide"
+                aria-label="Ask Naira — AI Portfolio Analyst"
+                title="Ask Naira — AI-powered portfolio intelligence"
               >
                 <NeuralIcon className="w-4 h-4 text-[#FCD34D]" />
-                <span className="hidden sm:inline">AI Analyst</span>
+                <span className="hidden sm:inline">Ask N<span className="text-[#FCD34D] font-bold">ai</span>ra</span>
               </button>
               
               {/* User Menu */}
@@ -680,9 +680,9 @@ export function AppHeader({
                         router.push('/dashboard?openHelp=true');
                       }
                     }}
-                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-[#ECFDF5] dark:bg-[#022C22] hover:bg-[#DCFCE7] dark:hover:bg-[#064E3B] transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] bg-[#ECFDF5] dark:bg-[#022C22] hover:bg-[#DCFCE7] dark:hover:bg-[#064E3B] transition-colors tracking-wide"
                   >
-                    <span>AI Analyst</span>
+                    <span>Ask N<span className="text-emerald-600 dark:text-[#FCD34D] font-bold">ai</span>ra</span>
                     <NeuralIcon className="w-4 h-4 text-[#FCD34D]" />
                   </button>
                   <Link
