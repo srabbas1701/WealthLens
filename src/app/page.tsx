@@ -3,20 +3,24 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
-import { 
-  ShieldCheckIcon, 
-  CheckCircleIcon, 
-  LockIcon, 
-  TargetIcon, 
-  ChartIcon, 
-  InfoIcon,
+import {
+  ShieldCheckIcon,
+  CheckCircleIcon,
   ArrowRightIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  UploadIcon,
   SparklesIcon,
+  TrendingDownIcon,
+  FoldersIcon,
+  TableIcon,
+  LineChartIcon,
+  UploadCloudIcon,
+  LayersIcon,
+  BarChart3Icon,
+  PieChartIcon,
+  SearchIcon,
   TrendingUpIcon,
-  EyeIcon,
+  HomeIcon,
 } from '@/components/icons';
 import { useAuthSession } from '@/lib/auth';
 import { AppHeader } from '@/components/AppHeader';
@@ -45,10 +49,9 @@ export default function HomePage() {
   const [showSessionExpiredMessage, setShowSessionExpiredMessage] = useState(false);
   const { 
     plans, 
-    loading: plansLoading, 
+    loading: plansLoading,
     error: plansError,
     currentSubscription,
-    subLoading,
   } = usePlans(!!user);  // Only fetch sub if user is logged in
   
   // Check for timeout message from auto-logout
@@ -94,31 +97,31 @@ export default function HomePage() {
 
   const faqs = [
     {
+      question: "Do you connect directly to broker accounts?",
+      answer: "No. LensOnWealth works through statements and manual inputs to keep your financial data secure."
+    },
+    {
+      question: "Can I track all my investments here?",
+      answer: "Yes. Track stocks, mutual funds, retirement accounts, property, gold, fixed deposits, and more."
+    },
+    {
       question: "Do you provide investment advice?",
-      answer: "No. LensOnWealth is a personal finance tracking software. We do not provide investment advice, portfolio management, or trade execution services."
+      answer: "No. LensOnWealth provides portfolio analysis and insights only."
     },
     {
-      question: "Do you connect to my broker account?",
-      answer: "No. You upload CSV statements or manually enter data. We do not access broker logins."
-    },
-    {
-      question: "Do you execute trades?",
-      answer: "No. LensOnWealth is strictly a record-keeping and visualization platform."
-    },
-    {
-      question: "How accurate are valuations?",
-      answer: "Asset prices are updated using publicly available data sources after market hours. Valuations are informational estimates and should be verified with official statements."
+      question: "Is my financial data secure?",
+      answer: "Yes. All data is encrypted and securely hosted in India."
     },
   ];
 
   const platforms = [
-    { name: 'Zerodha', icon: '📊' },
-    { name: 'Groww', icon: '📈' },
-    { name: 'Kuvera', icon: '💰' },
-    { name: 'ICICI Direct', icon: '🏦' },
-    { name: 'Paytm Money', icon: '💳' },
-    { name: 'ET Money', icon: '📱' },
-    { name: 'Any CSV', icon: '📄' },
+    { name: 'Zerodha', logo: '/logos/zerodha.png' },
+    { name: 'Groww', logo: '/logos/groww.png' },
+    { name: 'Upstox', logo: '/logos/upstox.png' },
+    { name: 'ICICI Direct', logo: '/logos/icici-direct.png' },
+    { name: 'HDFC Securities', logo: '/logos/hdfc-securities.png' },
+    { name: 'CAMS', logo: '/logos/cams.png' },
+    { name: 'KFintech', logo: '/logos/kfintech.png' },
   ];
   
   return (
@@ -171,7 +174,7 @@ export default function HomePage() {
               </h1>
 
               <p className="text-lg text-[#6B7280] dark:text-[#94A3B8] leading-relaxed mb-8">
-                Upload statements or enter manually. We organize everything — giving you one consolidated, real-time view of your complete financial picture, securely hosted in India.
+                Upload statements or enter manually. We organize everything, giving you one consolidated, real-time view of your complete financial picture, securely hosted in India.
               </p>
 
               {/* CTA */}
@@ -240,11 +243,15 @@ export default function HomePage() {
                   <span className="text-4xl font-semibold tracking-wide text-[#0F172A] dark:text-[#F8FAFC] relative z-10 select-none whitespace-nowrap">LensOnWealth</span>
                 </div>
 
+                {/* ⚠️ LOCKED: DO NOT MODIFY constellation positioning below.
+                     Positioning uses: className="absolute" + style transform="rotate(Adeg) translate(Rpx) rotate(-Adeg)"
+                     No top/left/wrapper changes. Ask user before ANY change to this block. */}
+
                 {/* Inner ring r=90px — AI Naira at top, Insurance & Reports flanking */}
                 {([
-                  { label: "✦ AI Naira", cls: "text-3xl font-semibold bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] bg-clip-text text-transparent", angle: -90 },
+                  { label: <>✦ AI N<span className="text-[#B45309] dark:text-[#D97706]">ai</span>ra</>, cls: "text-3xl font-semibold bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] bg-clip-text text-transparent", angle: -90 },
                   { label: "Reports",    cls: "text-base font-semibold text-[#16A34A] dark:text-[#86EFAC]",                                                                               angle:  28 },
-                ] as { label: string; cls: string; angle: number }[]).map(({ label, cls, angle }) => (
+                ] as { label: React.ReactNode; cls: string; angle: number }[]).map(({ label, cls, angle }) => (
                   <div key={label} className="absolute opacity-100" style={{ transform: `rotate(${angle}deg) translate(90px) rotate(${-angle}deg)` }}>
                     <span className={`whitespace-nowrap ${cls} hover:scale-105 transition-transform duration-200 cursor-default select-none block`}>{label}</span>
                   </div>
@@ -254,7 +261,7 @@ export default function HomePage() {
                 {([
                   { label: "Stocks", cls: "text-3xl font-black text-[#2563EB] dark:text-[#3B82F6]", angle: -90 },
                   { label: "ETF",    cls: "text-3xl font-black text-[#2563EB] dark:text-[#3B82F6]", angle: -33 },
-                  { label: "NPS",    cls: "text-2xl font-bold text-[#16A34A] dark:text-[#22C55E]",  angle: 148 },
+                  { label: "NPS",    cls: "text-2xl font-bold text-[#16A34A] dark:text-[#22C55E]",  angle: 154 },
                   { label: "PPF",    cls: "text-2xl font-bold text-[#16A34A] dark:text-[#22C55E]",  angle: 225 },
                 ] as { label: string; cls: string; angle: number }[]).map(({ label, cls, angle }) => (
                   <div key={label} className="absolute opacity-90" style={{ transform: `rotate(${angle}deg) translate(160px) rotate(${-angle}deg)` }}>
@@ -283,6 +290,12 @@ export default function HomePage() {
                   { label: "Direct Uploads",     cls: "text-base font-semibold text-[#16A34A] dark:text-[#86EFAC]", r: 230, a: 198 },
                   { label: "AES-256 Encryption", cls: "text-xs font-medium text-[#0F172A] dark:text-[#F8FAFC]",   r: 230, a:  222 },
                   { label: "Cash",               cls: "text-base font-semibold text-[#6B7280] dark:text-[#94A3B8]", r: 230, a: 246 },
+                  /* New labels – text-xs, Liabilities color, placed in gaps */
+                  { label: "Home Loan",      cls: "text-xs font-medium text-[#6B7280] dark:text-[#94A3B8]", r: 214, a: -122 },
+                  { label: "Vehicle Loan",  cls: "text-xs font-medium text-[#6B7280] dark:text-[#94A3B8]", r: 125, a:  -16 },
+                  { label: "Education Loan", cls: "text-xs font-medium text-[#6B7280] dark:text-[#94A3B8]", r: 206, a:   35 },
+                  { label: "Health Insurance", cls: "text-xs font-medium text-[#6B7280] dark:text-[#94A3B8]", r: 223, a:  120 },
+                  { label: "Life Insurance", cls: "text-xs font-medium text-[#6B7280] dark:text-[#94A3B8]", r: 152, a:  118 },
                 ] as { label: string; cls: string; r: number; a: number }[]).map(({ label, cls, r, a }) => (
                   <div key={label} className="absolute opacity-75" style={{ transform: `rotate(${a}deg) translate(${r}px) rotate(${-a}deg)` }}>
                     <span className={`whitespace-nowrap ${cls} hover:scale-105 transition-transform duration-200 cursor-default select-none block`}>{label}</span>
@@ -292,11 +305,11 @@ export default function HomePage() {
               </div>
               {/* Tagline + AI Naira badge */}
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] text-center mt-2 tracking-wide">
-                Your complete financial universe — tracked, organized, clear.
+                Your complete financial universe, tracked, organized, clear.
               </p>
               <div className="flex items-center justify-center gap-1.5 mt-1.5 text-xs sm:text-sm">
                 <span className="text-[#2563EB] dark:text-[#3B82F6]">✦</span>
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] font-semibold">AI Naira — Portfolio Analyst</span>
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] font-semibold">AI N</span><span className="text-[#B45309] dark:text-[#D97706] font-semibold">ai</span><span className="bg-clip-text text-transparent bg-gradient-to-r from-[#16A34A] to-[#16A34A] dark:from-[#22C55E] dark:to-[#22C55E] font-semibold">ra - Portfolio Analyst</span>
               </div>
             </div>
           </div>
@@ -310,40 +323,40 @@ export default function HomePage() {
       </section>
 
       {/* Problem Section */}
-      <section className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]">
+      <section className="py-16 sm:py-20 md:py-24 lg:py-28 bg-white dark:bg-[#1E293B]">
         <div className="container mx-auto px-4 sm:px-6">
-          <div className="text-center mb-10 sm:mb-12 md:mb-16">
+          <div className="text-center mb-8 sm:mb-10 md:mb-12">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3 sm:mb-4">
-              The Problem Every Indian Investor Faces
+              The Problem Every Investor Eventually Faces
             </h2>
             <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8] max-w-3xl mx-auto px-4 sm:px-0">
-              Your investments are scattered. Your insights are incomplete. Your time is wasted.
+              Your investments may be growing, but your overall financial picture is often fragmented.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto">
             {[
               {
-                icon: '📱',
-                title: 'Scattered Everywhere',
-                description: 'Your stocks are in Zerodha. Mutual funds in Groww and Kuvera. EPF with your employer. NPS with pension fund. PPF at the post office. Fixed deposits across 3 banks. Where\'s the complete picture of your wealth?'
+                icon: <FoldersIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />,
+                title: 'Investments Scattered Everywhere',
+                description: 'Mutual funds, stocks, EPF, property, fixed deposits, your wealth lives across multiple platforms and statements. Seeing the full picture is difficult.'
               },
               {
-                icon: '📊',
-                title: 'Manual Tracking Mayhem',
-                description: 'Excel sheets with outdated values. Forgetting about that old FD. No idea what your EPF balance is today. Manually calculating PPF interest. Hours wasted every month just to know "What am I worth?"'
+                icon: <TableIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />,
+                title: 'Manual Tracking Doesn\'t Scale',
+                description: 'Many investors rely on spreadsheets or memory. As investments grow, tracking becomes time-consuming and error-prone.'
               },
               {
-                icon: '🔍',
-                title: 'No True Insights',
-                description: 'What\'s your actual net worth? Real asset allocation across all investments? Are you too heavy in equity or fixed income? How much are you really saving for retirement? You\'re managing wealth blindfolded.'
+                icon: <LineChartIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />,
+                title: 'No Clear Portfolio Insight',
+                description: 'Without consolidation, it\'s difficult to understand allocation, diversification, and portfolio risk.'
               },
             ].map((problem, i) => (
               <div
                 key={i}
-                className="group p-6 sm:p-8 bg-white dark:bg-[#1E293B] rounded-2xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                className="group p-5 sm:p-6 bg-white dark:bg-[#1E293B] rounded-2xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
               >
-                <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 mb-4 sm:mb-6 rounded-2xl bg-[#2563EB] dark:bg-[#3B82F6] flex items-center justify-center text-white text-2xl sm:text-3xl shadow-lg">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
                   {problem.icon}
                 </div>
                 <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2 sm:mb-3">
@@ -359,50 +372,53 @@ export default function HomePage() {
       </section>
 
       {/* Solution Section - How It Works */}
-      <section className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A]">
+      <section className="py-16 sm:py-20 md:py-24 lg:py-28 bg-[#F6F8FB] dark:bg-[#0F172A]">
         <div className="container mx-auto px-4 sm:px-6">
-          <div className="text-center mb-10 sm:mb-12 md:mb-16">
+          <div className="text-center mb-8 sm:mb-10 md:mb-12">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3 sm:mb-4">
               How LensOnWealth Works
             </h2>
+            <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8] max-w-3xl mx-auto px-4 sm:px-0">
+              Bring your entire financial life into one organized system.
+            </p>
           </div>
 
           <div className="relative max-w-5xl mx-auto">
             {/* Timeline connector */}
             <div className="hidden md:block absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-[#2563EB] via-[#16A34A] to-[#2563EB] dark:from-[#3B82F6] dark:via-[#22C55E] dark:to-[#3B82F6] opacity-20" />
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 relative z-10">
               {[
                 {
                   step: 1,
-                  title: 'Upload Your Records',
-                  description: 'Upload CSV statements from your broker or manually enter assets. Add EPF, NPS, PPF, fixed deposits, bonds, real estate, gold, and cash.',
+                  title: 'Upload Your Investment Records',
+                  description: 'Import CAS statements, broker exports, or manually add assets like property, gold, or fixed deposits.',
                   subtitle: 'No broker login required.',
-                  icon: <UploadIcon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8" />
+                  icon: <UploadCloudIcon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8" />
                 },
                 {
                   step: 2,
-                  title: 'We Standardize & Organize',
-                  description: 'Our system matches ISINs, updates publicly available price references after market hours, and structures everything into a clean format.',
-                  subtitle: 'All your financial records — organized in one place.',
-                  icon: <SparklesIcon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8" />
+                  title: 'Everything Gets Organized',
+                  description: 'LensOnWealth automatically structures your investments across asset classes and accounts.',
+                  subtitle: 'All your financial records, organized in one place.',
+                  icon: <LayersIcon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8" />
                 },
                 {
                   step: 3,
-                  title: 'View Clear Summaries',
-                  description: 'See total net worth, asset breakdowns, allocation distribution, and historical performance summaries — all from one dashboard.',
+                  title: <>AI N<span className="text-[#B45309] dark:text-[#D97706]">ai</span>ra Analyzes Your Portfolio</>,
+                  description: <>AI N<span className="text-[#B45309] dark:text-[#D97706]">ai</span>ra evaluates your portfolio to highlight allocation insights, diversification gaps, and potential risks.</>,
                   subtitle: 'No spreadsheets. No manual consolidation.',
-                  icon: <EyeIcon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8" />
+                  icon: <SparklesIcon className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8" />
                 },
               ].map((step, i) => (
                 <div
                   key={i}
-                  className="relative z-10 bg-white dark:bg-[#1E293B] p-6 sm:p-8 rounded-2xl border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-xl transition-all duration-300"
+                  className="relative z-10 bg-white dark:bg-[#1E293B] p-5 sm:p-6 rounded-2xl border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-xl transition-all duration-300"
                 >
-                  <div className="absolute -top-4 sm:-top-6 -left-4 sm:-left-6 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#16A34A] dark:bg-[#22C55E] flex items-center justify-center text-[#0F172A] dark:text-[#F8FAFC] font-bold text-lg sm:text-xl shadow-lg">
+                  <div className="absolute -top-4 sm:-top-5 -left-4 sm:-left-5 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#16A34A] dark:bg-[#22C55E] flex items-center justify-center text-[#0F172A] dark:text-[#F8FAFC] font-bold text-base sm:text-lg shadow-lg">
                     {step.step}
                   </div>
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 mb-4 sm:mb-6 rounded-xl bg-[#EFF6FF] dark:bg-[#1E3A8A] flex items-center justify-center text-[#2563EB] dark:text-[#3B82F6]">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center text-[#2563EB] dark:text-[#3B82F6]">
                     {step.icon}
                   </div>
                   <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2 sm:mb-3">
@@ -423,53 +439,46 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]">
+      {/* Portfolio Intelligence Section */}
+      <section id="features" className="py-16 sm:py-20 md:py-24 lg:py-28 bg-white dark:bg-[#1E293B]">
         <div className="container mx-auto px-4 sm:px-6">
-          <div className="text-center mb-10 sm:mb-12 md:mb-16">
+          <div className="text-center mb-8 sm:mb-10 md:mb-12">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3 sm:mb-4">
-              Complete Clarity Across All Assets
+              Understand What Your Portfolio Is Really Doing
             </h2>
+            <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8] max-w-3xl mx-auto px-4 sm:px-0">
+              LensOnWealth analyzes your entire portfolio to reveal allocation, diversification, risk exposure, and hidden concentration.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 max-w-7xl mx-auto">
             {[
               {
-                icon: '💼',
-                title: 'Complete Wealth Tracking',
-                description: 'Track equity, mutual funds, retirement accounts, fixed income, real assets, and cash in one unified dashboard.'
+                icon: <BarChart3Icon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />,
+                title: 'Portfolio Overview',
+                description: 'See your total portfolio value, holdings, asset classes, and risk profile in one place.'
               },
               {
-                icon: '🔗',
-                title: 'Multi-Platform Support',
-                description: 'Upload from Zerodha, Groww, Kuvera, ICICI Direct, banks, or any platform that supports CSV export. Manual entry is supported for all asset types.'
+                icon: <PieChartIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />,
+                title: 'Allocation & Diversification',
+                description: 'Understand how your wealth is distributed across growth, income, real assets, and liquidity.'
               },
               {
-                icon: '💹',
-                title: 'Automated Price Updates',
-                description: 'Stock prices and mutual fund NAV references are updated after market hours using publicly available data sources. Valuations are informational estimates for tracking purposes.'
+                icon: <SearchIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />,
+                title: 'Investment X-Ray',
+                description: 'Look inside mutual funds and ETFs to see your true exposure across sectors and asset classes.'
               },
               {
-                icon: '📊',
-                title: 'Allocation Visualization',
-                description: 'Understand how your assets are distributed across equity, debt, retirement, real assets, and cash. Clear charts. Simple breakdowns.'
-              },
-              {
-                icon: '🎯',
-                title: 'Advanced Reporting',
-                description: 'View performance summaries, capital gains reports (informational), maturity tracking, and downloadable reports. Export anytime.'
-              },
-              {
-                icon: '📈',
-                title: 'AI-Powered Data Assistant (Premium)',
-                description: 'Ask questions about your uploaded data and receive structured explanations and summaries. For informational use only.'
+                icon: <TrendingDownIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />,
+                title: 'Scenario & Risk Insights',
+                description: 'Understand how your portfolio might behave during market corrections or sector shocks.'
               },
             ].map((feature, i) => (
               <div
                 key={i}
-                className="group p-6 sm:p-8 bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300"
+                className="group p-5 sm:p-6 bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300"
               >
-                <div className="w-12 h-12 sm:w-14 sm:h-14 mb-4 sm:mb-6 rounded-xl bg-[#EFF6FF] dark:bg-[#1E3A8A] group-hover:bg-[#EFF6FF]/50 dark:group-hover:bg-[#1E3A8A]/50 flex items-center justify-center text-2xl sm:text-3xl transition-colors duration-300">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
                   {feature.icon}
                 </div>
                 <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2 sm:mb-3">
@@ -487,98 +496,74 @@ export default function HomePage() {
       {/* Real Estate Highlights Section */}
       <RealEstateHighlights />
 
-      {/* What You Can Track Section */}
-      <section id="platforms" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A] text-[#0F172A] dark:text-[#F8FAFC]">
+      {/* Asset Coverage Section */}
+      <section id="platforms" className="py-16 sm:py-20 md:py-24 lg:py-28 bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC]">
         <div className="container mx-auto px-4 sm:px-6">
-          <div className="text-center mb-10 sm:mb-12 md:mb-16">
+          <div className="text-center mb-8 sm:mb-10 md:mb-12">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4">
-              Get a Clear View of Every Asset Type
+              Built for Every Asset You Own
             </h2>
           </div>
 
           {/* Asset Categories Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 mb-10 sm:mb-12 md:mb-16 max-w-7xl mx-auto">
-            
+
             {/* Equity & Markets */}
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-6 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
-              <div className="text-3xl sm:text-4xl mb-3 sm:mb-4">📈</div>
-              <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2 sm:mb-3">Equity & Markets</h3>
-              <ul className="space-y-1.5 sm:space-y-2 text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm">
-                <li>✓ Stocks (NSE, BSE)</li>
-                <li>✓ Mutual Funds</li>
-                <li>✓ ETFs & Index Funds</li>
-                <li>✓ SIP tracking</li>
-              </ul>
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
+                <TrendingUpIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Equity & Markets</h3>
+              <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm">Stocks · Mutual Funds · ETFs</p>
             </div>
 
             {/* Retirement */}
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-6 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
-              <div className="text-3xl sm:text-4xl mb-3 sm:mb-4">🏦</div>
-              <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2 sm:mb-3">Retirement</h3>
-              <ul className="space-y-1.5 sm:space-y-2 text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm">
-                <li>✓ EPF</li>
-                <li>✓ NPS</li>
-                <li>✓ PPF</li>
-                <li>✓ Superannuation</li>
-              </ul>
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
+                <ShieldCheckIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Retirement</h3>
+              <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm">EPF · PPF · NPS</p>
             </div>
 
             {/* Fixed Income */}
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-6 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
-              <div className="text-3xl sm:text-4xl mb-3 sm:mb-4">💰</div>
-              <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2 sm:mb-3">Fixed Income</h3>
-              <ul className="space-y-1.5 sm:space-y-2 text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm">
-                <li>✓ Fixed Deposits</li>
-                <li>✓ Corporate Bonds</li>
-                <li>✓ Government Bonds</li>
-                <li>✓ Debt Mutual Funds</li>
-              </ul>
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
+                <LayersIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Fixed Income</h3>
+              <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm">Fixed Deposits · Bonds · Debt Funds</p>
             </div>
 
-            {/* Real Assets & More */}
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-6 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
-              <div className="text-3xl sm:text-4xl mb-3 sm:mb-4">✨</div>
-              <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2 sm:mb-3">Real Assets & More</h3>
-              <ul className="space-y-1.5 sm:space-y-2 text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm">
-                <li>✓ Real Estate</li>
-                <li>✓ Gold (Physical & Digital)</li>
-                <li>✓ Cash & Savings</li>
-                <li>✓ Other Investments</li>
-              </ul>
+            {/* Real Assets */}
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
+                <HomeIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Real Assets</h3>
+              <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs sm:text-sm">Real Estate · Gold · Silver · Other Assets</p>
             </div>
           </div>
 
-          {/* Platform Support */}
+          {/* Platform Integrations */}
           <div className="text-center mb-6 sm:mb-8">
             <h3 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Works With Your Platforms</h3>
           </div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 mb-8 sm:mb-12 max-w-6xl mx-auto">
-            {[
-              { name: 'Zerodha', logo: '/logos/zerodha.png' },
-              { name: 'Groww', logo: '/logos/groww.png' },
-              { name: 'Kuvera', logo: '/logos/kuvera.png' },
-              { name: 'ICICI Direct', logo: '/logos/icici-direct.png' },
-              { name: 'Paytm Money', logo: '/logos/paytm-money.png' },
-              { name: 'ET Money', logo: '/logos/etmoney.png' },
-              { name: 'EPFO', logo: '/logos/epfo.png' },
-              { name: 'NPS Trust', logo: '/logos/nps-trust.png' },
-              { name: 'Post Office', logo: '/logos/post-office.png' },
-              { name: 'HDFC Bank', logo: '/logos/hdfc-bank.png' },
-              { name: 'ICICI Bank', logo: '/logos/icici-bank.png' },
-              { name: 'SBI', logo: '/logos/sbi.png' },
-            ].map((platform) => (
-              <div 
-                key={platform.name} 
-                className="p-0.5 sm:p-1 bg-transparent rounded-md border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300 flex items-center justify-center min-h-[15px] sm:min-h-[20px] touch-target"
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4 mb-8 sm:mb-12 max-w-5xl mx-auto">
+            {platforms.map((platform) => (
+              <div
+                key={platform.name}
+                className="flex flex-col items-center gap-2 p-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300"
               >
                 <Image
                   src={platform.logo}
                   alt={platform.name}
-                  width={45}
-                  height={15}
-                  className="object-contain max-w-full max-h-full w-auto h-auto opacity-80 hover:opacity-100 transition-opacity"
+                  width={80}
+                  height={40}
+                  className="object-contain w-auto h-10 grayscale opacity-80 hover:opacity-100 hover:grayscale-0 transition-all duration-300"
                 />
+                <span className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8] text-center leading-tight">{platform.name}</span>
               </div>
             ))}
           </div>
@@ -598,9 +583,9 @@ export default function HomePage() {
       />
 
       {/* FAQ Section */}
-      <section id="faq" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A]">
+      <section id="faq" className="py-16 sm:py-20 md:py-24 lg:py-28 bg-white dark:bg-[#1E293B]">
         <div className="container mx-auto px-4 sm:px-6">
-          <div className="text-center mb-10 sm:mb-12 md:mb-16">
+          <div className="text-center mb-8 sm:mb-10 md:mb-12">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3 sm:mb-4">
               Frequently Asked Questions
             </h2>
@@ -641,29 +626,21 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Trust & Positioning Block */}
-      <section id="trust" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A]">
+      {/* Trust & Transparency Block */}
+      <section id="trust" className="py-16 sm:py-20 md:py-24 lg:py-28 bg-[#F6F8FB] dark:bg-[#0F172A]">
         <div className="container mx-auto px-4 sm:px-6">
-          <div className="text-center mb-10 sm:mb-12 md:mb-16">
+          <div className="text-center mb-8 sm:mb-10 md:mb-12">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3 sm:mb-4">
-              Trust &amp; Positioning
+              Trust &amp; Transparency
             </h2>
-            <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8] max-w-3xl mx-auto px-4 sm:px-0">
-              Transparency and clarity in how we serve you
-            </p>
           </div>
 
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-2xl mx-auto">
             <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg p-6 sm:p-8">
-              <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4 text-center">
-                Important Notice
-              </h3>
               <div className="space-y-4 text-[#6B7280] dark:text-[#94A3B8] text-sm sm:text-base leading-relaxed">
                 <p>
-                  LensOnWealth is a subscription-based personal finance tracking software designed to help individuals organize and view their financial records.
-                </p>
-                <p>
-                  We do not provide investment advisory services, portfolio management, tax advice, or trade execution.
+                  LensOnWealth is a portfolio tracking and financial clarity tool.
+                  We do not provide investment advice or execute trades.
                 </p>
                 <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                   All information is provided for informational purposes only.
@@ -676,14 +653,13 @@ export default function HomePage() {
 
       {/* Final CTA Section */}
       <section className="py-16 sm:py-20 md:py-24 lg:py-32 bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] relative overflow-hidden">
-        
+
         <div className="relative z-10 max-w-4xl mx-auto text-center space-y-6 sm:space-y-8 px-4 sm:px-6">
           <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
-            Ready to See Your Complete Wealth, Clearly?
+            See Your Entire Financial Life in One Place
           </h2>
           <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[#6B7280] dark:text-[#94A3B8] px-2 sm:px-0">
-            Join hundreds of Indian investors who've gained clarity on their complete wealth 
-            and started making smarter decisions.
+            Join investors who want clarity across all their assets, not just their brokerage accounts.
           </p>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4">
             {user ? (
@@ -698,7 +674,7 @@ export default function HomePage() {
                 href="/signup"
                 className="w-full sm:w-auto px-8 sm:px-12 py-4 sm:py-5 min-h-[56px] bg-[#2563EB] dark:bg-[#3B82F6] hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] text-white rounded-full text-lg sm:text-xl font-bold hover:scale-105 hover:shadow-2xl transition-all duration-300 touch-target"
               >
-                Upload Your First Portfolio - It's Free
+                Start Tracking Your Portfolio, Free
               </Link>
             )}
           </div>
@@ -707,6 +683,11 @@ export default function HomePage() {
             <span>✅ Free forever for basic tracking</span>
             <span>✅ No credit card required</span>
             <span>✅ Setup in under 5 minutes</span>
+          </div>
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-6 justify-center text-[#9CA3AF] dark:text-[#6B7280] text-xs px-4 pt-2">
+            <span>✓ No broker login required</span>
+            <span>✓ Secure data storage</span>
+            <span>✓ Works with all major platforms</span>
           </div>
         </div>
       </section>

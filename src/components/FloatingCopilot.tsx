@@ -927,7 +927,11 @@ export default function FloatingCopilot({
             <p className="text-xs text-[#9CA3AF] dark:text-[#64748B]">
               For educational purposes only · Not financial advice
             </p>
-            {typeof usedQueries === 'number' && typeof queryLimit === 'number' && (
+            {planTier === 'premium' ? (
+              <p className="text-xs font-semibold text-emerald-500 dark:text-emerald-400">
+                Unlimited
+              </p>
+            ) : typeof usedQueries === 'number' && typeof queryLimit === 'number' ? (
               <p
                 className={`text-xs font-semibold ${
                   isQuotaExhausted
@@ -939,7 +943,7 @@ export default function FloatingCopilot({
               >
                 {usedQueries} of {queryLimit} used
               </p>
-            )}
+            ) : null}
           </div>
         </form>
       </div>

@@ -169,12 +169,12 @@ export default function PricingSection({
     return (
       <section
         id="pricing"
-        className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]"
+        className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A]"
       >
         <div className="container mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
-              Simple, Transparent Pricing
+              Simple Pricing. No Hidden Fees.
             </h2>
             <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8]">
               Free to start. Upgrade for enhanced reporting and automation.
@@ -192,12 +192,12 @@ export default function PricingSection({
     return (
       <section
         id="pricing"
-        className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]"
+        className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A]"
       >
         <div className="container mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
-              Simple, Transparent Pricing
+              Simple Pricing. No Hidden Fees.
             </h2>
           </div>
           <p className="text-center text-[#6B7280] dark:text-[#94A3B8] py-12">
@@ -253,12 +253,12 @@ export default function PricingSection({
   return (
     <section
       id="pricing"
-      className="py-12 sm:py-16 md:py-20 lg:py-24 bg-white dark:bg-[#1E293B]"
+      className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#F6F8FB] dark:bg-[#0F172A]"
     >
       <div className="container mx-auto px-4 sm:px-6">
         <div className="text-center mb-10 sm:mb-12 md:mb-16 space-y-3 sm:space-y-4">
           <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
-            Simple, Transparent Pricing
+            Simple Pricing. No Hidden Fees.
           </h2>
           <p className="text-base sm:text-lg md:text-xl text-[#6B7280] dark:text-[#94A3B8]">
             Free to start. Upgrade for enhanced reporting and automation.

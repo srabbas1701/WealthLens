@@ -198,6 +198,16 @@
   animation: slide-in 0.3s ease-out;
 }
 
+/* Hero constellation slow orbit animation */
+@keyframes slowOrbit {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.constellation-orbit {
+  animation: slowOrbit 40s linear infinite;
+}
+
 /* Scroll indicator bounce animation */
 @keyframes bounce-scroll {
   0%, 20%, 50%, 80%, 100% { 

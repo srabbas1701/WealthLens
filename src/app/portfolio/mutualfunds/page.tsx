@@ -177,7 +177,7 @@ export default function MutualFundsPage() {
               
               // Extract metadata fields (use metadata if available, otherwise fallback to extraction)
               const amc = metadata.amc || 'Other';
-              const category = metadata.category || 'Large Cap';
+              const category = metadata.category || 'Other';
               const plan = metadata.plan || 'Direct - Growth';
               const folio = metadata.folio || ''; // Use actual folio from metadata, empty string if not set
               
@@ -296,7 +296,7 @@ export default function MutualFundsPage() {
               }
 
               const amc = metadata.amc || 'Other';
-              const category = metadata.category || 'Large Cap';
+              const category = metadata.category || 'Other';
               const plan = metadata.plan || 'Direct - Growth';
               const folio = metadata.folio || '';
               const purchaseDate = h.purchaseDate || metadata.purchase_date || null;

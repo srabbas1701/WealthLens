@@ -11,7 +11,7 @@
  */
 
 import { cache } from 'react';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import type { UserEntitlements } from '@/types/entitlements';
 import type { TrialLimits } from '@/types/capabilities';
 
@@ -149,15 +149,20 @@ async function getUserEntitlementsUncached(
     // plan_capabilities, but the PAID_PLAN_AI_LIMITS entry IS the source of truth.
     entitlements['use_ai_help'] = true;
     entitlements.plan_tier = planId;
-    const paidAiLimit = PAID_PLAN_AI_LIMITS[planId];
-    // Use calendar month as the usage period key (safe — avoids dependency on
-    // current_period_start which may not exist in all DB environments).
-    // Reset date uses current_period_end from subscription for accurate display.
-    const periodStart = getPeriodStart(); // calendar month
-    const usage = await getUsageCounters(db, userId, periodStart);
-    entitlements.ai_remaining = Math.max(0, paidAiLimit - (usage.ai_used ?? 0));
-    entitlements.ai_query_limit = paidAiLimit;
-    entitlements.ai_reset_date = getResetDate(sub?.current_period_end);
+
+    if (planId === 'premium') {
+      // Premium users have unlimited AI access — no per-month cap.
+      // ai_remaining and ai_query_limit are left undefined so requirePaidAction
+      // never blocks them and the UI shows "Unlimited".
+    } else {
+      // Pro and other paid plans: enforce monthly cap.
+      const paidAiLimit = PAID_PLAN_AI_LIMITS[planId];
+      const periodStart = getPeriodStart(); // calendar month
+      const usage = await getUsageCounters(db, userId, periodStart);
+      entitlements.ai_remaining = Math.max(0, paidAiLimit - (usage.ai_used ?? 0));
+      entitlements.ai_query_limit = paidAiLimit;
+      entitlements.ai_reset_date = getResetDate(sub?.current_period_end);
+    }
   } else {
     // Free user (no active trial, no paid plan): grant limited AI access.
     entitlements['use_ai_help'] = true;
@@ -198,21 +203,36 @@ async function getPremiumCapabilityKeys(db: SupabaseClient): Promise<string[]> {
   return Array.from(keys);
 }
 
-/** Get current period usage for AI and scenarios from subscription_usage. */
+/** Get current period usage for AI and scenarios from subscription_usage.
+ *  Uses admin client so RLS never silently returns 0 for legitimate reads.
+ */
 async function getUsageCounters(
   db: SupabaseClient,
   userId: string,
   periodStart: string
 ): Promise<{ ai_used: number; scenario_used: number }> {
   try {
-    const { data: usage, error } = await db
+    // Prefer the admin client (bypasses RLS) so a missing or restrictive policy
+    // never makes the counter look like 0 when it isn't.
+    let readDb: SupabaseClient;
+    try {
+      readDb = createAdminClient() as unknown as SupabaseClient;
+    } catch {
+      readDb = db;
+    }
+
+    const { data: usage, error } = await readDb
       .from('subscription_usage')
       .select('analyst_queries, analytics_views')
       .eq('user_id', userId)
       .eq('month', periodStart)
       .maybeSingle();
 
-    if (error || !usage) return { ai_used: 0, scenario_used: 0 };
+    if (error) {
+      console.error('[getUsageCounters] fetch error:', error);
+      return { ai_used: 0, scenario_used: 0 };
+    }
+    if (!usage) return { ai_used: 0, scenario_used: 0 };
     const u = usage as { analyst_queries?: number; scenario_views?: number; analytics_views?: number };
     return {
       ai_used: u.analyst_queries ?? 0,
@@ -285,51 +305,33 @@ export async function incrementTrialUsage(
 
 /**
  * Increment AI usage for any user type (trial, paid plan, or free).
- * Replaces incrementTrialUsage for the AI analyst endpoint.
- * - Trial users: increments if trial is active (calendar month period)
- * - Pro/Premium users: always increments (billing cycle period)
- * - Free users: always increments (calendar month period)
+ *
+ * Uses the `increment_ai_usage` Postgres function (migration 023) which does
+ * an atomic INSERT ... ON CONFLICT DO UPDATE, so:
+ *   - No race condition between read and write
+ *   - SECURITY DEFINER bypasses RLS — counter always persists regardless of
+ *     the calling client's role or session state
+ *
+ * Falls back to the admin client (service role) for the RPC call so it works
+ * even if the SSR cookie session is stale.
  */
 export async function incrementAIUsage(
   db: SupabaseClient,
   userId: string
 ): Promise<void> {
-  const column = 'analyst_queries';
-
-  // All user types (free, trial, paid) use calendar month as the period key,
-  // consistent with getUsageCounters. This avoids dependency on columns
-  // (current_period_start) that may not exist in all DB environments.
   const periodStart = getPeriodStart();
 
-  const { data: row, error: fetchError } = await db
-    .from('subscription_usage')
-    .select(column)
-    .eq('user_id', userId)
-    .eq('month', periodStart)
-    .maybeSingle();
-
-  if (fetchError) {
-    console.error('[incrementAIUsage] fetch error:', fetchError);
-    return;
+  // Prefer the admin client so the RPC call is never blocked by auth state.
+  let callDb: SupabaseClient;
+  try {
+    callDb = createAdminClient() as unknown as SupabaseClient;
+  } catch {
+    callDb = db;
   }
 
-  const current = (row as Record<string, number>)?.[column] ?? 0;
-  const next = current + 1;
-
-  if (row) {
-    const { error: updateError } = await db
-      .from('subscription_usage')
-      .update({ [column]: next })
-      .eq('user_id', userId)
-      .eq('month', periodStart);
-    if (updateError) console.error('[incrementAIUsage] update error:', updateError);
-  } else {
-    const { error: insertError } = await db.from('subscription_usage').insert({
-      user_id: userId,
-      month: periodStart,
-      analyst_queries: 1,
-      analytics_views: 0,
-    });
-    if (insertError) console.error('[incrementAIUsage] insert error:', insertError);
-  }
+  const { error } = await (callDb as any).rpc('increment_ai_usage', {
+    p_user_id: userId,
+    p_month: periodStart,
+  });
+  if (error) console.error('[incrementAIUsage] rpc error:', error);
 }
