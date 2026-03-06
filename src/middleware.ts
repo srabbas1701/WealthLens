@@ -83,14 +83,25 @@ export async function middleware(request: NextRequest) {
   );
 
   // Refresh session (critical for production - ensures session is valid)
-  const { data: { user }, error: sessionError } = await supabase.auth.getUser();
-  
+  // Supabase THROWS AuthApiError for invalid refresh tokens; wrap in try/catch
+  let user: { id: string } | null = null;
+  let sessionError: { message?: string; code?: string } | null = null;
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+    sessionError = result.error;
+  } catch (thrown) {
+    sessionError = thrown as { message?: string; code?: string };
+  }
+
   // Handle invalid refresh token error - clear cookies and treat as unauthenticated
-  if (sessionError) {
-    // Check if it's a refresh token error
-    if (sessionError.message?.includes('Refresh Token Not Found') || 
-        sessionError.message?.includes('refresh_token_not_found') ||
-        (sessionError as any)?.code === 'refresh_token_not_found') {
+  const isRefreshTokenErr =
+    sessionError &&
+    (sessionError.message?.includes('Refresh Token Not Found') ||
+      sessionError.message?.includes('refresh_token_not_found') ||
+      (sessionError as any)?.code === 'refresh_token_not_found');
+
+  if (isRefreshTokenErr) {
       // Clear all Supabase auth-related cookies to prevent repeated errors
       // Supabase SSR uses cookies with pattern: sb-<project-ref>-auth-token
       const allCookies = request.cookies.getAll();
@@ -121,12 +132,11 @@ export async function middleware(request: NextRequest) {
       }
       
       return response;
-    }
-    
-    // Log other session errors in production for debugging (non-blocking)
-    if (process.env.NODE_ENV === 'production') {
-      console.error('[Middleware] Session error:', sessionError.message);
-    }
+  }
+
+  // Log other session errors in production for debugging (non-blocking)
+  if (sessionError && process.env.NODE_ENV === 'production') {
+    console.error('[Middleware] Session error:', sessionError.message);
   }
 
   const searchParams = request.nextUrl.searchParams;

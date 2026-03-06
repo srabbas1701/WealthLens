@@ -14,6 +14,17 @@
 import { createClient } from '@/lib/supabase/client';
 import { clearEntitlementsCache } from '@/hooks/useCapabilities';
 
+/** Check if an error is the Supabase refresh_token_not_found (works for both returned and thrown errors) */
+export function isRefreshTokenError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { message?: string; code?: string };
+  return !!(
+    e.message?.includes('Refresh Token Not Found') ||
+    e.message?.includes('refresh_token_not_found') ||
+    e.code === 'refresh_token_not_found'
+  );
+}
+
 export type LogoutReason = 
   | 'inactivity' 
   | 'session_expired' 
@@ -111,11 +122,7 @@ export async function isSessionExpired(): Promise<boolean> {
     }
 
     if (error) {
-      if (
-        error.message?.includes('Refresh Token Not Found') ||
-        error.message?.includes('refresh_token_not_found') ||
-        (error as { code?: string })?.code === 'refresh_token_not_found'
-      ) {
+      if (isRefreshTokenError(error)) {
         return true;
       }
       // Other errors (e.g. network) - do NOT assume expired to avoid kicking active users
@@ -125,6 +132,10 @@ export async function isSessionExpired(): Promise<boolean> {
 
     return false;
   } catch (error) {
+    // Supabase throws AuthApiError for invalid refresh token - treat as expired
+    if (isRefreshTokenError(error)) {
+      return true;
+    }
     console.error('[Logout] Error checking session expiration:', error);
     // On transient errors (network, etc.), do NOT assume expired - avoids logging out active users
     return false;

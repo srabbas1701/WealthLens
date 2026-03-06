@@ -7,6 +7,7 @@
  * Read-only exports - no editing, no schema changes.
  */
 
+import { addLensOnWealthLogo } from '@/lib/pdf/pdfLogo';
 import type { RealEstateDashboardData } from '@/types/realEstateDashboard.types';
 import type { RealEstatePropertyDetailData } from '@/types/realEstatePropertyDetail.types';
 import type { RealEstatePropertyAlert } from '@/types/realEstatePropertyAlerts.types';
@@ -375,6 +376,9 @@ async function exportRealEstatePortfolioToPDF(
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
   let currentY = margin;
+
+  // LensOnWealth logo - top right corner
+  await addLensOnWealthLogo(doc, pageWidth, pageHeight, margin);
   
   // Colors
   const primaryColor = [15, 23, 42];
@@ -519,6 +523,9 @@ async function exportPropertyDetailToPDF(
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
   let currentY = margin;
+  
+  // LensOnWealth logo - top right corner
+  await addLensOnWealthLogo(doc, pageWidth, pageHeight, margin);
   
   // Colors
   const primaryColor = [15, 23, 42];

@@ -471,7 +471,7 @@ export default function PortfolioSummaryPage() {
         showBackButton={true}
         backHref="/dashboard"
         backLabel="Back to Dashboard"
-        showDownload={true}
+        showDownload={false}
       />
 
       <main className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">

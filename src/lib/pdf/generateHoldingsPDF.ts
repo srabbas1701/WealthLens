@@ -6,6 +6,8 @@
  * Note: Uses dynamic import for client-side only execution
  */
 
+import { addLensOnWealthLogo } from '@/lib/pdf/pdfLogo';
+
 // Helper function to format numbers with Indian numbering system for PDF
 function formatNumberForPDF(num: number, decimals: number = 2): string {
   if (num === null || num === undefined || isNaN(num)) {
@@ -83,6 +85,9 @@ async function generatePDFInternal({
   const startX = margin;
   let currentY = margin;
 
+  // Logo at top-right (min requirement for all reports)
+  await addLensOnWealthLogo(doc, pageWidth, pageHeight, margin);
+
   // Colors
   const primaryColor = [15, 23, 42];
   const secondaryColor = [71, 85, 105];
@@ -119,11 +124,11 @@ async function generatePDFInternal({
   // Table setup
   const tableStartX = startX;
   const tableStartY = currentY;
-  const rowHeight = 9;
+  const rowHeight = 12; // Taller to accommodate wrapped scheme names
   const headerHeight = 10;
   const cellPadding = 5;
   const headerVerticalPadding = 6.5;
-  const rowVerticalCenter = 4.5;
+  const rowVerticalCenter = 6; // Center in taller row
 
   // Calculate column positions
   const colX: Record<string, number> = {};
@@ -146,7 +151,9 @@ async function generatePDFInternal({
 
   columns.forEach((col) => {
     const x = col.align === 'right' ? rightAlignX(col.key) : colX[col.key] + cellPadding;
-    doc.text(col.label.toUpperCase(), x, headerY, col.align === 'right' ? { align: 'right' } : {});
+    const maxWidth = col.width - 4;
+    const opts = col.align === 'right' ? { align: 'right' as const, maxWidth } : { maxWidth };
+    doc.text(col.label.toUpperCase(), x, headerY, opts);
   });
 
   currentY = tableStartY + headerHeight;
@@ -169,7 +176,9 @@ async function generatePDFInternal({
       const newHeaderY = currentY + headerVerticalPadding;
       columns.forEach((col) => {
         const x = col.align === 'right' ? rightAlignX(col.key) : colX[col.key] + cellPadding;
-        doc.text(col.label.toUpperCase(), x, newHeaderY, col.align === 'right' ? { align: 'right' } : {});
+        const maxWidth = col.width - 4;
+        const opts = col.align === 'right' ? { align: 'right' as const, maxWidth } : { maxWidth };
+        doc.text(col.label.toUpperCase(), x, newHeaderY, opts);
       });
       currentY += headerHeight;
     }
@@ -212,7 +221,11 @@ async function generatePDFInternal({
         doc.setTextColor(...primaryColor);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
-        doc.text(formatted, x, dataY, col.align === 'right' ? { align: 'right' } : {});
+        const cellMaxWidth = col.width - 2 * cellPadding;
+        const textOpts = col.align === 'right'
+          ? { align: 'right' as const, maxWidth: cellMaxWidth }
+          : { maxWidth: cellMaxWidth };
+        doc.text(formatted, x, dataY, textOpts);
       }
     });
 
@@ -244,6 +257,10 @@ async function generatePDFInternal({
     const totalValueStr = 'Rs. ' + formatNumberForPDF(totalValue, 0);
     doc.text(totalValueStr, rightAlignX(valueCol.key), currentY, { align: 'right' });
   }
+
+  // Line below TOTAL row (total between 2 lines - min requirement for all reports)
+  currentY += 6;
+  doc.line(tableStartX, currentY, pageWidth - margin, currentY);
 
   // Footer text
   const footerTextY = pageHeight - 10;
@@ -304,12 +321,12 @@ export async function generateMutualFundsPDF({
     title: 'Mutual Funds Holdings Report',
     holdings,
     columns: [
-      { key: 'name', label: 'SCHEME NAME', width: 75, align: 'left' }, // Wider for scheme names
-      { key: 'units', label: 'UNITS', width: 32, align: 'right', formatter: (v) => formatNumberForPDF(v, 4) },
-      { key: 'investedValue', label: 'INVESTED VALUE', width: 40, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
-      { key: 'currentValue', label: 'CURRENT VALUE', width: 40, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
-      { key: 'xirr', label: 'XIRR', width: 30, align: 'right', formatter: (v) => v !== null ? `${v.toFixed(2)}%` : 'N/A' },
-      { key: 'gainLoss', label: 'P&L', width: 40, align: 'right', formatter: (v) => {
+      { key: 'name', label: 'SCHEME NAME', width: 115, align: 'left' }, // Wide for long names, text wraps
+      { key: 'units', label: 'UNITS', width: 26, align: 'right', formatter: (v) => formatNumberForPDF(v, 4) },
+      { key: 'investedValue', label: 'INVESTED', width: 30, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
+      { key: 'currentValue', label: 'CURRENT', width: 30, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
+      { key: 'xirr', label: 'XIRR', width: 22, align: 'right', formatter: (v) => v !== null ? `${v.toFixed(2)}%` : 'N/A' },
+      { key: 'gainLoss', label: 'P&L', width: 34, align: 'right', formatter: (v) => {
         const sign = v >= 0 ? '+' : '-';
         return 'Rs. ' + sign + formatNumberForPDF(Math.abs(v), 0);
       }},
@@ -459,6 +476,55 @@ export async function generateFixedDepositsPDF({
   });
 }
 
+// EPF PDF
+export async function generateEPFPDF({
+  holdings,
+  totalValue,
+  totalContributions,
+  portfolioPercentage,
+  formatCurrency,
+}: {
+  holdings: Array<{
+    uan: string;
+    employerName: string;
+    currentValue: number;
+    investedValue: number;
+    interestEarned: number;
+    interestRate: number;
+    lastUpdated: string;
+  }>;
+  totalValue: number;
+  totalContributions: number;
+  portfolioPercentage: number;
+  formatCurrency: (value: number) => string;
+}): Promise<void> {
+  const pdfHoldings = holdings.map((h) => ({
+    uan: h.uan || '—',
+    employerName: h.employerName || '—',
+    currentValue: h.currentValue,
+    investedValue: h.investedValue,
+    interestEarned: h.interestEarned,
+    interestRate: h.interestRate,
+    lastUpdated: h.lastUpdated ? new Date(h.lastUpdated).toLocaleDateString('en-IN') : '—',
+  }));
+  return generatePDFInternal({
+    title: 'EPF Holdings Report',
+    holdings: pdfHoldings,
+    columns: [
+      { key: 'uan', label: 'UAN', width: 36, align: 'left' },
+      { key: 'employerName', label: 'EMPLOYER', width: 50, align: 'left' },
+      { key: 'investedValue', label: 'CONTRIBUTIONS', width: 32, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
+      { key: 'interestEarned', label: 'INTEREST EARNED', width: 32, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
+      { key: 'interestRate', label: 'RATE %', width: 20, align: 'right', formatter: (v) => `${v.toFixed(2)}%` },
+      { key: 'currentValue', label: 'CURRENT VALUE', width: 34, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
+      { key: 'lastUpdated', label: 'LAST UPDATED', width: 28, align: 'left' },
+    ],
+    totalValue,
+    totalInvested: totalContributions,
+    portfolioPercentage,
+  });
+}
+
 // NPS PDF
 export async function generateNPSPDF({
   holdings,
@@ -512,5 +578,72 @@ export async function generateNPSPDF({
     portfolioPercentage,
     dateLabel: 'NAV as of',
     dateValue: navDate,
+  });
+}
+
+// PPF PDF
+export async function generatePPFPDF({
+  holdings,
+  totalValue,
+  totalContributions,
+  portfolioPercentage,
+  formatCurrency,
+}: {
+  holdings: Array<{
+    accountHolderName: string;
+    bankOrPostOffice: string;
+    accountNumber: string;
+    openingDate: string | null;
+    maturityDate: string | null;
+    currentBalance: number;
+    totalContributions: number;
+    interestEarned: number;
+    interestRate: number;
+    status: string;
+  }>;
+  totalValue: number;
+  totalContributions: number;
+  portfolioPercentage: number;
+  formatCurrency: (value: number) => string;
+}): Promise<void> {
+  const maskAccountNumber = (num: string) => {
+    if (!num) return '—';
+    if (num.length <= 4) return num;
+    return 'XXXX' + num.slice(-4);
+  };
+
+  const pdfHoldings = holdings.map((h) => ({
+    accountHolderName: h.accountHolderName || '—',
+    bankOrPostOffice: h.bankOrPostOffice || '—',
+    accountNumber: maskAccountNumber(h.accountNumber),
+    openingDate: h.openingDate,
+    maturityDate: h.maturityDate,
+    currentValue: h.currentBalance,
+    investedValue: h.totalContributions,
+    interestEarned: h.interestEarned,
+    interestRate: h.interestRate,
+    status: h.status?.charAt(0).toUpperCase() + (h.status?.slice(1) || ''),
+  }));
+
+  return generatePDFInternal({
+    title: 'PPF Holdings Report',
+    holdings: pdfHoldings,
+    columns: [
+      { key: 'accountHolderName', label: 'HOLDER', width: 28, align: 'left' },
+      { key: 'bankOrPostOffice', label: 'BANK/PO', width: 28, align: 'left' },
+      { key: 'accountNumber', label: 'ACCT NO', width: 22, align: 'left' },
+      { key: 'openingDate', label: 'OPEN', width: 22, align: 'left', formatter: (v) => v ? new Date(v).toLocaleDateString('en-IN') : 'N/A' },
+      { key: 'maturityDate', label: 'MATURITY', width: 22, align: 'left', formatter: (v) => v ? new Date(v).toLocaleDateString('en-IN') : 'N/A' },
+      { key: 'currentValue', label: 'BALANCE', width: 30, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
+      { key: 'investedValue', label: 'CONTRIB', width: 28, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
+      { key: 'interestEarned', label: 'INTEREST', width: 28, align: 'right', formatter: (v) => 'Rs. ' + formatNumberForPDF(v, 0) },
+      { key: 'interestRate', label: 'RATE %', width: 18, align: 'right', formatter: (v) => `${(v ?? 0).toFixed(2)}%` },
+      { key: 'status', label: 'STATUS', width: 16, align: 'left' },
+    ],
+    totalValue,
+    totalInvested: totalContributions,
+    portfolioPercentage,
+    dateLabel: 'Generated on',
+    dateValue: new Date().toISOString(),
   });
 }

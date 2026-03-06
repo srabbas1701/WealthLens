@@ -27,7 +27,12 @@ import {
   TrashIcon,
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/lib/capabilities';
+import { FEATURE_ACCESS } from '@/config/feature-access';
+import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
+import { useToast } from '@/components/Toast';
+import { generatePPFPDF } from '@/lib/pdf/generateHoldingsPDF';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import DataConsolidationMessage from '@/components/DataConsolidationMessage';
 import PPFAddModal from '@/components/PPFAddModal';
@@ -61,6 +66,9 @@ export default function PPFHoldingsPage() {
   const router = useRouter();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const { showToast } = useToast();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<PPFHolding[]>([]);
@@ -307,6 +315,63 @@ export default function PPFHoldingsPage() {
     setHoldingToDelete(null);
   };
 
+  // Download handler for PPF
+  const handleDownload = useCallback(async () => {
+    if (capabilitiesLoading) {
+      showToast({ type: 'info', title: 'Loading...', message: 'Please wait while we check your access.', duration: 3000 });
+      return;
+    }
+    if (!hasCapability(FEATURE_ACCESS.DOWNLOAD.capability)) {
+      setShowPremiumModal(true);
+      return;
+    }
+    try {
+      if (!holdings || holdings.length === 0) {
+        showToast({
+          type: 'warning',
+          title: 'No Data',
+          message: 'No PPF holdings available to download.',
+          duration: 5000,
+        });
+        return;
+      }
+      const totalContributions = holdings.reduce((sum, h) => sum + (h.totalContributions || 0), 0);
+      const pdfData = holdings.map((h) => ({
+        accountHolderName: h.accountHolderName || '—',
+        bankOrPostOffice: h.bankOrPostOffice || '—',
+        accountNumber: h.accountNumber || '',
+        openingDate: h.openingDate || null,
+        maturityDate: h.maturityDate || null,
+        currentBalance: h.currentBalance,
+        totalContributions: h.totalContributions,
+        interestEarned: h.interestEarned,
+        interestRate: h.interestRate,
+        status: h.status || 'active',
+      }));
+      await generatePPFPDF({
+        holdings: pdfData,
+        totalValue: totalBalance,
+        totalContributions,
+        portfolioPercentage,
+        formatCurrency,
+      });
+      showToast({
+        type: 'success',
+        title: 'PDF Downloaded',
+        message: 'Your PPF holdings report has been downloaded successfully.',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('[PPF Download] Error generating PDF:', error);
+      showToast({
+        type: 'error',
+        title: 'Download Failed',
+        message: error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
+        duration: 5000,
+      });
+    }
+  }, [holdings, totalBalance, portfolioPercentage, formatCurrency, showToast, hasCapability, capabilitiesLoading]);
+
   // Mask account number for display
   const maskAccountNumber = (accountNumber: string | null | undefined): string => {
     if (!accountNumber) return '—';
@@ -346,6 +411,8 @@ export default function PPFHoldingsPage() {
         showBackButton={true}
         backHref="/dashboard"
         backLabel="Back to Dashboard"
+        showDownload={true}
+        onDownload={handleDownload}
       />
 
       <main className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
@@ -723,6 +790,8 @@ export default function PPFHoldingsPage() {
         onSuccess={handleAddSuccess}
         existingHolding={editingHolding}
       />
+
+      <PremiumDownloadModal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal

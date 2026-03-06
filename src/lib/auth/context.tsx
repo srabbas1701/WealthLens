@@ -339,8 +339,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           sessionStorage.removeItem('auth_loading_start');
         }
       } catch (error) {
-        // Handle any unexpected errors during session initialization
         if (!isMounted) return;
+        // Supabase THROWS AuthApiError for invalid refresh tokens - handle same as returned error
+        const { isRefreshTokenError } = await import('@/lib/auth/logout');
+        if (isRefreshTokenError(error)) {
+          try {
+            const { handleLogout } = await import('@/lib/auth/logout');
+            await handleLogout({ reason: 'token_expired', redirectTo: '/', skipRedirect: false });
+          } catch (logoutErr) {
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+            setAuthStatus('unauthenticated');
+            sessionStorage.removeItem('auth_loading_start');
+            if (typeof window !== 'undefined') window.location.href = '/?session_expired=true';
+          }
+          return;
+        }
         console.error('[Auth] Error initializing session:', error);
         setSession(null);
         setUser(null);

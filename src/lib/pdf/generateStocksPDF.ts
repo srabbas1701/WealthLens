@@ -6,6 +6,8 @@
  * Note: Uses dynamic import for client-side only execution
  */
 
+import { addLensOnWealthLogo } from './pdfLogo';
+
 export interface StockPDFRow {
   name: string;
   symbol: string;
@@ -100,6 +102,9 @@ export async function generateStocksPDF({
   const margin = 15;
   const startX = margin;
   let currentY = margin;
+
+  // LensOnWealth logo - top right corner
+  await addLensOnWealthLogo(doc, pageWidth, pageHeight, margin);
 
   // Colors
   const primaryColor = [15, 23, 42]; // #0F172A
@@ -381,6 +386,10 @@ export async function generateStocksPDF({
   doc.setFontSize(7);
   const totalPLPercentStr = `(${totalPL >= 0 ? '+' : ''}${totalPLPercentage.toFixed(2)}%)`;
   doc.text(totalPLPercentStr, rightAlignX('pl'), footerY + 2, { align: 'right' });
+
+  // Line below TOTAL row (total between 2 lines - min requirement for all reports)
+  currentY += 6;
+  doc.line(tableStartX, currentY, pageWidth - margin, currentY);
 
   // Footer text
   const footerTextY = pageHeight - 10;

@@ -14,6 +14,7 @@
 import type { Liability } from '@/lib/liabilities-store';
 import type { TimelinePoint } from '@/lib/net-worth-timeline';
 import { calculateApproxInterestCost, getInterestPriorityTag } from '@/lib/liability-insights';
+import { addLensOnWealthLogo } from '@/lib/pdf/pdfLogo';
 
 /** Format number for PDF (Indian style, no decimals for large amounts). */
 function formatNum(num: number, decimals = 0): string {
@@ -51,8 +52,12 @@ export async function generateNetWorthStatementPDF(input: NetWorthPDFInput): Pro
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
   let y = margin;
+
+  // LensOnWealth logo - top right corner
+  await addLensOnWealthLogo(doc, pageWidth, pageHeight, margin);
 
   const primary = [15, 23, 42];
   const muted = [107, 114, 128];

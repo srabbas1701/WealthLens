@@ -6,6 +6,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server';
+import { isRefreshTokenError } from '@/lib/auth/logout';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
@@ -74,6 +75,20 @@ export async function checkAuth(request: NextRequest): Promise<AuthCheckResult> 
       error: null,
     };
   } catch (error) {
+    // Supabase THROWS AuthApiError for invalid refresh token - treat as session expired
+    if (isRefreshTokenError(error)) {
+      return {
+        user: null,
+        supabase: null,
+        error: {
+          message: 'Session expired. Please sign in again.',
+          code: 'SESSION_EXPIRED',
+          status: 401,
+        },
+      };
+    }
+    // Other errors - log and return generic auth error
+    // Only log non-refresh-token errors to reduce noise
     console.error('[API Auth] Error checking authentication:', error);
     return {
       user: null,
