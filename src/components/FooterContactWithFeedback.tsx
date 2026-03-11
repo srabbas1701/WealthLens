@@ -63,7 +63,7 @@ export function FooterContactWithFeedback({
                   </svg>
                 </a>
                 <a
-                  href="https://linkedin.com/company/lensonwealth"
+                  href="https://www.linkedin.com/company/lensonwealth/?viewAsMember=true"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors duration-300"

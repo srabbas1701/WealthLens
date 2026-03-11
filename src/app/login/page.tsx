@@ -472,11 +472,22 @@ function LoginContent() {
             console.log("Establishing Supabase session...");
 
             // Sign in with email+password (Supabase standard method)
+            // Retry up to 3 times with a short delay to handle transient failures
+            // on mobile (e.g. password update propagation delay, network blip)
             const supabase = createClient();
-            const { error: sessionError } = await supabase.auth.signInWithPassword({
-              email: data.credentials.email,
-              password: data.credentials.password,
-            });
+            let sessionError = null;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              if (attempt > 1) {
+                await new Promise(r => setTimeout(r, 600));
+              }
+              const { error } = await supabase.auth.signInWithPassword({
+                email: data.credentials.email,
+                password: data.credentials.password,
+              });
+              sessionError = error;
+              if (!error) break;
+              console.warn(`Session attempt ${attempt} failed:`, error.message);
+            }
 
             if (sessionError) {
               console.error("Session error:", sessionError);
@@ -487,7 +498,12 @@ function LoginContent() {
 
             console.log("✅ Session created successfully");
             verificationSucceededRef.current = true;
-            router.push("/dashboard");
+            // Use full page navigation (not client-side router.push) so the browser
+            // sends a fresh HTTP request with the newly-set session cookie.
+            // This fixes iOS Safari's "scroll back to login" issue where a client-side
+            // navigation could race with cookie writes, causing the middleware to see
+            // no session and redirect back to /login.
+            window.location.href = "/dashboard";
           } else {
             setError(data.error || "Login failed");
             setIsVerifying(false);

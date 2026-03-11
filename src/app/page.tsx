@@ -2,7 +2,62 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+
+function SparkleIcon({ size = '1em' }: { size?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    // Keyframes: flash gold/amber on bright frames for maximum eye-catch
+    const keyframes: Keyframe[] = [
+      { opacity: 1, transform: 'scale(1)',   color: '#2563EB' },
+      { opacity: 0, transform: 'scale(0.3)', color: '#2563EB' },
+      { opacity: 1, transform: 'scale(2.2)', color: '#FBBF24' },  // bright gold
+      { opacity: 0, transform: 'scale(0.3)', color: '#FBBF24' },
+      { opacity: 1, transform: 'scale(2.0)', color: '#F59E0B' },  // amber
+      { opacity: 0, transform: 'scale(0.3)', color: '#F59E0B' },
+      { opacity: 1, transform: 'scale(1.3)', color: '#2563EB' },
+      { opacity: 1, transform: 'scale(1)',   color: '#2563EB' },
+    ];
+    const options: KeyframeAnimationOptions = {
+      duration: 1600,
+      iterations: 1,
+      fill: 'forwards',
+      easing: 'ease-in-out',
+    };
+
+    let current: Animation | null = null;
+
+    const play = () => {
+      if (document.hidden) return; // skip if tab not visible
+      current?.cancel();
+      current = el.animate(keyframes, options);
+    };
+
+    // Play on mount after a short delay
+    const initTimer = setTimeout(play, 500);
+
+    // Repeat every 7 seconds while user stays on page
+    const interval = setInterval(play, 7000);
+
+    // Re-trigger when user returns to the tab
+    const onVisibilityChange = () => { if (!document.hidden) play(); };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      current?.cancel();
+    };
+  }, []);
+
+  return (
+    <span ref={ref} style={{ display: 'inline-block', color: '#2563EB', fontSize: size }}>✦</span>
+  );
+}
 import {
   ShieldCheckIcon,
   CheckCircleIcon,
@@ -249,7 +304,7 @@ export default function HomePage() {
 
                 {/* Inner ring r=90px — AI Naira at top, Insurance & Reports flanking */}
                 {([
-                  { label: <>✦ AI N<span className="text-[#B45309] dark:text-[#D97706]">ai</span>ra</>, cls: "text-3xl font-semibold bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] bg-clip-text text-transparent", angle: -90 },
+                  { label: <><SparkleIcon size="1em" /> AI N<span className="text-[#B45309] dark:text-[#D97706]">ai</span>ra</>, cls: "text-3xl font-semibold bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] bg-clip-text text-transparent", angle: -90 },
                   { label: "Reports",    cls: "text-base font-semibold text-[#16A34A] dark:text-[#86EFAC]",                                                                               angle:  28 },
                 ] as { label: React.ReactNode; cls: string; angle: number }[]).map(({ label, cls, angle }) => (
                   <div key={label} className="absolute opacity-100" style={{ transform: `rotate(${angle}deg) translate(90px) rotate(${-angle}deg)` }}>
@@ -308,7 +363,7 @@ export default function HomePage() {
                 Your complete financial universe, tracked, organized, clear.
               </p>
               <div className="flex items-center justify-center gap-1.5 mt-1.5 text-xs sm:text-sm">
-                <span className="text-[#2563EB] dark:text-[#3B82F6]">✦</span>
+                <SparkleIcon />
                 <span><span className="bg-clip-text text-transparent bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] font-semibold">AI N</span><span className="text-[#B45309] dark:text-[#D97706] font-semibold">ai</span><span className="bg-clip-text text-transparent bg-gradient-to-r from-[#16A34A] to-[#16A34A] dark:from-[#22C55E] dark:to-[#22C55E] font-semibold">ra - Portfolio Analyst</span></span>
               </div>
             </div>
@@ -753,9 +808,11 @@ export default function HomePage() {
               <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs mb-1">
                 © {new Date().getFullYear()} LensOnWealth. Built with ❤️ in India for Indian investors.
               </p>
-              <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs leading-tight">
-                <strong className="text-[#6B7280] dark:text-[#94A3B8]">Disclaimer:</strong> LensOnWealth is a personal finance tracking software. 
-                We do not provide investment advice, recommendations, or regulated financial services. Data displayed is for informational purposes only.
+              <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs leading-relaxed">
+                <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Disclaimer:</strong> LensOnWealth is a personal finance tracking software.{' '}
+                We do not provide investment advice, recommendations, or regulated financial services.
+                <br />
+                <span className="text-[#2563EB] dark:text-[#3B82F6] font-medium">Data displayed is for informational purposes only.</span>
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center md:justify-end text-xs text-[#6B7280] dark:text-[#94A3B8]">
