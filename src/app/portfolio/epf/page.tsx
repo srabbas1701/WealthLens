@@ -395,6 +395,7 @@ export default function EPFHoldingsPage() {
         backHref="/dashboard"
         backLabel="Back to Dashboard"
         showDownload={true}
+        downloadLabel="Download EPF"
         onDownload={handleDownload}
       />
 

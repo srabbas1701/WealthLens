@@ -63,12 +63,73 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 // This allows existing imports from '@/components/AppHeader' to continue working
 export { useCurrency };
 
+const NAV_FROM_KEY = 'app_nav_from';
+const NAV_CURRENT_KEY = 'app_nav_current';
+const NAV_VISITED_KEY = 'app_nav_visited';
+const NAV_BACK_TARGETS_KEY = 'app_nav_back_targets';
+
+/** Derive a friendly "Back to X" label from a path (referrer URL or stored previous path) */
+function getBackLabelFromPath(pathOrUrl: string | null, fallback: string): string {
+  if (!pathOrUrl || typeof window === 'undefined') return fallback;
+  try {
+    let path: string;
+    if (pathOrUrl.startsWith('http')) {
+      const url = new URL(pathOrUrl);
+      if (url.origin !== window.location.origin) return fallback;
+      path = url.pathname;
+    } else {
+      path = pathOrUrl;
+    }
+
+    const routeLabels: Record<string, string> = {
+      '/': 'Back to Home',
+      '/dashboard': 'Back to Dashboard',
+      '/portfolio': 'Back to Portfolio',
+      '/portfolio/summary': 'Back to Summary',
+      '/portfolio/stocks': 'Back to Stocks',
+      '/portfolio/equity': 'Back to Stocks',
+      '/portfolio/mutualfunds': 'Back to Mutual Funds',
+      '/portfolio/etfs': 'Back to ETFs',
+      '/portfolio/bonds': 'Back to Bonds',
+      '/portfolio/ppf': 'Back to PPF',
+      '/portfolio/epf': 'Back to EPF',
+      '/portfolio/nps': 'Back to NPS',
+      '/portfolio/gold': 'Back to Gold',
+      '/portfolio/real-estate': 'Back to Real Estate',
+      '/portfolio/fixeddeposits': 'Back to Fixed Deposits',
+      '/portfolio/cash': 'Back to Cash',
+      '/portfolio/insurance': 'Back to Insurance',
+      '/portfolio/upload': 'Back to Upload',
+      '/portfolio/holdings/add': 'Back to Add Holding',
+      '/onboarding': 'Back to Onboarding',
+      '/analytics/overview': 'Back to Analytics',
+      '/analytics/scenarios': 'Back to Scenarios',
+      '/liabilities': 'Back to Liabilities',
+      '/account': 'Back to Account',
+    };
+
+    if (routeLabels[path]) return routeLabels[path];
+    if (path.startsWith('/portfolio/real-estate/')) return 'Back to Real Estate';
+    if (path.startsWith('/portfolio/insurance/')) return 'Back to Insurance';
+    if (path.startsWith('/portfolio/stocks/')) return 'Back to Stocks';
+    if (path.startsWith('/portfolio/mutualfunds/')) return 'Back to Mutual Funds';
+    if (path.startsWith('/portfolio/etfs/')) return 'Back to ETFs';
+    if (path.startsWith('/analytics/')) return 'Back to Analytics';
+    if (path.startsWith('/demo')) return 'Back to Demo';
+
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 interface AppHeaderProps {
   showBackButton?: boolean;
   backHref?: string;
   backLabel?: string;
   showDownload?: boolean;
   onDownload?: () => void;
+  downloadLabel?: string; // Dynamic label e.g. "Download EPF", "Download Stocks" (default: "Download")
   isDemoMode?: boolean; // If true, shows Sign In instead of Account menu
 }
 
@@ -78,6 +139,7 @@ export function AppHeader({
   backLabel = 'Back to Dashboard',
   showDownload = false,
   onDownload,
+  downloadLabel = 'Download',
   isDemoMode = false, // Default to false, will be auto-detected if not provided
 }: AppHeaderProps) {
   // CRITICAL: Get pathname FIRST - before accessing portfolio state
@@ -122,6 +184,44 @@ export function AppHeader({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
+  // Track navigation: per-page back targets so "Back" from Summary shows Dashboard (not PPF when returning)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !pathname) return;
+    const visitedRaw = sessionStorage.getItem(NAV_VISITED_KEY);
+    const visited: string[] = visitedRaw ? JSON.parse(visitedRaw) : [];
+    const targetsRaw = sessionStorage.getItem(NAV_BACK_TARGETS_KEY);
+    const targets: Record<string, string> = targetsRaw ? JSON.parse(targetsRaw) : {};
+    const prev = sessionStorage.getItem(NAV_CURRENT_KEY);
+
+    if (visited.includes(pathname)) {
+      // Back navigation - use stored back target for this page
+      const fromPath = targets[pathname] || prev || backHref;
+      sessionStorage.setItem(NAV_FROM_KEY, fromPath);
+    } else {
+      // Forward navigation - store back target for new page
+      visited.push(pathname);
+      targets[pathname] = prev || '';
+      sessionStorage.setItem(NAV_VISITED_KEY, JSON.stringify(visited));
+      sessionStorage.setItem(NAV_BACK_TARGETS_KEY, JSON.stringify(targets));
+      sessionStorage.setItem(NAV_FROM_KEY, prev || '');
+    }
+    sessionStorage.setItem(NAV_CURRENT_KEY, pathname);
+  }, [pathname, backHref]);
+
+  // Dynamic back label: use stored previous path (client-side nav) or referrer (full load)
+  const [displayBackLabel, setDisplayBackLabel] = useState(backLabel);
+  useEffect(() => {
+    if (!showBackButton || typeof window === 'undefined') return;
+    const fromPath = sessionStorage.getItem(NAV_FROM_KEY);
+    const ref = document.referrer || '';
+    const label = fromPath
+      ? getBackLabelFromPath(fromPath, backLabel)
+      : ref
+        ? getBackLabelFromPath(ref, backLabel)
+        : backLabel;
+    setDisplayBackLabel(label);
+  }, [showBackButton, backLabel, pathname]);
+
   // Close user menu when clicking outside (must be before early return)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -140,6 +240,17 @@ export function AppHeader({
   }, [showUserMenu]);
 
   const handleCloseLogoutModal = useCallback(() => setShowLogoutModal(false), []);
+  
+  // Back button: always go to previous screen (router.back), fallback to backHref when no history
+  const handleBackClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push(backHref);
+    }
+  }, [router, backHref]);
+
   const handleLogout = useCallback(() => {
     setShowLogoutModal(false);
     setShowUserMenu(false);
@@ -390,13 +501,14 @@ export function AppHeader({
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between md:hidden" style={{ pointerEvents: 'auto' }}>
         <div className="flex items-center gap-2 sm:gap-3">
           {showBackButton && (
-            <Link
-              href={backHref}
+            <button
+              type="button"
+              onClick={handleBackClick}
               className="flex items-center justify-center w-9 h-9 min-w-[36px] min-h-[36px] rounded-full text-[#6B7280] dark:text-[#94A3B8] hover:bg-[#F3F4F6] dark:hover:bg-[#334155] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors shrink-0"
-              aria-label={backLabel}
+              aria-label={displayBackLabel}
             >
               <ArrowLeftIcon className="w-5 h-5" />
-            </Link>
+            </button>
           )}
           <LogoLockup />
         </div>
@@ -414,7 +526,7 @@ export function AppHeader({
                 }
               }}
               className="inline-flex items-center justify-center w-9 h-9 min-w-[36px] min-h-[36px] rounded-full bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
-              aria-label="Download holdings"
+              aria-label={downloadLabel}
             >
               <FileIcon className="w-4 h-4" />
             </button>
@@ -438,12 +550,15 @@ export function AppHeader({
           <LogoLockup />
           
           {showBackButton && (
-            <Link 
-              href={backHref}
+            <button
+              type="button"
+              onClick={handleBackClick}
               className="flex items-center gap-2 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors ml-4 pl-4 border-l border-[#E5E7EB] dark:border-[#334155]"
+              aria-label={displayBackLabel}
             >
-              <span className="text-sm font-medium">{backLabel}</span>
-            </Link>
+              <ArrowLeftIcon className="w-4 h-4 shrink-0" />
+              <span className="text-sm font-medium">{displayBackLabel}</span>
+            </button>
           )}
         </div>
         
@@ -524,10 +639,10 @@ export function AppHeader({
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors cursor-pointer relative z-[60]"
               style={{ pointerEvents: 'auto' }}
               type="button"
-              aria-label="Download holdings"
+              aria-label={downloadLabel}
             >
               <FileIcon className="w-4 h-4" />
-              Download
+              {downloadLabel}
             </button>
           )}
           

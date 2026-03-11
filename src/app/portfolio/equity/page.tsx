@@ -956,6 +956,7 @@ export default function EquityHoldingsPage() {
         backHref="/dashboard"
         backLabel="Back to Dashboard"
         showDownload={true}
+        downloadLabel="Download Stocks"
         onDownload={handleDownload}
       />
 

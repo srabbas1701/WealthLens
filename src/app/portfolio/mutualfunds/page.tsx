@@ -1073,6 +1073,7 @@ export default function MutualFundsPage() {
         backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
         backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
+        downloadLabel="Download Mutual Funds"
         onDownload={handleDownload}
       />
 

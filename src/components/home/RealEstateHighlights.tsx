@@ -46,7 +46,7 @@ export default function RealEstateHighlights() {
           {features.map((feature, i) => (
             <Card
               key={i}
-              className="group bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300"
+              className="group bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300"
             >
               <CardContent className="p-5 sm:p-6">
                 <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">

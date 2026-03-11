@@ -784,6 +784,7 @@ export default function FixedDepositsPage() {
           backHref="/dashboard"
           backLabel="Back to Dashboard"
           showDownload={true}
+          downloadLabel="Download Fixed Deposits"
           onDownload={handleDownload}
         />
 

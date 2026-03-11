@@ -507,6 +507,7 @@ export default function NPSHoldingsPage() {
         backHref="/dashboard"
         backLabel="Back to Dashboard"
         showDownload={holdings.length > 0}
+        downloadLabel="Download NPS"
         onDownload={handleDownload}
       />
 

@@ -309,7 +309,7 @@ export default function HomePage() {
               </p>
               <div className="flex items-center justify-center gap-1.5 mt-1.5 text-xs sm:text-sm">
                 <span className="text-[#2563EB] dark:text-[#3B82F6]">✦</span>
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] font-semibold">AI N</span><span className="text-[#B45309] dark:text-[#D97706] font-semibold">ai</span><span className="bg-clip-text text-transparent bg-gradient-to-r from-[#16A34A] to-[#16A34A] dark:from-[#22C55E] dark:to-[#22C55E] font-semibold">ra - Portfolio Analyst</span>
+                <span><span className="bg-clip-text text-transparent bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] font-semibold">AI N</span><span className="text-[#B45309] dark:text-[#D97706] font-semibold">ai</span><span className="bg-clip-text text-transparent bg-gradient-to-r from-[#16A34A] to-[#16A34A] dark:from-[#22C55E] dark:to-[#22C55E] font-semibold">ra - Portfolio Analyst</span></span>
               </div>
             </div>
           </div>
@@ -354,7 +354,7 @@ export default function HomePage() {
             ].map((problem, i) => (
               <div
                 key={i}
-                className="group p-5 sm:p-6 bg-white dark:bg-[#1E293B] rounded-2xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+                className="group p-5 sm:p-6 bg-white dark:bg-[#1E293B] rounded-2xl border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
               >
                 <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
                   {problem.icon}
@@ -476,7 +476,7 @@ export default function HomePage() {
             ].map((feature, i) => (
               <div
                 key={i}
-                className="group p-5 sm:p-6 bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300"
+                className="group p-5 sm:p-6 bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300"
               >
                 <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
                   {feature.icon}
@@ -509,7 +509,7 @@ export default function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 mb-10 sm:mb-12 md:mb-16 max-w-7xl mx-auto">
 
             {/* Equity & Markets */}
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] transition-all duration-300">
               <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
                 <TrendingUpIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />
               </div>
@@ -518,7 +518,7 @@ export default function HomePage() {
             </div>
 
             {/* Retirement */}
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] transition-all duration-300">
               <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
                 <ShieldCheckIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />
               </div>
@@ -527,7 +527,7 @@ export default function HomePage() {
             </div>
 
             {/* Fixed Income */}
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] transition-all duration-300">
               <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
                 <LayersIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />
               </div>
@@ -536,7 +536,7 @@ export default function HomePage() {
             </div>
 
             {/* Real Assets */}
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300">
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl p-5 border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] transition-all duration-300">
               <div className="w-9 h-9 sm:w-10 sm:h-10 mb-3 flex items-center justify-center">
                 <HomeIcon className="w-7 h-7 text-[#2563EB] dark:text-[#3B82F6]" />
               </div>
@@ -554,7 +554,7 @@ export default function HomePage() {
             {platforms.map((platform) => (
               <div
                 key={platform.name}
-                className="flex flex-col items-center gap-2 p-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all duration-300"
+                className="flex flex-col items-center gap-2 p-4 bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] transition-all duration-300"
               >
                 <Image
                   src={platform.logo}
@@ -598,7 +598,7 @@ export default function HomePage() {
             {faqs.map((faq, i) => (
               <div
                 key={i}
-                className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden"
+                className="bg-white dark:bg-[#1E293B] rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
               >
                 <button
                   onClick={() => toggleFaq(i)}
@@ -636,7 +636,7 @@ export default function HomePage() {
           </div>
 
           <div className="max-w-2xl mx-auto">
-            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg p-6 sm:p-8">
+            <div className="bg-white dark:bg-[#1E293B] rounded-xl sm:rounded-2xl border-2 border-[#E5E7EB] dark:border-[#334155] hover:border-[#16A34A] dark:hover:border-[#22C55E] shadow-lg p-6 sm:p-8 transition-all duration-300">
               <div className="space-y-4 text-[#6B7280] dark:text-[#94A3B8] text-sm sm:text-base leading-relaxed">
                 <p>
                   LensOnWealth is a portfolio tracking and financial clarity tool.

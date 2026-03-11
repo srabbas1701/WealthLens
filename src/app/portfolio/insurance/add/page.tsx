@@ -289,7 +289,7 @@ export default function AddInsurancePage() {
 
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
-      <AppHeader showBackButton={true} backLabel="Back to Insurance" />
+      <AppHeader showBackButton={true} backHref="/portfolio/insurance" backLabel="Back to Insurance" />
 
       <main className="max-w-2xl mx-auto px-6 py-8 pt-24">
         {/* Progress Indicator */}

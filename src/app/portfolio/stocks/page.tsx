@@ -688,6 +688,7 @@ export default function StocksHoldingsPage() {
         backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
         backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
+        downloadLabel="Download Stocks"
         onDownload={() => {
           console.log('[Stocks Page] Direct handler called');
           handleDownload();

@@ -799,6 +799,7 @@ export default function ETFHoldingsPage() {
         backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
         backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
+        downloadLabel="Download ETFs"
         onDownload={handleDownload}
       />
 

@@ -877,6 +877,7 @@ export default function BondsHoldingsPage() {
         backHref="/dashboard"
         backLabel="Back to Dashboard"
         showDownload={true}
+        downloadLabel="Download Bonds"
         onDownload={handleDownload}
       />
 

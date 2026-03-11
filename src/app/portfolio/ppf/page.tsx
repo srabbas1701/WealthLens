@@ -412,6 +412,7 @@ export default function PPFHoldingsPage() {
         backHref="/dashboard"
         backLabel="Back to Dashboard"
         showDownload={true}
+        downloadLabel="Download PPF"
         onDownload={handleDownload}
       />
 
