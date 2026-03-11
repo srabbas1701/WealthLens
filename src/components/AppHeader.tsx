@@ -319,8 +319,8 @@ export function AppHeader({
                 <a href="#features" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
                   Features
                 </a>
-                <a href="#trust" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
-                  Trust
+                <a href="/security" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
+                  Security
                 </a>
                 <a href="#pricing" className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors font-medium">
                   Pricing
