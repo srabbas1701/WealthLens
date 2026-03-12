@@ -70,6 +70,36 @@ export async function POST(req: NextRequest) {
       (u) => u.email === internalEmail
     );
 
+    // Track which email to return as credentials
+    // - Phone-only users: internalEmail (phoneDigits@lensonwealth.app)
+    // - Email-signup users found via public.users: their real email
+    let returnEmail = internalEmail;
+
+    /**
+     * 2b️⃣ If not found by internal email, check public.users by phone_number.
+     *     This handles email-signup users who added an optional phone number.
+     *     Phone in public.users may be stored in different formats (+91..., 91..., 10-digit),
+     *     so match on the last 10 digits to be format-agnostic.
+     */
+    if (!user) {
+      const last10Digits = phoneDigits.slice(-10);
+      const { data: publicUserByPhone } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .like('phone_number', `%${last10Digits}`)
+        .maybeSingle();
+
+      if (publicUserByPhone?.id) {
+        const { data: existingAuthData } = await supabaseAdmin.auth.admin.getUserById(publicUserByPhone.id);
+        if (existingAuthData?.user) {
+          user = existingAuthData.user;
+          // Use their real auth email so signInWithPassword works with their account
+          returnEmail = existingAuthData.user.email || internalEmail;
+          console.log('[phone-login] Found existing email-signup user via public.users phone lookup');
+        }
+      }
+    }
+
     /**
      * 3️⃣ Create user if not exists (SIGNUP)
      */
@@ -86,6 +116,7 @@ export async function POST(req: NextRequest) {
       }
 
       user = newUserData.user;
+      returnEmail = internalEmail;
     }
 
     /**
@@ -124,7 +155,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       credentials: {
-        email: internalEmail,
+        email: returnEmail,
         password: tempPassword,
       },
     });

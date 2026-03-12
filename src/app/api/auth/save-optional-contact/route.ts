@@ -73,6 +73,21 @@ export async function POST(req: NextRequest) {
     if (body.email && (!existingProfile?.email || existingProfile.email?.endsWith('@lensonwealth.app'))) {
       updates.email = body.email;
       console.log('📧 Saving optional email for user:', body.userId);
+
+      // Phone-signup users have auth.users.email = internalEmail@lensonwealth.app.
+      // Update it to the real email immediately so they can log in via magic link.
+      if (isInternalEmail) {
+        const { error: authEmailError } = await supabaseAdmin.auth.admin.updateUserById(body.userId, {
+          email: body.email,
+          email_confirm: true,
+        });
+        if (authEmailError) {
+          console.warn('⚠️ Could not update auth.users email:', authEmailError.message);
+          // Non-fatal: public.users still gets updated
+        } else {
+          console.log('✅ Updated auth.users.email to real email for phone-signup user:', body.userId);
+        }
+      }
     }
 
     if (!existingProfile) {

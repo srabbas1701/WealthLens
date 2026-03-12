@@ -582,6 +582,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
+          shouldCreateUser: false,
         },
       });
       

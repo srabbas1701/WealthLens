@@ -366,7 +366,21 @@ function LoginContent() {
         setIsLoading(false);
         return;
       }
-      
+
+      // Check if phone number is registered before sending OTP
+      // Prevents sending OTP to unregistered numbers
+      const checkRes = await fetch('/api/auth/check-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'phone', value: fullPhone }),
+      });
+      const checkData = await checkRes.json();
+      if (!checkData.exists) {
+        setError('No account found with this number. Please sign up first.');
+        setIsLoading(false);
+        return;
+      }
+
       // ===============================
       // SUPABASE PHONE OTP (DISABLED)
       // Reason: DLT issues in India
