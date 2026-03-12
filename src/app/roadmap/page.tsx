@@ -1,12 +1,13 @@
 /**
- * LensOnWealth Roadmap - Simple Single-Page Version
- * 
+ * LensOnWealth Roadmap
+ *
  * Clean, straightforward roadmap showing actual product status
  * Fully responsive, dark/light mode compatible
  */
 
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { AppHeader } from '@/components/AppHeader';
 import { LogoLockup } from '@/components/LogoLockup';
@@ -14,79 +15,124 @@ import { FeatureRequestModal } from '@/components/FeatureRequestModal';
 import { FooterContactWithFeedback } from '@/components/FooterContactWithFeedback';
 
 export default function RoadmapPage() {
-  // Simple roadmap data structure
   const roadmapSections = [
     {
       title: "What's Already Live",
-      subtitle: "Q4 2025",
       status: "launched",
+      badge: "Live",
+      badgeColor: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400",
       icon: "✅",
       features: [
+        // Uploads & Data
+        "Demo Mode — Try Without Signing Up",
         "Multi-Platform CSV Upload",
-        "Automatic ISIN Resolution (95%+ accuracy!)",
-        "Daily NAV Updates",
-        "EPF, NPS, PPF Tracking",
-        "Complete Asset Allocation",
-        "Dark & Light mode",
+        "Daily NAV & Market Price Updates",
+        // Asset Classes
+        "Direct Equity (Stocks) Tracking",
+        "Mutual Funds with XIRR Calculations",
+        "ETF Portfolio Tracking",
+        "Bonds & Fixed Income",
+        "Fixed Deposits (FD) Management",
+        "PPF, EPF & NPS Tracking",
+        "Gold & Precious Metals",
+        "Cash & Liquidity Positions",
+        "Insurance Policy Management & Coverage Alerts",
+        "Liabilities: Loans, Credit Cards & EMI Tracking",
+        "Real Estate with Rental Income & Loan Management",
+        "Real Estate Co-Ownership Tracking",
+        // Portfolio & Net Worth
+        "Unified Net Worth Dashboard",
         "Portfolio Health Score",
-        "AI Portfolio Analyst (ask questions in natural language!)",
-        "Advanced Analytics (Sector, Market cap, Geography)"
-      ]
+        "Net Worth Timeline & History",
+        "Credit Health Score",
+        // Analytics
+        "Complete Asset Allocation View",
+        "Sector Exposure Analysis",
+        "Market Cap Analysis (Large / Mid / Small Cap)",
+        "Geography Diversification",
+        "Mutual Fund X-Ray",
+        "Stability Analytics",
+        "Scenario Impact Analysis (Market Drawdown, Sector Shock, Rate Shock)",
+        "Property Sell / Hold Simulation",
+        // AI Features
+        <>AI N<span className="text-[#2563EB] dark:text-[#3B82F6] font-semibold">ai</span>ra — Ask Questions in Natural Language</>,
+        "Daily AI Portfolio Summary",
+        "Weekly AI Portfolio Insights",
+        // Downloads
+        "PDF Downloads (Holdings, Net Worth Statement)",
+      ] as React.ReactNode[],
     },
     {
       title: "Coming Very Soon",
-      subtitle: "Q1 2025",
       status: "in-progress",
+      badge: "In Progress",
+      badgeColor: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400",
       icon: "🚧",
       features: [
-        "Property & Related Income",
-        "Tax optimization reports",
-        "Financial goals tracking",
-        "Advanced XIRR calculations",
-        "Downloads"
-      ]
+        "Property & Related Income Tracking",
+        "Tax Optimization Reports",
+        "Financial Goals Tracking",
+        "Advanced XIRR Calculations",
+        "More Download & Export Options",
+      ],
     },
     {
       title: "Exciting Future",
-      subtitle: "Q3-Q4 2025",
       status: "planned",
+      badge: "Planned",
+      badgeColor: "bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400",
       icon: "📋",
       features: [
-        "Native mobile apps (iOS & Android)",
-        "Enhanced bonds & fixed income",
-        "Scenario analysis",
-        "Family portfolio management",
-        "Direct API integrations (Zerodha, Groww)"
-      ]
+        "Native Mobile Apps (iOS & Android)",
+        "Enhanced Bonds & Fixed Income",
+        "Scenario Analysis",
+        "Family Portfolio Management",
+        "Direct API Integrations (Zerodha, Groww)",
+      ],
     },
     {
       title: "Innovation",
-      subtitle: "2026+",
       status: "exploring",
+      badge: "Exploring",
+      badgeColor: "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400",
       icon: "🔍",
       features: [
-        "Cryptocurrency tracking",
-        "Financial advisor marketplace",
-        "Automated rebalancing",
-        "Social features",
-        "International markets"
-      ]
-    }
+        "Cryptocurrency Tracking",
+        "Financial Advisor Marketplace",
+        "Automated Rebalancing",
+        "Social Features",
+        "International Markets",
+      ],
+    },
   ];
 
-  // Status color mapping with explicit dark/light mode colors
-  const getStatusColor = (status: string) => {
+  const getSectionStyle = (status: string) => {
     switch (status) {
       case 'launched':
-        return 'border-[#10B981]/20 dark:border-[#22C55E]/20 bg-[#DCFCE7]/50 dark:bg-[#16A34A]/10';
+        return 'border-emerald-200 dark:border-emerald-800/30 bg-emerald-50/50 dark:bg-emerald-950/10';
       case 'in-progress':
-        return 'border-[#2563EB]/20 dark:border-[#3B82F6]/20 bg-[#EFF6FF]/50 dark:bg-[#1E3A8A]/20';
+        return 'border-blue-200 dark:border-blue-800/30 bg-blue-50/50 dark:bg-blue-950/10';
       case 'planned':
-        return 'border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#0F172A]';
+        return 'border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B]';
       case 'exploring':
-        return 'border-[#E5E7EB] dark:border-[#334155] bg-[#EFF6FF] dark:bg-[#1E293B]';
+        return 'border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B]';
       default:
         return 'border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B]';
+    }
+  };
+
+  const getHoverStyle = (status: string) => {
+    switch (status) {
+      case 'launched':
+        return 'hover:border-emerald-400 dark:hover:border-emerald-600 hover:shadow-md';
+      case 'in-progress':
+        return 'hover:border-blue-400 dark:hover:border-blue-600 hover:shadow-md';
+      case 'planned':
+        return 'hover:border-[#2563EB]/40 dark:hover:border-[#3B82F6]/40 hover:shadow-md';
+      case 'exploring':
+        return 'hover:border-violet-400 dark:hover:border-violet-600 hover:shadow-md';
+      default:
+        return 'hover:border-[#2563EB]/40 dark:hover:border-[#3B82F6]/40 hover:shadow-md';
     }
   };
 
@@ -94,111 +140,95 @@ export default function RoadmapPage() {
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader />
 
-      {/* Hero Section */}
-      <section className="pt-24 pb-16 sm:pt-28 sm:pb-20 md:pt-32 md:pb-24">
-        <div className="container mx-auto px-4 sm:px-6 max-w-4xl">
-          <div className="text-center mb-12 sm:mb-16">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4 sm:mb-6 leading-tight tracking-tight">
+      {/* Page Header */}
+      <header className="bg-gradient-to-br from-blue-50 via-emerald-50/50 to-[#F6F8FB] dark:from-blue-950/20 dark:via-emerald-950/10 dark:to-[#0F172A] border-b border-[#E5E7EB] dark:border-[#334155]">
+        <div className="container mx-auto px-6 py-16">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-100 dark:bg-blue-950/30 rounded-full mb-6">
+              <span className="text-4xl">🗺️</span>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
               Product Roadmap
             </h1>
-            <p className="text-lg sm:text-xl md:text-2xl text-[#6B7280] dark:text-[#94A3B8] mb-4 sm:mb-6 max-w-3xl mx-auto">
-              See what we're building to give you complete clarity on your wealth
+            <p className="text-lg text-[#6B7280] dark:text-[#94A3B8] max-w-2xl mx-auto">
+              See what we've built, what's in progress, and where we're headed next — built with
+              Indian investors in mind.
             </p>
-            <div className="w-24 h-1 bg-gradient-to-r from-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:to-[#22C55E] mx-auto rounded-full"></div>
           </div>
         </div>
-      </section>
+      </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 sm:px-6 pb-12 sm:pb-16 md:pb-20">
-        <div className="max-w-5xl mx-auto">
-          
-          {/* Roadmap Grid */}
-          <div className="grid gap-8 md:gap-12">
-            {roadmapSections.map((section, index) => (
-              <section 
-                key={section.title}
-                className={`
-                  p-8 md:p-10 rounded-2xl border-2 transition-all duration-300
-                  ${getStatusColor(section.status)}
-                `}
-              >
-                
-                {/* Section Header */}
-                <div className="mb-8">
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-4xl">{section.icon}</span>
-                    <div>
-                      <h2 className="text-2xl md:text-3xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
-                        {section.title}
-                      </h2>
-                      <p className="text-[#6B7280] dark:text-[#94A3B8] font-medium">
-                        {section.subtitle}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+      <main className="container mx-auto px-6 py-12">
+        <div className="max-w-4xl mx-auto space-y-8">
 
-                {/* Features List */}
-                <div className="grid gap-4 md:grid-cols-2">
-                  {section.features.map((feature, fIndex) => (
-                    <div 
-                      key={fIndex}
-                      className="flex items-start gap-3 p-4 rounded-lg bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] hover:border-[#2563EB]/50 dark:hover:border-[#3B82F6]/50 transition-all duration-300 hover:shadow-md"
-                    >
-                      <span className="text-xl flex-shrink-0 mt-0.5">
-                        {section.icon}
-                      </span>
-                      <span className="text-[#0F172A] dark:text-[#F8FAFC] font-medium leading-relaxed">
-                        {feature}
-                      </span>
-                    </div>
-                  ))}
+          {roadmapSections.map((section) => (
+            <section
+              key={section.title}
+              className={`rounded-xl border p-6 md:p-8 transition-all duration-300 ${getSectionStyle(section.status)} ${getHoverStyle(section.status)}`}
+            >
+              {/* Section Header */}
+              <div className="flex items-center justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">{section.icon}</span>
+                  <h2 className="text-xl md:text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+                    {section.title}
+                  </h2>
                 </div>
+                <span className={`flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full ${section.badgeColor}`}>
+                  {section.badge}
+                </span>
+              </div>
 
-              </section>
-            ))}
-          </div>
+              {/* Features List */}
+              <ul className="grid sm:grid-cols-2 gap-x-8 gap-y-2">
+                {section.features.map((feature, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm text-[#6B7280] dark:text-[#94A3B8]"
+                  >
+                    <span className="flex-shrink-0 mt-0.5">{section.icon}</span>
+                    <span className="leading-relaxed">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+
+          {/* Feature Request */}
+          <section className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-xl p-8 text-center transition-all duration-300 hover:border-[#2563EB]/40 dark:hover:border-[#3B82F6]/40 hover:shadow-md">
+            <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
+              Have a Feature Request?
+            </h2>
+            <p className="text-[#6B7280] dark:text-[#94A3B8] mb-6 max-w-xl mx-auto">
+              We're building LensOnWealth for you. Share your ideas and help us prioritize what
+              matters most to Indian investors.
+            </p>
+            <FeatureRequestModal />
+          </section>
+
+          {/* Disclaimer Note */}
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] text-center pb-4">
+            This roadmap is subject to change based on user feedback and priorities. Timelines are
+            approximate. Features marked as "Exploring" are under consideration.
+          </p>
 
         </div>
       </main>
 
-      {/* Footer CTA */}
-      <section className="py-16 md:py-24 bg-gradient-to-br from-[#2563EB] via-[#2563EB] to-[#16A34A] dark:from-[#3B82F6] dark:via-[#3B82F6] dark:to-[#22C55E]">
-        <div className="container mx-auto px-4 sm:px-6 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
-            Have a Feature Request?
-          </h2>
-          <p className="text-lg md:text-xl text-white/90 mb-8 max-w-2xl mx-auto">
-            We're building LensOnWealth for you. Share your ideas and help us prioritize 
-            what matters most to Indian investors.
-          </p>
-          <FeatureRequestModal />
-        </div>
-      </section>
-
-      {/* Simple Footer Note */}
-      <div className="bg-[#F6F8FB] dark:bg-[#0F172A] border-t border-[#E5E7EB] dark:border-[#334155]">
-        <div className="container mx-auto px-4 sm:px-6 py-8">
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] text-center max-w-3xl mx-auto">
-            This roadmap is subject to change based on user feedback and priorities. 
-            Timelines are approximate. Features marked as "Exploring" are under consideration.
-          </p>
-        </div>
-      </div>
-
       {/* Footer */}
-      <footer className="bg-[#F6F8FB] dark:bg-[#0F172A] border-t border-[#E5E7EB] dark:border-[#334155]">
+      <footer className="bg-[#F6F8FB] dark:bg-[#0F172A] border-t border-[#E5E7EB] dark:border-[#334155] mt-12">
         <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6 sm:gap-8">
-            
+
             {/* Column 1: Brand & Description */}
             <div className="lg:col-span-2">
               <div className="flex items-center gap-2 mb-3">
                 <LogoLockup linkToHome={true} showTagline={true} iconSize="w-12 h-12" />
               </div>
               <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] mb-4 max-w-sm">
-                Your clear view of complete wealth. Track stocks, mutual funds, and ETFs from all platforms in one unified dashboard.
+                Your clear view of complete wealth. Track stocks, mutual funds, and ETFs from all
+                platforms in one unified dashboard.
               </p>
             </div>
 
@@ -249,13 +279,13 @@ export default function RoadmapPage() {
                 © {new Date().getFullYear()} LensOnWealth. Built with ❤️ in India for Indian investors.
               </p>
               <p className="text-[#6B7280] dark:text-[#94A3B8] text-xs leading-tight">
-                <strong className="text-[#6B7280] dark:text-[#94A3B8]">Disclaimer:</strong> This is an educational portfolio tracking tool. 
+                <strong className="text-[#6B7280] dark:text-[#94A3B8]">Disclaimer:</strong> This is an educational portfolio tracking tool.
                 We do not provide investment advice, recommendations, or tips. This is a read-only platform—we never execute trades or modify your data.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center md:justify-end text-xs text-[#6B7280] dark:text-[#94A3B8]">
-              <span>🔒 Data stored in India</span>
-              <span>📊 AMFI verified</span>
+              <span>🔒 Core data stored in India</span>
+              <span>🚫 Zero Trade Execution</span>
               <span>🇮🇳 Made in India</span>
             </div>
           </div>

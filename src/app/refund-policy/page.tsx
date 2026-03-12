@@ -20,7 +20,7 @@ import { FooterContactWithFeedback } from '@/components/FooterContactWithFeedbac
 /**
  * Refund Policy - LensOnWealth
  * SaaS personal finance tracking software - India
- * Last updated: February 20, 2026
+ * Last updated: March 12, 2026
  */
 
 export default function RefundPolicyPage() {
@@ -40,7 +40,7 @@ export default function RefundPolicyPage() {
             </h1>
             <p className="text-[#6B7280] dark:text-[#94A3B8] flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Last updated: February 20, 2026
+              Last updated: March 12, 2026
             </p>
           </div>
         </div>
@@ -143,7 +143,7 @@ export default function RefundPolicyPage() {
             </span>
             Refund Processing Time
           </h2>
-          <div className="flex gap-4 p-6 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30">
+          <div className="flex gap-4 p-6 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 transition-all duration-300 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md">
             <Clock className="w-8 h-8 text-blue-600 dark:text-blue-400 flex-shrink-0" />
             <div>
               <p className="text-[#0F172A] dark:text-[#F8FAFC] font-semibold mb-2">
@@ -268,7 +268,7 @@ export default function RefundPolicyPage() {
             </span>
             Contact
           </h2>
-          <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-xl p-6 shadow-sm">
+          <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-xl p-6 shadow-sm transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
             <div className="flex items-center gap-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50">
               <div className="p-2 rounded-lg bg-emerald-500/10">
                 <Mail className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
@@ -369,8 +369,8 @@ export default function RefundPolicyPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center md:justify-end text-xs text-[#6B7280] dark:text-[#94A3B8]">
-              <span>🔒 Data stored in India</span>
-              <span>📊 AMFI verified</span>
+              <span>🔒 Core data stored in India</span>
+              <span>🚫 Zero Trade Execution</span>
               <span>🇮🇳 Made in India</span>
             </div>
           </div>

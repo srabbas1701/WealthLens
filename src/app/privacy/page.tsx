@@ -29,7 +29,7 @@ import { FooterContactWithFeedback } from '@/components/FooterContactWithFeedbac
 
 /**
  * Privacy Policy - LensOnWealth
- * Last updated: February 20, 2026
+ * Last updated: March 12, 2026
  */
 
 export default function PrivacyPolicyPage() {
@@ -49,7 +49,7 @@ export default function PrivacyPolicyPage() {
             </h1>
             <p className="text-[#6B7280] dark:text-[#94A3B8] flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Last updated: February 20, 2026
+              Last updated: March 12, 2026
             </p>
           </div>
         </div>
@@ -85,16 +85,16 @@ export default function PrivacyPolicyPage() {
               </h3>
 
               <div className="space-y-4">
-                <div className="p-4 rounded-lg bg-violet-50/50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30">
+                <div className="p-4 rounded-lg bg-violet-50/50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30 transition-all duration-300 hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md">
                   <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Account Information:</p>
                   <ul className="space-y-1 text-[#6B7280] dark:text-[#94A3B8] text-sm">
                     <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> Name</li>
                     <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> Email address</li>
-                    <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> Encrypted password</li>
+                    <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> Phone number (for OTP authentication)</li>
                   </ul>
                 </div>
 
-                <div className="p-4 rounded-lg bg-violet-50/50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30">
+                <div className="p-4 rounded-lg bg-violet-50/50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30 transition-all duration-300 hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md">
                   <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">User-Uploaded Data:</p>
                   <ul className="space-y-1 text-[#6B7280] dark:text-[#94A3B8] text-sm">
                     <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> Financial records uploaded voluntarily via CSV files</li>
@@ -103,7 +103,7 @@ export default function PrivacyPolicyPage() {
                   </ul>
                 </div>
 
-                <div className="p-4 rounded-lg bg-violet-50/50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30">
+                <div className="p-4 rounded-lg bg-violet-50/50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30 transition-all duration-300 hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md">
                   <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Optional Profile Information:</p>
                   <ul className="space-y-1 text-[#6B7280] dark:text-[#94A3B8] text-sm">
                     <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> Preferences</li>
@@ -201,15 +201,15 @@ export default function PrivacyPolicyPage() {
             ))}
           </ul>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/30 text-center">
+            <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/30 text-center transition-all duration-300 hover:border-emerald-400 dark:hover:border-emerald-600 hover:shadow-md">
               <Ban className="w-6 h-6 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
               <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">No Advertising</p>
             </div>
-            <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/30 text-center">
+            <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/30 text-center transition-all duration-300 hover:border-emerald-400 dark:hover:border-emerald-600 hover:shadow-md">
               <Ban className="w-6 h-6 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
               <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">No Data Sales</p>
             </div>
-            <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/30 text-center">
+            <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/30 text-center transition-all duration-300 hover:border-emerald-400 dark:hover:border-emerald-600 hover:shadow-md">
               <Ban className="w-6 h-6 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
               <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">No Profiling</p>
             </div>
@@ -237,9 +237,9 @@ export default function PrivacyPolicyPage() {
               <div className="flex gap-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/20 border-l-4 border-blue-500 dark:border-blue-400">
                 <MapPin className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                 <div className="text-[#6B7280] dark:text-[#94A3B8]">
-                  <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Your data is stored on secure cloud infrastructure located in India.</p>
+                  <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Your core financial data is stored on secure cloud infrastructure located in India.</p>
                   <p className="text-sm">
-                    We do not transfer personal data outside India except where required for essential service providers (such as email delivery), and such providers are contractually obligated to protect your information.
+                    When you use the AI Portfolio Analyst feature, queries are processed through OpenAI's secured cloud services solely to generate your analysis — data is not used for model training. For email delivery, we use Resend. Both providers are contractually obligated to protect your information.
                   </p>
                 </div>
               </div>
@@ -252,9 +252,9 @@ export default function PrivacyPolicyPage() {
               </h3>
               <ul className="space-y-2 text-[#6B7280] dark:text-[#94A3B8] mb-4">
                 {[
-                  'Encryption of data in transit',
-                  'Encrypted storage of sensitive fields',
-                  'Hashed passwords',
+                  'Encryption of data in transit (TLS 1.3)',
+                  'Encrypted storage of sensitive fields (AES-256)',
+                  'OTP-based authentication (no passwords stored)',
                   'Access controls',
                   'Audit logging',
                   'Regular backups',
@@ -289,10 +289,10 @@ export default function PrivacyPolicyPage() {
               </p>
               <ul className="space-y-2 text-[#6B7280] dark:text-[#94A3B8] mb-4">
                 {[
-                  'Cloud hosting',
-                  'Email notifications',
-                  'Payment processing',
-                  'Anonymous usage analytics',
+                  'Cloud hosting (servers in India)',
+                  'Email notifications (Resend)',
+                  'Payment processing (Razorpay)',
+                  'AI-powered analysis (OpenAI) — Portfolio Analyst feature only, not used for model training',
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <CheckCircle2 className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
@@ -338,25 +338,25 @@ export default function PrivacyPolicyPage() {
           </h2>
           <p className="text-[#6B7280] dark:text-[#94A3B8] mb-6">You may:</p>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex items-start gap-4 p-4 rounded-lg bg-teal-50/50 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/30">
+            <div className="flex items-start gap-4 p-4 rounded-lg bg-teal-50/50 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/30 transition-all duration-300 hover:border-teal-300 dark:hover:border-teal-700 hover:shadow-md">
               <Eye className="w-6 h-6 text-teal-600 dark:text-teal-400 flex-shrink-0" />
               <div>
                 <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Access your data</p>
               </div>
             </div>
-            <div className="flex items-start gap-4 p-4 rounded-lg bg-teal-50/50 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/30">
+            <div className="flex items-start gap-4 p-4 rounded-lg bg-teal-50/50 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/30 transition-all duration-300 hover:border-teal-300 dark:hover:border-teal-700 hover:shadow-md">
               <Edit3 className="w-6 h-6 text-teal-600 dark:text-teal-400 flex-shrink-0" />
               <div>
                 <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Modify your records</p>
               </div>
             </div>
-            <div className="flex items-start gap-4 p-4 rounded-lg bg-teal-50/50 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/30">
+            <div className="flex items-start gap-4 p-4 rounded-lg bg-teal-50/50 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/30 transition-all duration-300 hover:border-teal-300 dark:hover:border-teal-700 hover:shadow-md">
               <Download className="w-6 h-6 text-teal-600 dark:text-teal-400 flex-shrink-0" />
               <div>
                 <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Export your data</p>
               </div>
             </div>
-            <div className="flex items-start gap-4 p-4 rounded-lg bg-teal-50/50 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/30">
+            <div className="flex items-start gap-4 p-4 rounded-lg bg-teal-50/50 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/30 transition-all duration-300 hover:border-teal-300 dark:hover:border-teal-700 hover:shadow-md">
               <Trash2 className="w-6 h-6 text-teal-600 dark:text-teal-400 flex-shrink-0" />
               <div>
                 <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">Request deletion of your account</p>
@@ -466,7 +466,7 @@ export default function PrivacyPolicyPage() {
             </span>
             Contact
           </h2>
-          <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-xl p-6 shadow-sm">
+          <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-xl p-6 shadow-sm transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex items-center gap-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50">
                 <div className="p-2 rounded-lg bg-[#2563EB]/10">
@@ -507,7 +507,7 @@ export default function PrivacyPolicyPage() {
         <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/30 rounded-xl p-6 text-center">
           <CheckCircle2 className="w-12 h-12 text-emerald-500 dark:text-emerald-400 mx-auto mb-3" />
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-2">
-            This Privacy Policy is effective as of February 20, 2026. By using LensOnWealth, you acknowledge that you have read and understood this Privacy Policy.
+            This Privacy Policy is effective as of March 12, 2026. By using LensOnWealth, you acknowledge that you have read and understood this Privacy Policy.
           </p>
         </div>
       </main>
@@ -566,8 +566,8 @@ export default function PrivacyPolicyPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center md:justify-end text-xs text-[#6B7280] dark:text-[#94A3B8]">
-              <span>🔒 Data stored in India</span>
-              <span>📊 AMFI verified</span>
+              <span>🔒 Core data stored in India</span>
+              <span>🚫 Zero Trade Execution</span>
               <span>🇮🇳 Made in India</span>
             </div>
           </div>

@@ -21,7 +21,7 @@ import { FooterContactWithFeedback } from '@/components/FooterContactWithFeedbac
 
 /**
  * Terms of Service - LensOnWealth
- * Last updated: February 20, 2026
+ * Last updated: March 12, 2026
  */
 
 export default function TermsOfServicePage() {
@@ -41,7 +41,7 @@ export default function TermsOfServicePage() {
             </h1>
             <p className="text-[#6B7280] dark:text-[#94A3B8] flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Last updated: February 20, 2026
+              Last updated: March 12, 2026
             </p>
           </div>
         </div>
@@ -85,6 +85,7 @@ export default function TermsOfServicePage() {
               'Track historical values of assets',
               'Generate informational reports and summaries',
               'View allocation breakdowns across asset categories',
+              'Use AI-powered portfolio analysis (informational only; powered by a third-party AI service)',
             ].map((item, i) => (
               <li key={i} className="flex items-start gap-3 text-[#6B7280] dark:text-[#94A3B8]">
                 <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
@@ -106,6 +107,7 @@ export default function TermsOfServicePage() {
                 'We do NOT provide financial, tax, or legal advice',
                 'We do NOT manage or move customer funds',
                 'We do NOT connect directly to brokerage accounts',
+                'AI-generated insights are informational only and do not constitute financial advice',
                 'Users upload data voluntarily for record-keeping purposes',
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
@@ -394,7 +396,7 @@ export default function TermsOfServicePage() {
             </span>
             Limitation of Liability
           </h2>
-          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30 p-6 rounded-lg">
+          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30 p-6 rounded-lg transition-all duration-300 hover:border-amber-400 dark:hover:border-amber-600 hover:shadow-md">
             <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
               To the maximum extent permitted by law:
             </p>
@@ -462,7 +464,7 @@ export default function TermsOfServicePage() {
             </span>
             Contact
           </h2>
-          <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-xl p-6 shadow-sm">
+          <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-xl p-6 shadow-sm transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex items-center gap-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50">
                 <div className="p-2 rounded-lg bg-[#2563EB]/10">
@@ -507,7 +509,7 @@ export default function TermsOfServicePage() {
             Terms of Service.
           </p>
           <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
-            Effective Date: February 20, 2026
+            Effective Date: March 12, 2026
           </p>
         </div>
       </main>
@@ -566,8 +568,8 @@ export default function TermsOfServicePage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center md:justify-end text-xs text-[#6B7280] dark:text-[#94A3B8]">
-              <span>🔒 Data stored in India</span>
-              <span>📊 AMFI verified</span>
+              <span>🔒 Core data stored in India</span>
+              <span>🚫 Zero Trade Execution</span>
               <span>🇮🇳 Made in India</span>
             </div>
           </div>

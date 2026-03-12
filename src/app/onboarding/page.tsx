@@ -922,7 +922,7 @@ export default function OnboardingPage() {
         {['welcome', 'category_selection', 'setup_queue', 'add_method', 'summary'].includes(currentStep) ? (
           <div className="container mx-auto px-4 sm:px-6 py-2">
             <p className="text-center text-xs text-[#6B7280] dark:text-[#94A3B8]">
-              © {new Date().getFullYear()} LensOnWealth · <Link href="/privacy" className="hover:text-[#0F172A] dark:hover:text-[#F8FAFC]">Privacy</Link> · <Link href="/terms" className="hover:text-[#0F172A] dark:hover:text-[#F8FAFC]">Terms</Link> · 🔒 Data stored in India
+              © {new Date().getFullYear()} LensOnWealth · <Link href="/privacy" className="hover:text-[#0F172A] dark:hover:text-[#F8FAFC]">Privacy</Link> · <Link href="/terms" className="hover:text-[#0F172A] dark:hover:text-[#F8FAFC]">Terms</Link> · 🔒 Core data stored in India
             </p>
           </div>
         ) : (
@@ -986,7 +986,7 @@ export default function OnboardingPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center md:justify-end text-xs text-[#6B7280] dark:text-[#94A3B8]">
-              <span>🔒 Data stored in India</span>
+              <span>🔒 Core data stored in India</span>
               <span>🇮🇳 Made in India</span>
             </div>
           </div>

@@ -9,7 +9,7 @@ import { FooterContactWithFeedback } from '@/components/FooterContactWithFeedbac
  * Security - LensOnWealth
  * 
  * Comprehensive security information and best practices
- * Last updated: January 2025
+ * Last updated: March 2026
  */
 
 export default function SecurityPage() {
@@ -17,58 +17,49 @@ export default function SecurityPage() {
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader />
 
-      {/* Header */}
-      <header className="bg-gradient-to-br from-blue-50 via-emerald-50/50 to-[#F6F8FB] dark:from-blue-950/20 dark:via-emerald-950/10 dark:to-[#0F172A] border-b border-[#E5E7EB] dark:border-[#334155]">
-        <div className="container mx-auto px-6 py-16">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-emerald-100 dark:bg-emerald-950/30 rounded-full mb-6">
-              <span className="text-4xl">🔒</span>
-            </div>
-            <h1 className="text-4xl md:text-5xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-4">
-              Bank-Grade Security
+      <main className="max-w-4xl mx-auto px-6 py-8 pt-24">
+
+        {/* Page Header */}
+        <div className="mb-8 flex items-start gap-4">
+          <div className="flex-shrink-0 p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+            <span className="text-2xl">🔒</span>
+          </div>
+          <div>
+            <h1 className="text-4xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Security
             </h1>
-            <p className="text-lg text-[#6B7280] dark:text-[#94A3B8] max-w-2xl mx-auto">
-              Your financial data is protected with enterprise-level security measures. 
-              Here's exactly how we keep your wealth information safe.
+            <p className="text-[#6B7280] dark:text-[#94A3B8]">
+              Your financial data is protected with enterprise-level security measures.
             </p>
           </div>
         </div>
-      </header>
 
-      {/* Key Security Highlights */}
-      <section className="py-16 bg-[#F6F8FB] dark:bg-[#0F172A]">
-        <div className="container mx-auto px-6">
-          <div className="max-w-6xl mx-auto">
-            <div className="grid md:grid-cols-3 gap-8">
-              <div className="text-center p-6 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg">
-                <div className="text-4xl mb-4">🇮🇳</div>
-                <h3 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Data in India</h3>
-                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                  All your data stored on secure Indian servers, never leaves the country
-                </p>
-              </div>
-              <div className="text-center p-6 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg">
-                <div className="text-4xl mb-4">🔐</div>
-                <h3 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">256-bit Encryption</h3>
-                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                  Same military-grade encryption used by banks and governments
-                </p>
-              </div>
-              <div className="text-center p-6 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg">
-                <div className="text-4xl mb-4">🚫</div>
-                <h3 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Zero Broker Access</h3>
-                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                  We never ask for or store your broker passwords - CSV only
-                </p>
-              </div>
-            </div>
+        {/* Key Security Highlights */}
+        <div className="grid md:grid-cols-3 gap-6 mb-10">
+          <div className="text-center p-6 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
+            <div className="text-4xl mb-4">🇮🇳</div>
+            <h3 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Hosted in India</h3>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+              Core financial data stored on secure cloud servers in Mumbai, India
+            </p>
+          </div>
+          <div className="text-center p-6 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
+            <div className="text-4xl mb-4">🔐</div>
+            <h3 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">256-bit Encryption</h3>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+              Same military-grade encryption used by banks and governments
+            </p>
+          </div>
+          <div className="text-center p-6 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
+            <div className="text-4xl mb-4">🚫</div>
+            <h3 className="text-xl font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Zero Broker Access</h3>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+              We never ask for or store your broker passwords: CSV uploads only
+            </p>
           </div>
         </div>
-      </section>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-6 py-12">
-        <div className="max-w-4xl mx-auto">
+        <div>
 
           {/* Section 1: Data Encryption */}
           <section className="mb-16">
@@ -77,7 +68,7 @@ export default function SecurityPage() {
             </h2>
 
             <div className="space-y-6">
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3 flex items-center gap-2">
                   <span>🔒</span> Encryption at Rest
                 </h3>
@@ -87,19 +78,19 @@ export default function SecurityPage() {
                 </p>
                 <ul className="text-sm text-[#6B7280] dark:text-[#94A3B8] space-y-2">
                   <li>✓ Portfolio holdings, transaction history, and personal information</li>
-                  <li>✓ Passwords hashed with bcrypt (industry standard, one-way encryption)</li>
+                  <li>✓ Authentication tokens managed securely by Supabase (signed JWTs, industry-standard)</li>
                   <li>✓ Encryption keys stored separately from data (defense in depth)</li>
                   <li>✓ Regular key rotation following best practices</li>
                 </ul>
               </div>
 
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3 flex items-center gap-2">
                   <span>🌐</span> Encryption in Transit
                 </h3>
                 <p className="text-[#6B7280] dark:text-[#94A3B8] mb-4">
                   All communication between your device and our servers uses <strong className="text-[#0F172A] dark:text-[#F8FAFC]">TLS 1.3</strong> 
-                  (Transport Layer Security) - the latest and most secure protocol.
+                  (Transport Layer Security)-the latest and most secure protocol.
                 </p>
                 <ul className="text-sm text-[#6B7280] dark:text-[#94A3B8] space-y-2">
                   <li>✓ HTTPS enforced on all pages (no unencrypted HTTP)</li>
@@ -118,11 +109,12 @@ export default function SecurityPage() {
             </h2>
 
             <div className="bg-emerald-50 dark:bg-emerald-950/20 border-l-4 border-emerald-500 dark:border-emerald-400 p-6 rounded-r-lg mb-6">
-              <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Your Data Stays in India</h3>
+              <h3 className="font-bold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Core Data Stored in India</h3>
               <p className="text-[#6B7280] dark:text-[#94A3B8] mb-0">
-                All your financial data is stored on secure cloud servers located in India. 
-                We comply with Indian data protection regulations and never transfer your 
-                personal or financial data outside India.
+                Your portfolio, transactions, and personal data are stored on secure cloud servers
+                in Mumbai, India. AI-powered features process queries through
+                internationally secured cloud services (OpenAI) solely to generate your analysis —
+                no data is retained or used for training by those services.
               </p>
             </div>
 
@@ -130,25 +122,25 @@ export default function SecurityPage() {
               Infrastructure Details
             </h3>
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-5">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-5 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">☁️ Cloud Provider</h4>
                 <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
                   Enterprise-grade cloud hosting with SOC 2 Type II certification
                 </p>
               </div>
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-5">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-5 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">📍 Server Location</h4>
                 <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                  Mumbai & Bangalore data centers (India) with 99.9% uptime SLA
+                  Secure cloud infrastructure in Mumbai, India — enterprise-grade uptime SLA
                 </p>
               </div>
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-5">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-5 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">💾 Backup Strategy</h4>
                 <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                  Daily encrypted backups with 30-day retention and disaster recovery
+                  Daily encrypted backups managed by Supabase; retention scales with plan tier
                 </p>
               </div>
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-5">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-5 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">🔄 Redundancy</h4>
                 <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
                   Multi-zone replication for high availability and fault tolerance
@@ -166,28 +158,28 @@ export default function SecurityPage() {
             <div className="space-y-6">
               <div>
                 <h3 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
-                  User Authentication
+                  Passwordless Authentication
                 </h3>
+                <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-3">
+                  LensOnWealth uses <strong className="text-[#0F172A] dark:text-[#F8FAFC]">passwordless OTP authentication</strong> —
+                  you never create or store a password, so there's nothing to steal, phish, or breach.
+                </p>
                 <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
                   <li>
-                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Secure Password Requirements:</strong> Minimum 
-                    8 characters with complexity requirements
+                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Phone OTP:</strong> One-time code sent to your
+                    verified mobile number, expires after a single use
                   </li>
                   <li>
-                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Password Hashing:</strong> Bcrypt algorithm 
-                    with salt (industry standard, irreversible)
+                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Email OTP / Magic Link:</strong> Secure one-time
+                    link sent to your registered email address
                   </li>
                   <li>
-                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Session Management:</strong> Secure session 
-                    tokens with automatic expiration
+                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Session Management:</strong> Secure JWT session
+                    tokens with automatic expiration and refresh
                   </li>
                   <li>
-                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Two-Factor Authentication (Coming Soon):</strong> Optional 
-                    2FA via email/SMS for enhanced security
-                  </li>
-                  <li>
-                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">OAuth Support:</strong> Secure sign-in with 
-                    Google/Microsoft (no password storage)
+                    <strong className="text-[#0F172A] dark:text-[#F8FAFC]">OAuth Support (Coming Soon):</strong> Sign-in with
+                    Google/Microsoft for additional convenience
                   </li>
                 </ul>
               </div>
@@ -197,11 +189,11 @@ export default function SecurityPage() {
                   Access Monitoring
                 </h3>
                 <ul className="text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-                  <li>✓ Login attempt tracking and rate limiting</li>
-                  <li>✓ Automatic account lockout after failed login attempts</li>
-                  <li>✓ Email notifications for suspicious activity</li>
-                  <li>✓ IP-based anomaly detection</li>
-                  <li>✓ Session invalidation on password change</li>
+                  <li>✓ OTP codes expire after a single use (no replayable credentials)</li>
+                  <li>✓ Session tokens invalidated on sign-out</li>
+                  <li>✓ Middleware enforces valid session on every protected route</li>
+                  <li>✓ Rate limiting & anomaly detection <span className="text-xs">(Coming Soon)</span></li>
+                  <li>✓ Email notifications for suspicious activity <span className="text-xs">(Coming Soon)</span></li>
                 </ul>
               </div>
             </div>
@@ -225,21 +217,21 @@ export default function SecurityPage() {
                 <p>✅ <strong className="text-[#0F172A] dark:text-[#F8FAFC]">No broker passwords:</strong> We never ask for or store your Zerodha/Groww/Kuvera passwords</p>
                 <p>✅ <strong className="text-[#0F172A] dark:text-[#F8FAFC]">No trading access:</strong> We cannot execute trades or modify your holdings</p>
                 <p>✅ <strong className="text-[#0F172A] dark:text-[#F8FAFC]">No bank access:</strong> We cannot withdraw funds or access your bank account</p>
-                <p>✅ <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Read-only data:</strong> You upload statements manually - full control</p>
+                <p>✅ <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Read-only data:</strong> You upload statements manually (full control)</p>
                 <p>✅ <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Smaller attack surface:</strong> No API keys or OAuth tokens that could be compromised</p>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6">
+            <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
               <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
                 CSV Upload Security
               </h3>
               <ul className="text-sm text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-                <li>• CSV files processed in memory, not stored permanently</li>
-                <li>• Virus and malware scanning on all uploads</li>
-                <li>• File size limits to prevent abuse (max 10MB per file)</li>
+                <li>• CSV files parsed in memory — never written to disk or stored permanently</li>
+                <li>• File type and format validation before processing</li>
+                <li>• File size limit to prevent abuse (max 5MB per file)</li>
                 <li>• Parsed data encrypted immediately after processing</li>
-                <li>• Original CSV files deleted after successful import</li>
+                <li>• No raw files retained after successful import</li>
               </ul>
             </div>
           </section>
@@ -251,7 +243,7 @@ export default function SecurityPage() {
             </h2>
 
             <div className="grid md:grid-cols-2 gap-6 mb-6">
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
                   24/7 Monitoring
                 </h3>
@@ -264,7 +256,7 @@ export default function SecurityPage() {
                 </ul>
               </div>
 
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
                   Incident Response
                 </h3>
@@ -295,7 +287,7 @@ export default function SecurityPage() {
             </h2>
 
             <div className="space-y-4">
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
                   Principle of Least Privilege
                 </h3>
@@ -303,14 +295,14 @@ export default function SecurityPage() {
                   Our team members only have access to the data they absolutely need to do their jobs:
                 </p>
                 <ul className="text-sm text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-                  <li>• <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Support staff:</strong> Limited to basic account info (email, name) - no portfolio data</li>
+                  <li>• <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Support staff:</strong> Limited to basic account info (email, name)-no portfolio data</li>
                   <li>• <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Engineers:</strong> Access only to anonymized/aggregated data for debugging</li>
                   <li>• <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Database access:</strong> Restricted to senior engineers with audit logging</li>
                   <li>• <strong className="text-[#0F172A] dark:text-[#F8FAFC]">No casual browsing:</strong> All data access requires justification and is logged</li>
                 </ul>
               </div>
 
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
                   Employee Security Practices
                 </h3>
@@ -332,7 +324,7 @@ export default function SecurityPage() {
             </h2>
 
             <div className="grid md:grid-cols-2 gap-6">
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
                   Current Compliance
                 </h3>
@@ -344,14 +336,14 @@ export default function SecurityPage() {
                 </ul>
               </div>
 
-              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6">
+              <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-6 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
                 <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
                   Future Certifications
                 </h3>
                 <ul className="text-sm text-[#6B7280] dark:text-[#94A3B8] space-y-2">
                   <li>📋 SOC 2 Type II (in progress)</li>
                   <li>📋 ISO 27001 certification</li>
-                  <li>📋 DPDP Act compliance (when enacted)</li>
+                  <li>📋 DPDP Act 2023 compliance (rules pending notification)</li>
                   <li>📋 Third-party penetration testing</li>
                 </ul>
               </div>
@@ -373,30 +365,27 @@ export default function SecurityPage() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-[#1E293B] border border-emerald-200 dark:border-emerald-800/30 rounded-lg p-5">
+              <div className="bg-white dark:bg-[#1E293B] border border-emerald-200 dark:border-emerald-800/30 rounded-lg p-5 transition-all duration-300 hover:border-emerald-400 dark:hover:border-emerald-600 hover:shadow-md">
                 <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">✅ DO</h4>
                 <ul className="text-sm text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-                  <li>✓ Use a strong, unique password (12+ characters)</li>
-                  <li>✓ Enable 2FA when available</li>
-                  <li>✓ Keep your email account secure</li>
+                  <li>✓ Keep your phone number and email account secure-they are your login keys</li>
+                  <li>✓ Enable SIM lock / carrier PIN to prevent SIM swaps</li>
+                  <li>✓ Use 2FA on your email account</li>
                   <li>✓ Log out on shared devices</li>
-                  <li>✓ Use a password manager</li>
                   <li>✓ Keep your browser/OS updated</li>
                   <li>✓ Verify the URL before logging in</li>
                   <li>✓ Report suspicious activity immediately</li>
                 </ul>
               </div>
 
-              <div className="bg-white dark:bg-[#1E293B] border border-red-200 dark:border-red-800/30 rounded-lg p-5">
+              <div className="bg-white dark:bg-[#1E293B] border border-red-200 dark:border-red-800/30 rounded-lg p-5 transition-all duration-300 hover:border-red-400 dark:hover:border-red-600 hover:shadow-md">
                 <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">❌ DON'T</h4>
                 <ul className="text-sm text-[#6B7280] dark:text-[#94A3B8] space-y-2">
-                  <li>✗ Reuse passwords from other sites</li>
-                  <li>✗ Share your password with anyone</li>
+                  <li>✗ Share your OTP code with anyone; we will never ask for it</li>
+                  <li>✗ Click OTP or login links from emails you didn't request</li>
                   <li>✗ Use public WiFi without VPN</li>
-                  <li>✗ Click suspicious email links</li>
-                  <li>✗ Save passwords in your browser (use a password manager instead)</li>
-                  <li>✗ Write down passwords</li>
-                  <li>✗ Log in on untrusted devices</li>
+                  <li>✗ Forward OTP SMS messages to others</li>
+                  <li>✗ Log in on untrusted or shared devices</li>
                   <li>✗ Ignore security notifications</li>
                 </ul>
               </div>
@@ -422,9 +411,10 @@ export default function SecurityPage() {
                   1
                 </div>
                 <div>
-                  <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Change Your Password</h4>
+                  <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Contact Us to Lock Your Account</h4>
                   <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                    Go to Account Settings → Security → Change Password. Use a strong, unique password.
+                    Email <a href="mailto:security@lensonwealth.com" className="text-[#2563EB] dark:text-[#3B82F6] hover:underline font-semibold">security@lensonwealth.com</a> immediately.
+                    We'll freeze your account and revoke all active sessions within hours.
                   </p>
                 </div>
               </div>
@@ -434,9 +424,10 @@ export default function SecurityPage() {
                   2
                 </div>
                 <div>
-                  <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Log Out All Sessions</h4>
+                  <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Sign Out of Your Current Session</h4>
                   <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                    In Account Settings, click "Log Out All Devices" to terminate all active sessions.
+                    Go to Account Settings and sign out to immediately invalidate your active session token.
+                    Since we use OTP-based login, there is no password to change-simply logging out denies further access.
                   </p>
                 </div>
               </div>
@@ -446,10 +437,10 @@ export default function SecurityPage() {
                   3
                 </div>
                 <div>
-                  <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Contact Us Immediately</h4>
+                  <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Secure Your Phone & Email</h4>
                   <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                    Email <a href="mailto:security@lensonwealth.com" className="text-[#2563EB] dark:text-[#3B82F6] hover:underline font-semibold">security@lensonwealth.com</a> with 
-                    details of the suspicious activity. We'll investigate and help secure your account.
+                    Since we use OTP-based login, your phone number and email are your access keys. If either
+                    is compromised, an attacker can request an OTP. Contact your carrier and email provider immediately.
                   </p>
                 </div>
               </div>
@@ -457,18 +448,6 @@ export default function SecurityPage() {
               <div className="flex items-start gap-4">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] text-white flex items-center justify-center font-bold">
                   4
-                </div>
-                <div>
-                  <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Check Your Email</h4>
-                  <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-                    If your email is compromised, attackers can reset your password. Secure your email account first.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#2563EB] dark:bg-[#3B82F6] text-white flex items-center justify-center font-bold">
-                  5
                 </div>
                 <div>
                   <h4 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-1">Review Account Activity</h4>
@@ -486,7 +465,7 @@ export default function SecurityPage() {
               📧 Contact Our Security Team
             </h2>
 
-            <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-8">
+            <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-8 transition-all duration-300 hover:border-[#2563EB]/30 dark:hover:border-[#3B82F6]/30 hover:shadow-md">
               <div className="grid md:grid-cols-2 gap-8">
                 <div>
                   <h3 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Security Issues</h3>
@@ -538,7 +517,7 @@ export default function SecurityPage() {
               invest in infrastructure, processes, and people to keep your financial data safe.
             </p>
             <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
-              Last updated: January 17, 2025
+              Last updated: March 12, 2026
             </p>
           </div>
         </div>
@@ -611,8 +590,8 @@ export default function SecurityPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center md:justify-end text-xs text-[#6B7280] dark:text-[#94A3B8]">
-              <span>🔒 Data stored in India</span>
-              <span>📊 AMFI verified</span>
+              <span>🔒 Core data stored in India</span>
+              <span>🚫 Zero Trade Execution</span>
               <span>🇮🇳 Made in India</span>
             </div>
           </div>
