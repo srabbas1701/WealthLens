@@ -1,8 +1,55 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { AppHeader } from '@/components/AppHeader';
+
+function SparkleIcon({ size = '1em', isActive = false }: { size?: string; isActive?: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const keyframes: Keyframe[] = [
+      { transform: 'scale(1)',   color: '#2563EB' },
+      { transform: 'scale(1.6)', color: '#FBBF24' },
+      { transform: 'scale(0.8)', color: '#F59E0B' },
+      { transform: 'scale(2.0)', color: '#FBBF24' },
+      { transform: 'scale(0.9)', color: '#F59E0B' },
+      { transform: 'scale(1.3)', color: '#2563EB' },
+      { transform: 'scale(1)',   color: '#2563EB' },
+    ];
+    const options: KeyframeAnimationOptions = {
+      duration: 1600,
+      iterations: 1,
+      fill: 'none',
+      easing: 'ease-in-out',
+    };
+
+    let current: Animation | null = null;
+    const play = () => {
+      if (document.hidden) return;
+      current?.cancel();
+      current = el.animate(keyframes, options);
+    };
+
+    const initTimer = setTimeout(play, 500);
+    const interval = setInterval(play, 7000);
+    const onVisibilityChange = () => { if (!document.hidden) play(); };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      current?.cancel();
+    };
+  }, []);
+
+  return (
+    <span ref={ref} style={{ display: 'inline-block', color: isActive ? '#FCD34D' : '#6366F1', fontSize: size }}>✦</span>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,13 +113,13 @@ const demoImages: Record<DemoState, string> = {
 // Top nav
 // ---------------------------------------------------------------------------
 
-const NAV_ITEMS: { id: DemoState; label: string; icon: string }[] = [
+const NAV_ITEMS: { id: DemoState; label: string; icon: string | null }[] = [
   { id: 'dashboard',    label: 'Dashboard Overview',      icon: '📊' },
   { id: 'asset-buckets',label: 'Asset Buckets',           icon: '🪣' },
   { id: 'allocation',   label: 'Build Portfolio',          icon: '⚖️' },
   { id: 'liabilities',  label: 'Liabilities & Protection',icon: '🛡️' },
   { id: 'exposure',     label: 'Exposure Analytics',      icon: '🔍' },
-  { id: 'copilot',      label: 'AI Copilot',              icon: '✨' },
+  { id: 'copilot',      label: 'AI Naira',                icon: null },
 ];
 
 // All sub-states that live under "Asset Buckets"
@@ -308,8 +355,8 @@ function getPageInfo(state: DemoState): PageInfo {
       };
     case 'copilot':
       return {
-        title: 'AI Copilot',
-        description: 'Ask plain-English questions about your portfolio and get answers grounded in your actual data. "Am I over-exposed to IT?", "Which holdings are dragging returns?", "How should I rebalance?" — the AI Copilot analyses your real holdings and gives actionable, personalised guidance. Available on Premium and Pro plans.',
+        title: 'AI Naira',
+        description: 'Ask plain-English questions about your portfolio and get answers grounded in your actual data. "Am I over-exposed to IT?", "Which holdings are dragging returns?", "How should I rebalance?" — Naira, your AI Portfolio Analyst, analyses your real holdings and gives actionable, personalised guidance. Available on Premium and Pro plans.',
         clickHint: 'Scroll down to see AI analysis examples powered by your real portfolio data.',
       };
   }
@@ -358,8 +405,14 @@ export default function DemoPage() {
                           : 'text-[#475569] dark:text-[#94A3B8] hover:bg-[#F1F5F9] dark:hover:bg-[#1E293B]'
                       }`}
                     >
-                      <span className="mr-1.5">{item.icon}</span>
-                      {item.label}
+                      {item.id === 'copilot' ? (
+                        <span className="inline-flex items-center gap-2">
+                          <SparkleIcon size="1.1em" isActive={isActive} />
+                          <span>AI N<span style={{ color: isActive ? '#FCD34D' : '#6366F1' }}>ai</span>ra</span>
+                        </span>
+                      ) : (
+                        <><span className="mr-1.5">{item.icon}</span>{item.label}</>
+                      )}
                     </button>
                   </li>
                 );
@@ -425,7 +478,7 @@ export default function DemoPage() {
             transition: 'opacity 0.15s ease-in-out',
           }}
         >
-          {/* AI Copilot: two images stacked */}
+          {/* AI Naira: two images stacked */}
           {demoState === 'copilot' ? (
             <div className="flex flex-col gap-4">
               {['ai_analysis_1.webp', 'ai_analysis_2.webp'].map((img) => (

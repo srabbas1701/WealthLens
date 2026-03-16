@@ -150,6 +150,28 @@ export async function POST(req: NextRequest) {
     }
 
     /**
+     * 5b️⃣ If optional email was provided, update auth.users.email so the user
+     *     can later log in via email magic link.
+     *     Without this, auth.users.email stays as the internal email and
+     *     magic link login would fail for this user.
+     *     Only runs when optionalEmail is present (signup path, not login path).
+     */
+    if (optionalEmail && optionalEmail.includes('@')) {
+      const { error: authEmailError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+        email: optionalEmail,
+        email_confirm: true,
+      });
+      if (authEmailError) {
+        console.warn('[phone-login] Could not update auth.users email:', authEmailError.message);
+        // Non-fatal: public.users has the email; phone login still works
+      } else {
+        console.log('[phone-login] Updated auth.users.email to real email for phone-signup user');
+        // Must use real email for signInWithPassword since auth.users.email is now updated
+        returnEmail = optionalEmail;
+      }
+    }
+
+    /**
      * 6️⃣ Return credentials for frontend login
      */
     return NextResponse.json({

@@ -69,7 +69,7 @@ interface AuthAppDataState {
 
 interface AuthState extends AuthSessionState, AuthAppDataState {
   // Auth methods
-  sendMagicLink: (email: string) => Promise<{ error: Error | null }>;
+  sendMagicLink: (email: string, isSignup?: boolean) => Promise<{ error: Error | null }>;
   sendOtp: (phone: string) => Promise<{ error: Error | null }>;
   verifyOtp: (phone: string, token: string) => Promise<{ error: Error | null }>;
   sendEmailVerification: (email: string) => Promise<{ error: Error | null }>;
@@ -572,17 +572,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Send magic link to email for passwordless login
    */
-  const sendMagicLink = async (email: string) => {
+  const sendMagicLink = async (email: string, isSignup = false) => {
     if (!supabase) {
       return { error: new Error('Supabase client not available') };
     }
-    
+
     try {
       const { data, error } = await supabase.auth.signInWithOtp({
         email,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
-          shouldCreateUser: false,
+          // Login: shouldCreateUser=false blocks OTP for unregistered emails (login hardening).
+          // Signup: shouldCreateUser=true allows new account creation.
+          shouldCreateUser: isSignup,
         },
       });
       

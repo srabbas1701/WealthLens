@@ -1488,7 +1488,7 @@ function DashboardContent() {
                     aria-label={`${bucketName} color indicator`}
                   />
                   <div className="flex items-center gap-2 mb-3 pr-8">
-                    <p className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap">
+                    <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] whitespace-nowrap">
                       {isCashBucket ? 'Cash' : bucketName}
                     </p>
                     <CategoryInfoTooltip content={tooltip} />

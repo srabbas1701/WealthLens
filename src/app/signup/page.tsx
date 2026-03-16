@@ -240,8 +240,8 @@ export default function SignupPage() {
         localStorage.removeItem('signup_optional_phone');
       }
       
-      // 3. Send magic link
-      const { error: magicLinkError } = await sendMagicLink(email);
+      // 3. Send magic link (isSignup=true so Supabase creates the new user)
+      const { error: magicLinkError } = await sendMagicLink(email, true);
       
       if (magicLinkError) {
         setError(friendlyErrorMessage(magicLinkError.message));
@@ -519,8 +519,8 @@ export default function SignupPage() {
         return;
       }
       
-      const { error: magicLinkError } = await sendMagicLink(email);
-      
+      const { error: magicLinkError } = await sendMagicLink(email, true);
+
       if (magicLinkError) {
         setError(friendlyErrorMessage(magicLinkError.message));
       } else {
