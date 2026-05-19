@@ -148,8 +148,8 @@ export async function POST(request: NextRequest) {
         `for user ${upgradeRow.user_id}`
       );
 
-      // Record history BEFORE changing
-      await admin.from('subscription_history').insert({
+      // Record history BEFORE changing (non-fatal — activation must not depend on this)
+      const { error: historyErr1 } = await admin.from('subscription_history').insert({
         user_id: upgradeRow.user_id,
         event: 'upgraded',
         from_tier: upgradeRow.tier,
@@ -159,6 +159,7 @@ export async function POST(request: NextRequest) {
         razorpay_subscription_id: subscription.id,
         occurred_at: now,
       });
+      if (historyErr1) console.error('[Webhook] History insert failed (upgrade):', historyErr1);
 
       // Now promote pending → active, clear pending columns
       const { error } = await admin
@@ -197,8 +198,8 @@ export async function POST(request: NextRequest) {
         `for user ${newSubRow.user_id}`
       );
 
-      // Record history
-      await admin.from('subscription_history').insert({
+      // Record history (non-fatal — activation must not depend on this)
+      const { error: historyErr2 } = await admin.from('subscription_history').insert({
         user_id: newSubRow.user_id,
         event: 'activated',
         from_tier: 'free',
@@ -208,6 +209,7 @@ export async function POST(request: NextRequest) {
         razorpay_subscription_id: subscription.id,
         occurred_at: now,
       });
+      if (historyErr2) console.error('[Webhook] History insert failed (activation):', historyErr2);
 
       const { error } = await admin
         .from('user_subscriptions')

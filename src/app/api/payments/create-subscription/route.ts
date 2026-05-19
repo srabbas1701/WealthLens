@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
 import { createAdminClient } from '@/lib/supabase/server';
+import { validateRazorpayConfig, getRazorpayPlanId } from '@/lib/payments/razorpay-config';
 
 const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, premium: 2 };
 
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
     if (!keyId || !keySecret) {
+      console.error('[Create subscription] RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET missing');
       return NextResponse.json(
         { error: 'Payment configuration error', details: 'Razorpay credentials not configured' },
         { status: 500 }
@@ -70,25 +72,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Map to Razorpay plan ID
-    let razorpayPlanId: string | undefined;
-    if (planId === 'pro' && billingCycle === 'monthly') {
-      razorpayPlanId = process.env.RAZORPAY_PRO_MONTHLY_PLAN;
-    }
-    if (planId === 'pro' && billingCycle === 'yearly') {
-      razorpayPlanId = process.env.RAZORPAY_PRO_ANNUAL_PLAN;
-    }
-    if (planId === 'premium' && billingCycle === 'monthly') {
-      razorpayPlanId = process.env.RAZORPAY_PREMIUM_MONTHLY_PLAN;
-    }
-    if (planId === 'premium' && billingCycle === 'yearly') {
-      razorpayPlanId = process.env.RAZORPAY_PREMIUM_ANNUAL_PLAN;
-    }
-
-    if (!razorpayPlanId) {
+    // Map to Razorpay plan ID — throws with a clear message if any env var is missing
+    let razorpayPlanId: string;
+    try {
+      const planConfig = validateRazorpayConfig();
+      razorpayPlanId = getRazorpayPlanId(planConfig, planId, billingCycle);
+    } catch (configErr) {
+      console.error('[Create subscription] Razorpay plan config error:', configErr);
       return NextResponse.json(
-        { error: 'Plan not found or not configured' },
-        { status: 400 }
+        { error: 'Payment configuration error', details: configErr instanceof Error ? configErr.message : 'Plan env vars missing' },
+        { status: 500 }
       );
     }
 
@@ -224,14 +217,18 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[Create subscription] Error:', err);
+    const razorpayError = err as { statusCode?: number; error?: { description?: string; code?: string } };
+    const razorpayDescription = razorpayError?.error?.description ?? null;
+    const razorpayCode = razorpayError?.error?.code ?? null;
+    console.error(
+      '[Create subscription] Unhandled error:',
+      JSON.stringify({ message, razorpayCode, razorpayDescription, err }, null, 2)
+    );
     const statusCode =
-      typeof (err as { statusCode?: number }).statusCode === 'number'
-        ? (err as { statusCode: number }).statusCode
-        : 500;
+      typeof razorpayError.statusCode === 'number' ? razorpayError.statusCode : 500;
     const httpStatus = statusCode >= 400 && statusCode < 600 ? statusCode : 500;
     return NextResponse.json(
-      { error: 'Payment error', details: message },
+      { error: 'Payment error', details: razorpayDescription ?? message },
       { status: httpStatus }
     );
   }
