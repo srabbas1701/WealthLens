@@ -2,13 +2,15 @@
  * POST /api/payments/create-subscription
  *
  * Creates a Razorpay subscription and returns checkout options.
- * 
- * CRITICAL SAFETY RULE:
- * - For NEW subscribers: insert row with status='pending'
- * - For UPGRADING users: store intent in pending_* columns ONLY
+ *
+ * CRITICAL SAFETY RULE — NO DB writes for non-active users here:
+ * - NEW subscribers / re-subscribers (cancelled/halted): NO DB row written.
+ *   The webhook creates/updates the row when payment is confirmed.
+ *   This means closing Razorpay without paying = zero DB change. ✓
+ *   This also means cancelled users can re-subscribe without row conflicts. ✓
+ * - UPGRADING users (currently active): store intent in pending_* columns ONLY.
  *   The active subscription row (tier, status) is NEVER touched here.
  *   ONLY the webhook sets status='active' and updates tier.
- *   This means closing Razorpay without paying = zero DB change to active plan.
  *
  * Body: { planId: 'pro' | 'premium', billingCycle: 'monthly' | 'annual', userId: string }
  */
@@ -157,9 +159,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (isCurrentlyActive) {
-      // UPGRADING USER — NEVER touch tier or status
-      // Store intent in pending_* columns only
-      // Webhook will complete the upgrade when payment confirmed
+      // UPGRADING USER — NEVER touch tier or status.
+      // Store intent in pending_* columns only; webhook promotes on payment confirmation.
       const { error: updateError } = await admin
         .from('user_subscriptions')
         .update({
@@ -179,32 +180,19 @@ export async function POST(request: NextRequest) {
       }
 
       console.log(
-        `[Create subscription] Stored pending upgrade for user ${userId}: ` +
+        `[Create subscription] Pending upgrade stored for user ${userId}: ` +
         `${currentTier} → ${planId} (${billingCycle}), sub: ${subscription.id}`
       );
     } else {
-      // NEW SUBSCRIBER — safe to insert with status=pending
-      const { error: upsertError } = await admin
-        .from('user_subscriptions')
-        .upsert(
-          {
-            user_id: userId,
-            tier: planId,
-            status: 'pending',
-            razorpay_subscription_id: subscription.id,
-            billing_cycle: billingCycle,
-            payment_provider: 'razorpay',
-          },
-          { onConflict: 'user_id' }
-        );
-
-      if (upsertError) {
-        console.error('[Create subscription] Upsert error:', upsertError);
-        return NextResponse.json(
-          { error: 'Failed to create subscription', details: upsertError.message },
-          { status: 500 }
-        );
-      }
+      // NEW / RE-SUBSCRIBING USER — do NOT write to DB here.
+      // The webhook writes the row when payment is confirmed (FLOW 3 via notes).
+      // Benefits:
+      //   1. Closing the modal leaves zero DB artefacts.
+      //   2. Cancelled/halted users can re-subscribe with no row conflicts.
+      console.log(
+        `[Create subscription] Razorpay subscription created for user ${userId}: ` +
+        `${planId} (${billingCycle}), sub: ${subscription.id} — DB row deferred to webhook`
+      );
     }
 
     return NextResponse.json({

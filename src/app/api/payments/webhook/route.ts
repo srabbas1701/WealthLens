@@ -227,34 +227,73 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    // FLOW 3: notes fallback — find by user_id in notes
+    // FLOW 3: primary path for new and re-subscribing users.
+    // create-subscription no longer writes a DB row for non-active users,
+    // so this is now the canonical activation path (not just a fallback).
+    // Handles three cases:
+    //   a) Brand-new user  → INSERT a fresh active row
+    //   b) Re-subscriber (cancelled/halted/expired) → UPDATE the existing row
+    //   c) True fallback (sub ID mismatch) → same UPDATE logic
     const notesUserId = subscription.notes?.user_id;
     if (notesUserId) {
-      console.warn(
-        `[Webhook] No row found by sub ID, trying notes.user_id: ${notesUserId}`
-      );
+      console.log(`[Webhook] FLOW 3 activation for user ${notesUserId}, sub ${subscription.id}`);
       const targetTier = subscription.notes?.plan_id;
       const targetCycle = subscription.notes?.billing_cycle === 'annual'
         ? 'yearly'
         : subscription.notes?.billing_cycle ?? 'monthly';
 
       if (targetTier && ['pro', 'premium'].includes(targetTier)) {
-        await admin
+        // Check whether this user already has a row (any status)
+        const { data: existingRow } = await admin
           .from('user_subscriptions')
-          .update({
-            tier: targetTier,
-            billing_cycle: targetCycle,
-            razorpay_subscription_id: subscription.id,
-            status: 'active',
-            current_period_end: currentPeriodEnd,
-            started_at: startedAt,
-            pending_tier: null,
-            pending_billing_cycle: null,
-            pending_razorpay_subscription_id: null,
-            updated_at: now,
-          })
-          .eq('user_id', notesUserId);
+          .select('user_id')
+          .eq('user_id', notesUserId)
+          .maybeSingle();
+
+        if (existingRow) {
+          // Re-subscriber or fallback — reset and activate the existing row
+          const { error: updateErr } = await admin
+            .from('user_subscriptions')
+            .update({
+              tier: targetTier,
+              billing_cycle: targetCycle,
+              razorpay_subscription_id: subscription.id,
+              status: 'active',
+              current_period_end: currentPeriodEnd,
+              started_at: startedAt,
+              pending_tier: null,
+              pending_billing_cycle: null,
+              pending_razorpay_subscription_id: null,
+              updated_at: now,
+            })
+            .eq('user_id', notesUserId);
+
+          if (updateErr) console.error('[Webhook] FLOW 3 update failed:', updateErr);
+          else console.log(`[Webhook] FLOW 3 re-subscriber activated: ${notesUserId} → ${targetTier}`);
+        } else {
+          // Brand-new user — insert a fresh active row
+          const { error: insertErr } = await admin
+            .from('user_subscriptions')
+            .insert({
+              user_id: notesUserId,
+              tier: targetTier,
+              billing_cycle: targetCycle,
+              razorpay_subscription_id: subscription.id,
+              status: 'active',
+              current_period_end: currentPeriodEnd,
+              started_at: startedAt,
+              payment_provider: 'razorpay',
+              updated_at: now,
+            });
+
+          if (insertErr) console.error('[Webhook] FLOW 3 insert failed:', insertErr);
+          else console.log(`[Webhook] FLOW 3 new subscriber activated: ${notesUserId} → ${targetTier}`);
+        }
+      } else {
+        console.warn(`[Webhook] FLOW 3 skipped — invalid targetTier: ${targetTier}`);
       }
+    } else {
+      console.warn(`[Webhook] No user_id in notes for sub ${subscription.id} — cannot activate`);
     }
 
     return NextResponse.json({ received: true });
