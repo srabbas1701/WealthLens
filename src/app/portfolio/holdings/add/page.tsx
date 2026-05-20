@@ -13,27 +13,8 @@ import { useSearchParams } from 'next/navigation';
 import { AppHeader } from '@/components/AppHeader';
 import { useCapabilities } from '@/lib/capabilities';
 import { UpgradeModal } from '@/components/UpgradeModal';
-
-interface AssetOption {
-  id: string;
-  label: string;
-  description: string;
-  href: string;
-}
-
-const ASSET_OPTIONS: AssetOption[] = [
-  { id: 'mutual_fund', label: 'Mutual Funds', description: 'Funds, SIPs, folios', href: '/portfolio/mutualfunds/add' },
-  { id: 'stocks', label: 'Stocks / Shares', description: 'Equity, direct stocks', href: '/portfolio/stocks/add' },
-  { id: 'etf', label: 'ETFs', description: 'Exchange traded funds', href: '/portfolio/etfs/add' },
-  { id: 'fd', label: 'Fixed Deposit', description: 'Bank FD, corporate FD', href: '/portfolio/fixeddeposits' },
-  { id: 'bond', label: 'Bond', description: 'Government, corporate bonds', href: '/portfolio/bonds' },
-  { id: 'gold', label: 'Gold', description: 'SGB, physical, ETF', href: '/portfolio/gold' },
-  { id: 'cash', label: 'Cash', description: 'Savings, current account', href: '/portfolio/cash' },
-  { id: 'epf', label: 'EPF', description: 'Employee Provident Fund', href: '/portfolio/epf' },
-  { id: 'ppf', label: 'PPF', description: 'Public Provident Fund', href: '/portfolio/ppf' },
-  { id: 'nps', label: 'NPS', description: 'National Pension System', href: '/portfolio/nps' },
-  { id: 'real_estate', label: 'Real Estate', description: 'Residential, commercial, land', href: '/portfolio/real-estate' },
-];
+import { ASSET_CATALOG_GROUPS, type AssetCatalogItem } from '@/lib/asset-catalog';
+import { getOnboardingLaunchRoute, withOnboardingParam } from '@/lib/onboarding-queue';
 
 function AddHoldingHubContent() {
   const searchParams = useSearchParams();
@@ -47,92 +28,136 @@ function AddHoldingHubContent() {
     benefits: string[];
   }>({ open: false, plan: 'Pro', title: '', description: '', benefits: [] });
 
+  const openUpgradeModal = (item: AssetCatalogItem) => {
+    const capability = item.requiredCapability;
+    if (!capability) return;
+
+    const copyByCapability: Record<string, { title: string; description: string; benefits: string[] }> = {
+      manage_real_assets: {
+        title: 'Real Estate',
+        description: 'Track properties, rental income, loans, and see real estate as part of your total net worth.',
+        benefits: [
+          'Property valuations & current value',
+          'Rental income & expense tracking',
+          'Loan and EMI management',
+          'Net worth with real assets',
+        ],
+      },
+      manage_insurance: {
+        title: 'Insurance Tracking',
+        description: 'Track life and health insurance policies with full portfolio visibility.',
+        benefits: [
+          'Life and health policy tracking',
+          'Premium and policy detail management',
+          'Coverage insights in one place',
+          'Integrated net worth view',
+        ],
+      },
+      manage_liabilities: {
+        title: 'Loans & Liabilities',
+        description: 'Track home, vehicle, and personal loans along with outstanding balances and EMIs.',
+        benefits: [
+          'Loan and EMI tracking',
+          'Outstanding balance visibility',
+          'Liability-adjusted net worth',
+          'Better cash flow planning',
+        ],
+      },
+      manage_commodities: {
+        title: 'Commodities',
+        description: 'Track gold and silver holdings with detailed valuation and portfolio impact.',
+        benefits: [
+          'Gold and silver holding tracking',
+          'Physical, ETF, and digital commodity support',
+          'Portfolio allocation visibility',
+          'Commodity performance insights',
+        ],
+      },
+    };
+
+    const modalCopy = copyByCapability[capability] ?? {
+      title: item.label,
+      description: `Upgrade to ${item.requiredPlan ?? 'Pro'} to track this asset.`,
+      benefits: ['Advanced tracking features', 'Richer portfolio insights', 'Priority feature access', 'Better analytics'],
+    };
+
+    setUpgradeModal({
+      open: true,
+      plan: item.requiredPlan ?? 'Pro',
+      title: modalCopy.title,
+      description: modalCopy.description,
+      benefits: modalCopy.benefits,
+    });
+  };
+
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader
         showBackButton={true}
-        backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
         backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
       />
 
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
-        <div className="mb-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
+        <div className="mb-5">
           <h1 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
-            Add Holding
+            What do you currently own?
           </h1>
-          <p className="text-[#6B7280] dark:text-[#94A3B8] mt-1">
-            Choose the type of investment you want to add
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
+            Pick a category to jump directly into its add-details screen.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {ASSET_OPTIONS.map((option) => {
-            const isGold = option.id === 'gold';
-            const isRealEstate = option.id === 'real_estate';
-            
-            const isLocked = 
-              (isGold && !hasCapability('manage_gold')) ||
-              (isRealEstate && !hasCapability('manage_real_assets'));
+        <div className="space-y-2.5">
+          {ASSET_CATALOG_GROUPS.map(group => (
+            <div key={group.id}>
+              <h3 className="text-xs font-bold text-[#B6C2D4] dark:text-[#94A3B8] uppercase tracking-wider mb-1.5 pb-1 border-b border-[#E5E7EB] dark:border-[#334155]">
+                {group.label}
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {group.items.map((item) => {
+                  const locked = !!item.requiredCapability && !hasCapability(item.requiredCapability);
+                  const launchRoute = fromOnboarding
+                    ? withOnboardingParam(getOnboardingLaunchRoute(item.id))
+                    : getOnboardingLaunchRoute(item.id);
 
-            if (isLocked) {
-              return (
-                <button
-                  key={option.id}
-                  onClick={() => setUpgradeModal({
-                    open: true,
-                    plan: 'Pro',
-                    title: isGold ? 'Gold Holdings' : 'Real Estate',
-                    description: isGold
-                      ? 'Track all your gold investments — physical gold, SGBs, and Gold ETFs — with live IBJA pricing.'
-                      : 'Track properties, rental income, loans, and see real estate as part of your total net worth.',
-                    benefits: isGold
-                      ? [
-                          'Physical gold, SGB & ETF tracking',
-                          'Live IBJA gold price updates',
-                          'Purity-based valuation (22K/24K)',
-                          'Gold as % of total portfolio',
-                        ]
-                      : [
-                          'Property valuations & current value',
-                          'Rental income & expense tracking',
-                          'Loan and EMI management',
-                          'Net worth with real assets',
-                        ],
-                  })}
-                  className="block p-4 rounded-lg border-2 border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all text-left w-full relative"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC] text-sm">
-                        {option.label}
-                      </p>
-                      <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                        {option.description}
-                      </p>
-                    </div>
-                    <span className="text-xs font-semibold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full ml-2 flex-shrink-0">
-                      Pro
-                    </span>
-                  </div>
-                </button>
-              );
-            }
+                  if (locked) {
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => openUpgradeModal(item)}
+                        className="flex items-center gap-2.5 p-2.5 rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] bg-[#F9FAFB] dark:bg-[#1E293B]/60 opacity-75 hover:opacity-90 transition-all duration-150 text-left w-full"
+                      >
+                        <span className="text-base shrink-0" aria-hidden="true">{item.icon}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-[#9CA3AF] dark:text-[#64748B]">{item.label}</p>
+                          <p className="text-[11px] text-[#9CA3AF] dark:text-[#64748B] truncate">{item.description}</p>
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 shrink-0">
+                          🔒 {item.requiredPlan ?? 'Pro'}
+                        </span>
+                      </button>
+                    );
+                  }
 
-            return (
-              <Link
-                key={option.id}
-                href={option.href}
-                className="block p-4 rounded-lg border-2 border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] hover:border-[#2563EB] dark:hover:border-[#3B82F6] transition-all text-left"
-              >
-                <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC] text-sm">
-                  {option.label}
-                </p>
-                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
-                  {option.description}
-                </p>
-              </Link>
-            );
-          })}
+                  return (
+                    <Link
+                      key={item.id}
+                      href={launchRoute}
+                      className="flex items-center gap-2.5 p-2.5 rounded-xl border-2 border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] hover:border-[#9CA3AF] dark:hover:border-[#475569] transition-all duration-150 text-left w-full"
+                    >
+                      <span className="text-base shrink-0" aria-hidden="true">{item.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-[#0F172A] dark:text-[#F8FAFC]">{item.label}</p>
+                        <p className="text-[11px] text-[#6B7280] dark:text-[#94A3B8] truncate">{item.description}</p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
         <UpgradeModal
           isOpen={upgradeModal.open}

@@ -741,9 +741,9 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
         onClick={step === 'basic' || step === 'error' ? handleClose : undefined}
       />
 
-      <div className="relative w-full max-w-3xl max-h-[90vh] mx-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg overflow-hidden flex flex-col">
+      <div className="relative modal-shell-standard max-w-3xl max-h-[90vh] mx-4 overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
+        <div className="modal-header-standard">
           <div>
             <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
               {isAddingTier2 ? 'Add Tier II' : 'Add NPS Account'}
@@ -772,20 +772,20 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
         </div>
 
         {/* Footer / Actions */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#334155]">
+        <div className="flex items-center gap-3 px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#334155]">
           {step === 'basic' && (
             <>
               <button
                 onClick={handleClose}
-                className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#1E293B] transition-colors"
+                className="flex-1 btn-secondary-standard justify-center"
               >
-                Cancel
+                Back
               </button>
               <button
                 onClick={() => {
                   if (validateBasic()) setStep('tier1');
                 }}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+                className="flex-1 btn-primary-standard justify-center px-6 py-2"
               >
                 Next: Tier I
               </button>
@@ -796,12 +796,12 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
             <>
               <button
                 onClick={() => setStep('basic')}
-                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#1E293B] transition-colors"
+                className="flex-1 btn-secondary-standard justify-center"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
               </button>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 flex-1 justify-end">
                 <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${
                   isAddingTier2 
                     ? 'bg-[#16A34A]/10 dark:bg-[#16A34A]/20 border-[#16A34A]/20 dark:border-[#16A34A]/30' 
@@ -843,7 +843,7 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
                       }
                     }
                   }}
-                  className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+                  className="btn-primary-standard justify-center px-6 py-2"
                 >
                   {hasTier2 ? 'Next: Tier II' : 'Review & Save'}
                 </button>
@@ -855,16 +855,16 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
             <>
               <button
                 onClick={() => isAddingTier2 ? handleClose() : setStep('tier1')}
-                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#1E293B] transition-colors"
+                className="flex-1 btn-secondary-standard justify-center"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
-                {isAddingTier2 ? 'Cancel' : 'Back'}
+                Back
               </button>
               <button
                 onClick={() => {
                   if (validateTier(tier2, 'Tier II', true)) setStep('review');
                 }}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+                className="flex-1 btn-primary-standard justify-center px-6 py-2"
               >
                 Review & Save
               </button>
@@ -875,7 +875,7 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
             <>
               <button
                 onClick={() => setStep(hasTier2 ? 'tier2' : 'tier1')}
-                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#1E293B] transition-colors"
+                className="flex-1 btn-secondary-standard justify-center"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
@@ -883,7 +883,7 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50"
+                className="flex-1 btn-primary-standard justify-center px-6 py-2"
               >
                 Save NPS Account
               </button>
@@ -894,7 +894,7 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
             <button
               onClick={handleClose}
               disabled={step === 'saving'}
-              className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#1E293B] transition-colors disabled:opacity-50"
+              className="flex-1 btn-secondary-standard justify-center disabled:opacity-50"
             >
               Close
             </button>
@@ -903,7 +903,7 @@ export default function NPSAddModal({ isOpen, onClose, userId, onSuccess, existi
           {step === 'error' && (
             <button
               onClick={() => setStep('review')}
-              className="px-4 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+              className="flex-1 btn-primary-standard justify-center px-4 py-2"
             >
               Try Again
             </button>

@@ -19,6 +19,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue } from '@/lib/onboarding-queue';
 import { RefreshIcon } from '@/components/icons';
 import { getAssetTotals } from '@/lib/portfolio-aggregation';
 import { useToast } from '@/components/Toast';
@@ -72,6 +74,7 @@ export default function StocksHoldingsPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [isLoading, setIsLoading] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
   
   // Price update state
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
@@ -90,6 +93,7 @@ export default function StocksHoldingsPage() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch stocks data
   const fetchData = useCallback(async (userId: string, silentRefresh = false) => {
@@ -301,28 +305,44 @@ export default function StocksHoldingsPage() {
   // Stock search handler
   const handleStockSearch = async (query: string) => {
     setFormData({ ...formData, name: query });
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
     
     if (query.length < 2) {
       setShowSearchResults(false);
+      setSearchResults([]);
+      setIsSearching(false);
       return;
     }
-    
+
     setIsSearching(true);
-    
-    try {
-      const response = await fetch(`/api/stocks/search?q=${encodeURIComponent(query)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setSearchResults(data.results || []);
-        setShowSearchResults(true);
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/stocks/search?q=${encodeURIComponent(query)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setSearchResults(data.results || []);
+          setShowSearchResults(true);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (error) {
+        console.error('Search error:', error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
       }
-    } catch (error) {
-      console.error('Search error:', error);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
+    }, 250);
   };
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, []);
 
   // Select stock from search results
   const selectStock = (stock: any) => {
@@ -408,7 +428,12 @@ export default function StocksHoldingsPage() {
         message: `${stockData.name} has been added successfully.`,
         duration: 5000,
       });
-      
+
+      if (user?.id) {
+        const q = readQueue(user.id);
+        if (q && q.current === 'stocks') setHasAddedOneInQueue(true);
+      }
+
     } catch (error: any) {
       console.error('Error adding stock:', error);
       showToast({
@@ -668,7 +693,7 @@ export default function StocksHoldingsPage() {
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
         <AppHeader 
           showBackButton={true}
-          backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
+          backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
           backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         />
         <div className="flex items-center justify-center h-screen">
@@ -685,15 +710,18 @@ export default function StocksHoldingsPage() {
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
-        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
-        showDownload={true}
-        downloadLabel="Download Stocks"
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
+          backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
+          showDownload={true}
+          downloadLabel="Download Stocks"
         onDownload={() => {
           console.log('[Stocks Page] Direct handler called');
           handleDownload();
         }}
       />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+      )}
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         
@@ -705,7 +733,7 @@ export default function StocksHoldingsPage() {
               {/* ADD STOCK - navigates to add page */}
               <Link
                 href="/portfolio/stocks/add"
-                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm min-w-[44px] min-h-[44px]"
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm min-w-[44px] min-h-[44px]"
                 title="Add Stock"
               >
                 <Plus className="w-5 h-5 shrink-0" />
@@ -964,6 +992,10 @@ export default function StocksHoldingsPage() {
       {showAddStockModal && (
         <AddStockModal
           onClose={() => {
+            if (fromOnboarding) {
+              router.replace('/onboarding/select?step=add-details');
+              return;
+            }
             setShowAddStockModal(false);
             setFormData({ name: '', symbol: '', quantity: '', avgBuyPrice: '', purchaseDate: '' });
             setSearchResults([]);
@@ -1083,14 +1115,14 @@ function AddStockModal({
 
   return (
     <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-card">
-          <h2 className="text-2xl font-bold text-foreground">Add Stock Holding</h2>
+        <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155] sticky top-0 bg-white dark:bg-[#1E293B]">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Add Stock Holding</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-accent rounded-lg transition-colors"
+            className="p-2 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] rounded-lg transition-colors"
             type="button"
           >
             <X className="w-5 h-5" />
@@ -1102,7 +1134,7 @@ function AddStockModal({
           
           {/* Stock Name with Autocomplete */}
           <div className="relative">
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Stock Name <span className="text-destructive">*</span>
             </label>
             <div className="relative">
@@ -1111,38 +1143,38 @@ function AddStockModal({
                 value={formData.name}
                 onChange={(e) => onSearch(e.target.value)}
                 placeholder="Search for stock (e.g., HDFC Bank)"
-                className="w-full px-4 py-3 pr-10 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+                className="w-full px-4 py-3 pr-10 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
                 required
                 autoComplete="off"
               />
-              <Search className="absolute right-3 top-3.5 w-5 h-5 text-muted-foreground" />
+              <Search className="absolute right-3 top-3.5 w-5 h-5 text-[#9CA3AF] dark:text-[#64748B]" />
             </div>
             
             {/* Search Results Dropdown */}
             {showSearchResults && searchResults.length > 0 && (
-              <div className="absolute z-10 w-full mt-2 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+              <div className="absolute z-10 w-full mt-2 bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-lg shadow-lg max-h-48 overflow-y-auto">
                 {searchResults.map((stock, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => onSelectStock(stock)}
-                    className="w-full text-left px-4 py-3 hover:bg-accent transition-colors border-b border-border last:border-0"
+                    className="w-full text-left px-4 py-3 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors border-b border-[#E5E7EB] dark:border-[#334155] last:border-0"
                   >
-                    <div className="font-semibold text-foreground">{stock.name}</div>
-                    <div className="text-sm text-muted-foreground">{stock.symbol}</div>
+                    <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{stock.name}</div>
+                    <div className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{stock.symbol}</div>
                   </button>
                 ))}
               </div>
             )}
             
             {isSearching && (
-              <div className="text-sm text-muted-foreground mt-1">Searching...</div>
+              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">Searching...</div>
             )}
           </div>
 
           {/* Symbol */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Symbol
             </label>
             <input
@@ -1150,16 +1182,16 @@ function AddStockModal({
               value={formData.symbol}
               onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
               placeholder="NSE:HDFCBANK or BSE:500180"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
             />
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
               Format: NSE:SYMBOL or BSE:SYMBOL
             </p>
           </div>
 
           {/* Quantity */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Quantity <span className="text-destructive">*</span>
             </label>
             <input
@@ -1169,14 +1201,14 @@ function AddStockModal({
               placeholder="100"
               min="1"
               step="1"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
             />
           </div>
 
           {/* Average Buy Price */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Average Buy Price (₹) <span className="text-destructive">*</span>
             </label>
             <input
@@ -1186,29 +1218,29 @@ function AddStockModal({
               placeholder="750.50"
               min="0.01"
               step="0.01"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
             />
           </div>
 
           {/* Purchase Date */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Purchase Date (Optional)
             </label>
             <input
               type="date"
               value={formData.purchaseDate}
               onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
             />
           </div>
 
           {/* Calculated Invested Value */}
           {investedValue > 0 && (
-            <div className="bg-accent border border-border rounded-lg p-4">
-              <div className="text-sm text-muted-foreground mb-1">Invested Value</div>
-              <div className="text-2xl font-bold text-foreground">
+            <div className="bg-[#EFF6FF] dark:bg-[#1E3A8A]/30 border border-[#BFDBFE] dark:border-[#1E40AF] rounded-lg p-4">
+              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">Invested Value</div>
+              <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                 {formatCurrency(investedValue)}
               </div>
             </div>
@@ -1219,14 +1251,14 @@ function AddStockModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+              className="flex-1 btn-secondary-standard"
             >
-              Cancel
+              Back
             </button>
             <button
               type="submit"
               disabled={isLoading || !formData.name || !formData.quantity || !formData.avgBuyPrice}
-              className="flex-1 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-6 py-3 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Adding...' : 'Add Stock'}
             </button>
@@ -1360,7 +1392,7 @@ function EditStockModal({
               onClick={onClose}
               className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
             >
-              Cancel
+              Back
             </button>
             <button
               type="submit"

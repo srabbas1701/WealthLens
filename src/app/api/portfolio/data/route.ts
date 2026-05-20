@@ -47,6 +47,7 @@ import {
 } from '@/lib/portfolio-calculations';
 import { getStockPrices, getPreviousTradingDay, getStockPrice } from '@/lib/stock-prices';
 import { getMFNavsByISIN, getMFNavByISIN } from '@/lib/mf-navs';
+import { calculateGoldCurrentValue } from '@/services/goldPricingService';
 
 // ============================================================================
 // CACHING CONFIGURATION
@@ -191,6 +192,7 @@ const ASSET_TYPE_LABELS: Record<string, string> = {
   'fd': 'Fixed Deposits',
   'bond': 'Bonds',
   'gold': 'Gold',
+  'silver': 'Silver',
   'ppf': 'PPF',
   'epf': 'EPF',
   'nps': 'NPS',
@@ -200,6 +202,59 @@ const ASSET_TYPE_LABELS: Record<string, string> = {
   'other': 'Other',
 };
 
+function parseNotesSafely(notes: unknown): Record<string, any> {
+  if (!notes) return {};
+  if (typeof notes === 'object') return notes as Record<string, any>;
+  if (typeof notes === 'string') {
+    try {
+      return JSON.parse(notes);
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function isMaturedBondHolding(assetType: string, notes: unknown): boolean {
+  if (assetType !== 'bond') return false;
+  const metadata = parseNotesSafely(notes);
+  const maturityDate =
+    metadata.maturity_date ||
+    metadata.maturityDate ||
+    metadata.bondMaturityDate ||
+    null;
+  if (!maturityDate) return false;
+
+  const maturity = new Date(maturityDate);
+  if (Number.isNaN(maturity.getTime())) return false;
+  const today = new Date();
+  maturity.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return maturity < today;
+}
+
+function isMaturedFDHolding(assetType: string, notes: unknown): boolean {
+  if (assetType !== 'fd') return false;
+  const metadata = parseNotesSafely(notes);
+  const maturityDate =
+    metadata.maturity_date ||
+    metadata.maturityDate ||
+    metadata.fdMaturityDate ||
+    null;
+  if (!maturityDate) return false;
+
+  const maturity = new Date(maturityDate);
+  if (Number.isNaN(maturity.getTime())) return false;
+  const today = new Date();
+  maturity.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return maturity < today;
+}
+
+function isMaturedIncomeAllocationHolding(assetType: string, notes: unknown): boolean {
+  return isMaturedBondHolding(assetType, notes) || isMaturedFDHolding(assetType, notes);
+}
+
 // ============================================================================
 // API HANDLER
 // ============================================================================
@@ -208,6 +263,8 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('user_id');
+    const mode = searchParams.get('mode');
+    const isLiteMode = mode === 'lite';
     
     if (!userId) {
       return NextResponse.json<PortfolioDataResponse>(
@@ -362,160 +419,237 @@ export async function GET(request: NextRequest) {
         holdingsWithNullAssets.map((h: any) => ({ holding_id: h.id, asset_id: h.asset_id }))
       );
     }
+
+    // Lite mode is additive and opt-in.
+    // It intentionally skips external price/NAV enrichment and heavyweight insight generation.
+    if (isLiteMode) {
+      const formattedHoldings: HoldingDetail[] = holdings.map((h: any) => {
+        const asset = h.assets as any;
+        const assetType = asset?.asset_type || 'other';
+        const investedValue = h.invested_value || 0;
+        const currentValue =
+          h.current_value !== null && h.current_value !== undefined
+            ? h.current_value
+            : investedValue;
+        const isMaturedIncomeHolding = isMaturedIncomeAllocationHolding(assetType, h.notes);
+
+        let isSilverHolding = false;
+        try {
+          const notes = h.notes ? JSON.parse(h.notes) : {};
+          isSilverHolding = !!notes?.silver_type;
+        } catch {
+          isSilverHolding = false;
+        }
+
+        const displayAssetType = isSilverHolding ? 'silver' : assetType;
+        const bucket = (h as any).top_level_bucket || (asset as any)?.top_level_bucket || null;
+        const riskBehavior = (h as any).risk_behavior || (asset as any)?.risk_behavior || null;
+
+        return {
+          id: h.id,
+          name: asset?.name || 'Unknown',
+          symbol: asset?.symbol || null,
+          isin: asset?.isin || null,
+          assetType: ASSET_TYPE_LABELS[displayAssetType] || displayAssetType || 'Other',
+          quantity: h.quantity || 0,
+          averagePrice: h.average_price || 0,
+          investedValue,
+          currentValue,
+          allocationPct: 0, // filled below once total is known
+          sector: asset?.sector || null,
+          assetClass: asset?.asset_class || null,
+          topLevelBucket: bucket,
+          riskBehavior,
+          notes: h.notes || null,
+          createdAt: h.created_at || null,
+          purchaseDate: h.purchase_date || null,
+          navDate: null,
+          priceDate: null,
+        };
+      });
+
+      const totalValue = formattedHoldings.reduce((sum, h) => {
+        const holdingAssetType = String(h.assetType || '').toLowerCase();
+        const mappedAssetType =
+          holdingAssetType.includes('bond') ? 'bond' :
+          holdingAssetType.includes('fixed deposit') ? 'fd' :
+          '';
+        const excludeMaturedIncome = mappedAssetType ? isMaturedIncomeAllocationHolding(mappedAssetType, h.notes) : false;
+        if (excludeMaturedIncome) return sum;
+        return sum + (h.currentValue || h.investedValue || 0);
+      }, 0);
+      const withAllocation = formattedHoldings.map((h) => ({
+        ...h,
+        allocationPct: (() => {
+          const holdingAssetType = String(h.assetType || '').toLowerCase();
+          const mappedAssetType =
+            holdingAssetType.includes('bond') ? 'bond' :
+            holdingAssetType.includes('fixed deposit') ? 'fd' :
+            '';
+          const excludeMaturedIncome = mappedAssetType ? isMaturedIncomeAllocationHolding(mappedAssetType, h.notes) : false;
+          if (excludeMaturedIncome) return 0;
+          return calculateAllocationPercentage(h.currentValue || h.investedValue || 0, totalValue);
+        })(),
+      }));
+      const topHoldings = withAllocation.slice(0, 5);
+
+      const allocationMap = new Map<string, number>();
+      for (const h of withAllocation) {
+        const bucket = h.topLevelBucket || '';
+        if (!ALLOCATION_BUCKETS.includes(bucket)) continue;
+        const holdingAssetType = String(h.assetType || '').toLowerCase();
+        const mappedAssetType =
+          holdingAssetType.includes('bond') ? 'bond' :
+          holdingAssetType.includes('fixed deposit') ? 'fd' :
+          '';
+        const excludeMaturedIncome = mappedAssetType ? isMaturedIncomeAllocationHolding(mappedAssetType, h.notes) : false;
+        if (excludeMaturedIncome) continue;
+        allocationMap.set(bucket, (allocationMap.get(bucket) || 0) + (h.currentValue || h.investedValue || 0));
+      }
+
+      let allocation: AllocationItem[] = Array.from(allocationMap.entries())
+        .map(([bucket, value]) => ({
+          name: BUCKET_LABELS[bucket] || bucket,
+          percentage: calculateAllocationPercentage(value, totalValue),
+          color: BUCKET_COLORS[bucket] || '#64748b',
+          value,
+        }))
+        .filter((a) => a.percentage > 0);
+
+      if (allocation.length > 0 && totalValue > 0) {
+        allocation = normalizeAllocations(allocation);
+      }
+
+      const assetTypes = new Set(holdings.map((h: any) => (h.assets as any)?.asset_type).filter(Boolean));
+      const largestHoldingPct = withAllocation.length > 0 ? withAllocation[0].allocationPct : 0;
+      const insights: InsightItem[] = withAllocation.length > 0 ? [{
+        id: 1,
+        type: 'info',
+        title: 'Lite portfolio snapshot',
+        description: 'Showing a fast snapshot without live price/NAV enrichment.',
+      }] : [{
+        id: 1,
+        type: 'info',
+        title: 'Upload your portfolio to get started',
+        description: 'Import your holdings from a CSV or Excel file to see personalized insights.',
+      }];
+
+      return NextResponse.json<PortfolioDataResponse>({
+        success: true,
+        data: {
+          metrics: {
+            netWorth: totalValue,
+            netWorthChange: 0,
+            riskScore: metrics?.risk_score || 50,
+            riskLabel: metrics?.risk_label || 'Moderate',
+            goalAlignment: metrics?.goal_progress_pct || 0,
+          },
+          allocation,
+          holdings: withAllocation,
+          topHoldings,
+          insights,
+          hasData: withAllocation.length > 0,
+          summary: {
+            totalHoldings: withAllocation.length,
+            totalAssetTypes: assetTypes.size,
+            largestHoldingPct,
+            lastUpdated: portfolio.updated_at,
+            createdAt: portfolio.created_at,
+          },
+        },
+      });
+    }
     
-    // 3.5. Fetch stock prices for equity and ETF holdings (batch query for performance)
-    // ETFs trade on exchanges like stocks, so they need real-time prices (like MF NAVs)
+    // 3.5–3.7. Fetch stock prices, gold price, and MF NAVs IN PARALLEL
+    // All three are independent — running sequentially was the bottleneck.
+
+    // Identify which holdings need which price source (pure array ops, no I/O)
     const equityAndETFHoldings = holdings.filter((h: any) => {
       const asset = h.assets as any;
       return (asset?.asset_type === 'equity' || asset?.asset_type === 'etf') && asset?.symbol;
     });
-    
-    if (equityAndETFHoldings.length > 0) {
-      const symbols = equityAndETFHoldings.map((h: any) => (h.assets as any).symbol).filter(Boolean);
-      const stockPrices = await getStockPrices(symbols);
-      
-      // Store price data in memory for read-time computation (like MF NAVs)
-      for (const holding of equityAndETFHoldings) {
-        const asset = holding.assets as any;
-        const symbol = asset?.symbol;
-        if (!symbol) continue;
-        
-        const priceData = stockPrices.get(symbol.toUpperCase());
-        
-        if (!priceData) {
-          // Price not found - use current_value from database if available, else invested_value
-          // Don't make individual queries here (performance optimization)
-          console.warn(`[Portfolio Data API] No price data found for symbol: ${symbol}`);
-        } else if (priceData.price && priceData.price > 0) {
-          // Store price in memory for computation
-          (holding as any)._computedPrice = priceData.price;
-          (holding as any)._priceDate = priceData.priceDate;
-        } else {
-          console.warn(`[Portfolio Data API] Price data exists but price is null/zero for symbol: ${symbol}`);
-        }
-      }
-    }
-    
-    // 3.6. Fetch IBJA gold prices for gold holdings (batch query for performance)
     const goldHoldings = holdings.filter((h: any) => {
-      const asset = h.assets as any;
-      return asset?.asset_type === 'gold';
-    });
-    
-    if (goldHoldings.length > 0) {
-      // Fetch latest IBJA gold prices (normalized to ₹ per gram)
-      const { data: goldPriceData, error: goldPriceError } = await supabase
-        .from('gold_price_daily')
-        .select('gold_24k, gold_22k, date, source, session')
-        .order('date', { ascending: false })
-        .limit(1)
-        .single();
-      
-      if (!goldPriceError && goldPriceData) {
-        // Import gold pricing service
-        const { calculateGoldCurrentValue, getRateForPurity } = await import('@/services/goldPricingService');
-        
-        // Create IBJA rates object
-        const ibjaRates = {
-          date: goldPriceData.date,
-          gold_24k: goldPriceData.gold_24k, // Already normalized to ₹ per gram
-          gold_22k: goldPriceData.gold_22k, // Already normalized to ₹ per gram
-          source: 'IBJA' as const,
-          session: (goldPriceData.session as 'AM' | 'PM') || 'AM',
-          last_updated: new Date().toISOString(),
-        };
-        
-        // Store IBJA rates and compute current values for each gold holding
-        for (const holding of goldHoldings) {
-          try {
-            const notes = holding.notes ? JSON.parse(holding.notes) : {};
-            const goldType = notes.gold_type || 'physical';
-            
-            // Gold ETF: Skip IBJA calculation (uses NAV from exchange)
-            if (goldType === 'etf') {
-              // ETF valuation is handled via stock prices API
-              continue;
-            }
-            
-            // Calculate current value using centralized service
-            const currentValue = calculateGoldCurrentValue(
-              {
-                goldType,
-                quantity: holding.quantity || 0,
-                unitType: notes.unit_type || 'gram',
-                purity: notes.purity || '22k',
-                netWeight: notes.net_weight,
-              },
-              ibjaRates
-            );
-            
-            // Store computed value for later use
-            (holding as any)._computedGoldPrice = currentValue / (holding.quantity || 1);
-            (holding as any)._computedGoldValue = currentValue;
-            (holding as any)._ibjaRates = ibjaRates;
-          } catch (e) {
-            console.warn(`[Portfolio Data API] Failed to calculate gold value for holding ${holding.id}:`, e);
-          }
-        }
-      } else {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[Portfolio Data API] No IBJA gold price data found, using current_value from database');
-        }
+      const assetType = (h.assets as any)?.asset_type;
+      if (assetType !== 'gold') return false;
+      try {
+        const notes = h.notes ? JSON.parse(h.notes) : {};
+        return !notes?.silver_type;
+      } catch {
+        return true;
       }
-    }
-    
-    // 3.7. Fetch NAVs for mutual fund holdings (batch query for performance)
-    // Separate MF holdings into those with ISINs and those without
-    // NOTE: ETFs are handled above in section 3.5 - they trade on exchanges and get prices from stock_prices table
+    });
     const allMFHoldings = holdings.filter((h: any) => {
       const asset = h.assets as any;
       return asset?.asset_type === 'mutual_fund' || asset?.asset_type === 'index_fund';
     });
-    
-    const mfHoldingsWithISIN = allMFHoldings.filter((h: any) => {
-      const asset = h.assets as any;
-      return asset?.isin;
-    });
-    
-    const mfHoldingsWithoutISIN = allMFHoldings.filter((h: any) => {
-      const asset = h.assets as any;
-      return !asset?.isin;
-    });
-    
-    // Note: MF holdings without ISINs need backfill (run POST /api/mf/isin/backfill)
-    // Log warning only in development for missing ISINs
-    if (mfHoldingsWithoutISIN.length > 0 && process.env.NODE_ENV === 'development') {
-      console.warn(`[Portfolio Data API] Found ${mfHoldingsWithoutISIN.length} MF holdings without ISINs (will use invested_value as fallback)`);
+    const mfHoldingsWithISIN = allMFHoldings.filter((h: any) => (h.assets as any)?.isin);
+
+    const stockSymbols = equityAndETFHoldings.map((h: any) => (h.assets as any).symbol).filter(Boolean);
+    const mfIsins = mfHoldingsWithISIN.map((h: any) => (h.assets as any).isin).filter(Boolean);
+    const hasGold = goldHoldings.length > 0;
+
+    // Fire all three fetches simultaneously
+    const [stockPrices, mfNavs, goldPriceResult] = await Promise.all([
+      stockSymbols.length > 0 ? getStockPrices(stockSymbols) : Promise.resolve(new Map()),
+      mfIsins.length > 0 ? getMFNavsByISIN(mfIsins) : Promise.resolve(new Map()),
+      hasGold
+        ? supabase
+            .from('gold_price_daily')
+            .select('gold_24k, gold_22k, date, source, session')
+            .order('date', { ascending: false })
+            .limit(1)
+            .single()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+
+    // Apply stock prices
+    for (const holding of equityAndETFHoldings) {
+      const symbol = (holding.assets as any)?.symbol;
+      if (!symbol) continue;
+      const priceData = stockPrices.get(symbol.toUpperCase());
+      if (priceData?.price && priceData.price > 0) {
+        (holding as any)._computedPrice = priceData.price;
+        (holding as any)._priceDate = priceData.priceDate;
+      }
     }
-    
-    // Fetch NAVs for MF holdings WITH ISINs
-    if (mfHoldingsWithISIN.length > 0) {
-      const isins = mfHoldingsWithISIN.map((h: any) => (h.assets as any).isin).filter(Boolean);
-      const mfNavs = await getMFNavsByISIN(isins);
-      
-      // For MF holdings: Store NAV data in memory for read-time computation
-      // DO NOT persist current_value for MF - it's computed from units × latest_nav
-      // DO NOT use diff logic for MF - NAV is the single source of truth
-      
-      // Store NAV data in holding object for later use (don't persist current_value)
-      for (const holding of mfHoldingsWithISIN) {
-        const asset = holding.assets as any;
-        const isin = asset?.isin;
-        if (!isin) continue;
-        
-        const navData = mfNavs.get(isin.toUpperCase());
-        
-        if (!navData) {
-          // NAV not found in batch query - use invested_value as fallback
-          // Don't make individual queries here (performance optimization)
-          console.warn(`[Portfolio Data API] No NAV data found for ISIN: ${isin}`);
-        } else if (navData.nav) {
-          // Store NAV in memory for computation (don't persist)
-          (holding as any)._computedNav = navData.nav;
-          (holding as any)._navDate = navData.navDate;
-        } else {
-          console.warn(`[Portfolio Data API] NAV data exists but nav is null/undefined for ISIN: ${isin}, navDate: ${navData.navDate}`);
+
+    // Apply gold prices
+    const goldPriceData = goldPriceResult.data;
+    if (goldPriceData && !goldPriceResult.error) {
+      const ibjaRates = {
+        date: goldPriceData.date,
+        gold_24k: goldPriceData.gold_24k,
+        gold_22k: goldPriceData.gold_22k,
+        source: 'IBJA' as const,
+        session: (goldPriceData.session as 'AM' | 'PM') || 'AM',
+        last_updated: new Date().toISOString(),
+      };
+      for (const holding of goldHoldings) {
+        try {
+          const notes = holding.notes ? JSON.parse(holding.notes) : {};
+          const goldType = notes.gold_type || 'physical';
+          if (goldType === 'etf') continue; // ETF gold uses stock price path
+          const currentValue = calculateGoldCurrentValue(
+            { goldType, quantity: holding.quantity || 0, unitType: notes.unit_type || 'gram', purity: notes.purity || '22k', netWeight: notes.net_weight },
+            ibjaRates
+          );
+          (holding as any)._computedGoldPrice = currentValue / (holding.quantity || 1);
+          (holding as any)._computedGoldValue = currentValue;
+          (holding as any)._ibjaRates = ibjaRates;
+        } catch (e) {
+          console.warn(`[Portfolio Data API] Failed to calculate gold value for holding ${holding.id}:`, e);
         }
+      }
+    }
+
+    // Apply MF NAVs
+    for (const holding of mfHoldingsWithISIN) {
+      const isin = (holding.assets as any)?.isin;
+      if (!isin) continue;
+      const navData = mfNavs.get(isin.toUpperCase());
+      if (navData?.nav) {
+        (holding as any)._computedNav = navData.nav;
+        (holding as any)._navDate = navData.navDate;
       }
     }
     
@@ -531,6 +665,7 @@ export async function GET(request: NextRequest) {
     
     holdings.forEach(h => {
       const assetType = (h.assets as any)?.asset_type || 'other';
+      const isMaturedIncomeHolding = isMaturedIncomeAllocationHolding(assetType, h.notes);
       const isMF = assetType === 'mutual_fund' || assetType === 'index_fund';
       const isEquity = assetType === 'equity' || assetType === 'etf';
       const investedValue = h.invested_value || 0;
@@ -538,7 +673,14 @@ export async function GET(request: NextRequest) {
       let valueToUse = investedValue;
       const isPPF = assetType === 'ppf';
       const isEPF = assetType === 'epf';
-      const isGold = assetType === 'gold';
+      let isSilverHolding = false;
+      try {
+        const notes = h.notes ? JSON.parse(h.notes) : {};
+        isSilverHolding = !!notes?.silver_type;
+      } catch {
+        isSilverHolding = false;
+      }
+      const isGold = assetType === 'gold' && !isSilverHolding;
       
       if (isMF) {
         // MF: Compute current_value from units × latest_nav (NAV-driven)
@@ -608,6 +750,11 @@ export async function GET(request: NextRequest) {
             valueToUse = investedValue;
           }
         }
+      }
+
+      if (isMaturedIncomeHolding) {
+        // Matured bonds/FDs remain visible but are excluded from portfolio totals/allocation.
+        valueToUse = 0;
       }
       
       // Get bucket from holdings (denormalized) or fallback to asset
@@ -731,6 +878,7 @@ export async function GET(request: NextRequest) {
     const formattedHoldings: HoldingDetail[] = holdings.map(h => {
       const asset = h.assets as any;
       const assetType = asset?.asset_type || 'other';
+      const isMaturedIncomeHolding = isMaturedIncomeAllocationHolding(assetType, h.notes);
       const investedValue = h.invested_value || 0;
       
       // Log if asset is null (indicates linking issue)
@@ -745,7 +893,14 @@ export async function GET(request: NextRequest) {
       let currentValue = investedValue;
       const isMF = assetType === 'mutual_fund' || assetType === 'index_fund';
       const isEquity = assetType === 'equity' || assetType === 'etf';
-      const isGold = assetType === 'gold';
+      let isSilverHolding = false;
+      try {
+        const notes = h.notes ? JSON.parse(h.notes) : {};
+        isSilverHolding = !!notes?.silver_type;
+      } catch {
+        isSilverHolding = false;
+      }
+      const isGold = assetType === 'gold' && !isSilverHolding;
       const isPPF = assetType === 'ppf';
       const isEPF = assetType === 'epf';
       
@@ -824,22 +979,25 @@ export async function GET(request: NextRequest) {
       const valueForAllocation = (isMF || isEquity || isPPF || isEPF) && currentValue !== investedValue && currentValue > investedValue
         ? currentValue
         : investedValue;
+      const allocationBaseValue = isMaturedIncomeHolding ? 0 : valueForAllocation;
       
       // Get bucket and risk behavior from holdings (denormalized) or fallback to asset
       const bucket = (h as any).top_level_bucket || (asset as any)?.top_level_bucket;
       const riskBehavior = (h as any).risk_behavior || (asset as any)?.risk_behavior;
       
+      const displayAssetType = isSilverHolding ? 'silver' : assetType;
+
       return {
         id: h.id,
         name: asset?.name || 'Unknown',
         symbol: asset?.symbol || null,
         isin: asset?.isin || null,
-        assetType: ASSET_TYPE_LABELS[assetType] || assetType || 'Other',
+        assetType: ASSET_TYPE_LABELS[displayAssetType] || displayAssetType || 'Other',
         quantity: h.quantity || 0,
         averagePrice: h.average_price || 0,
         investedValue: investedValue,
         currentValue: currentValue,
-        allocationPct: calculateAllocationPercentage(valueForAllocation, totalValue),
+        allocationPct: calculateAllocationPercentage(allocationBaseValue, totalValue),
         sector: asset?.sector || null,
         assetClass: asset?.asset_class || null,
         topLevelBucket: bucket || null,

@@ -24,6 +24,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { extractAMC, extractCategory, extractPlan } from '@/lib/mf-extraction-utils';
 
+const LOOKUP_CACHE_HEADERS = {
+  'Cache-Control': 'public, max-age=300, s-maxage=300',
+};
+
+function cachedJson<T>(data: T) {
+  return NextResponse.json(data, { headers: LOOKUP_CACHE_HEADERS });
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -68,11 +76,11 @@ export async function GET(request: NextRequest) {
             const schemePlan = extractPlan(scheme.scheme_name);
             return schemeAMC === amc && schemeCategory === category && schemePlan === plan;
           });
-          return NextResponse.json(filtered);
+          return cachedJson(filtered);
         }
       }
 
-      return NextResponse.json(data || []);
+      return cachedJson(data || []);
     }
 
     // Return plans for AMC + Category
@@ -118,11 +126,11 @@ export async function GET(request: NextRequest) {
                 .map((scheme: any) => extractPlan(scheme.scheme_name))
             )
           ).sort();
-          return NextResponse.json(extractedPlans);
+          return cachedJson(extractedPlans);
         }
       }
 
-      return NextResponse.json(plans);
+      return cachedJson(plans);
     }
 
     // Return categories for a specific AMC
@@ -163,11 +171,11 @@ export async function GET(request: NextRequest) {
                 .map((scheme: any) => extractCategory(scheme.scheme_name))
             )
           ).sort();
-          return NextResponse.json(extractedCategories);
+          return cachedJson(extractedCategories);
         }
       }
 
-      return NextResponse.json(categories);
+      return cachedJson(categories);
     }
 
     // Return unique AMCs - SIMPLE: Just get DISTINCT amc_name from database
@@ -254,26 +262,21 @@ export async function GET(request: NextRequest) {
       const amcLower = amc.toLowerCase();
       // Reject if contains scheme keywords (these are scheme names, not AMC names)
       if (schemeKeywords.some(keyword => amcLower.includes(keyword))) {
-        console.warn(`[MF Schemes API] Filtering out scheme name as AMC: ${amc}`);
         return false;
       }
       // Reject if contains numbers (AMC names don't have numbers)
       if (/\d/.test(amc)) {
-        console.warn(`[MF Schemes API] Filtering out AMC with numbers: ${amc}`);
         return false;
       }
       return true;
     }).sort();
-
-    console.log(`[MF Schemes API] Returning ${filteredAMCs.length} unique AMCs from database (filtered from ${allAMCNames.size} total)`);
-    console.log(`[MF Schemes API] Sample AMCs (first 10):`, filteredAMCs.slice(0, 10));
     
     if (filteredAMCs.length === 0) {
       console.error('[MF Schemes API] WARNING: No AMCs found after filtering!');
-      return NextResponse.json([]);
+      return cachedJson([]);
     }
-    
-    return NextResponse.json(filteredAMCs);
+
+    return cachedJson(filteredAMCs);
   } catch (error: any) {
     console.error('[MF Schemes API] Error:', error);
     return NextResponse.json(

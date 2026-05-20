@@ -79,7 +79,6 @@ import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { aggregatePortfolioData, validatePortfolioData } from '@/lib/portfolio-aggregation';
 import type { DailySummaryResponse, WeeklySummaryResponse, Status, RiskAlignmentStatus } from '@/types/copilot';
 import { calculateXIRRFromHoldings, formatXIRR } from '@/lib/xirr-calculator';
-import { fetchPortfolioHealthScore } from '@/services/portfolioAnalytics';
 import type { PortfolioHealthScore } from '@/lib/portfolio-intelligence/health-score';
 import { setCachedPortfolioData, clearPortfolioCache } from '@/lib/portfolio-cache';
 import { getLiabilityTotals, type Liability } from '@/lib/liabilities-store';
@@ -271,14 +270,12 @@ function DashboardContent() {
   const { user, authStatus, signOut } = useAuth();
   // CRITICAL: useAuthAppData triggers lazy loading of portfolio/profile data
   // This MUST be called on dashboard route for hasPortfolio/portfolioCheckComplete to work
-  const { profile, hasPortfolio, portfolioCheckComplete } = useAuthAppData();
+  const { profile, hasPortfolio, hasCompletedOnboarding, portfolioCheckComplete } = useAuthAppData();
   const { format, setFormat, formatCurrency } = useCurrency();
   const { hasCapability } = useCapabilities();
   const redirectAttemptedRef = useRef(false);
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous dashboard fetches
   const lastFetchedUserIdRef = useRef<string | null>(null); // Prevent re-fetch when portfolioCheckComplete changes
-  const fetchingHealthScoreRef = useRef(false); // Prevent duplicate health score fetches
-  
   const [greeting, setGreeting] = useState('');
   const [userName, setUserName] = useState('');
   
@@ -332,9 +329,8 @@ function DashboardContent() {
   // Insights & Alerts section collapsed state (collapsed by default so user controls visibility)
   const [insightsCollapsed, setInsightsCollapsed] = useState(false);
   
-  // Portfolio Health Score state (fetched from API)
+  // Portfolio Health Score state (loaded via fetchDashboardData)
   const [portfolioHealthScore, setPortfolioHealthScore] = useState<PortfolioHealthScore | null>(null);
-  const [healthScoreLoading, setHealthScoreLoading] = useState(false);
   const [showUnitHint, setShowUnitHint] = useState(false);
   const [upgradeModal, setUpgradeModal] = useState<{
     open: boolean;
@@ -351,14 +347,7 @@ function DashboardContent() {
   // Removed portfolioCheckTimeout to eliminate race conditions
   const hasValidSession = !!user && !!user.id;
 
-  // Fetch liabilities from API
-  useEffect(() => {
-    if (!user?.id) return;
-    fetch(`/api/liabilities?user_id=${user.id}`)
-      .then((r) => r.json())
-      .then((json) => { if (json.success) setLiabilitiesData(json.data ?? []); })
-      .catch(() => {});
-  }, [user?.id]);
+  // Liabilities are now fetched inside fetchDashboardData via dashboard-summary-optimized
 
   // Track onboarding progress
   useEffect(() => {
@@ -471,7 +460,6 @@ function DashboardContent() {
     const isFromHomePage = navigationSource === 'home' && navigationTime && (Date.now() - parseInt(navigationTime, 10)) < 10000; // Within 10 seconds
     
     if (navigationSource === 'home' || navigationSource === 'header') {
-      console.log('[Dashboard] Cleared redirect state - navigated from', navigationSource);
       redirectAttemptedRef.current = false;
       const redirectKey = `dashboard_redirect_${user.id}`;
       localStorage.removeItem(redirectKey);
@@ -481,7 +469,6 @@ function DashboardContent() {
       // If coming from home page, skip redirect logic entirely (user explicitly clicked)
       // This prevents unnecessary redirects and improves loading speed
       if (isFromHomePage) {
-        console.log('[Dashboard] Skipping redirect checks - user navigated from home page');
         return;
       }
     }
@@ -514,8 +501,20 @@ function DashboardContent() {
     
     const timeSinceRedirect = now - lastRedirectTime;
     
+    // Temporary bypass immediately after onboarding completion (client-side fallback)
+    const cameFromOnboarding = searchParams?.get('from') === 'onboarding';
+    let onboardingBypass = false;
+    try {
+      onboardingBypass = !!localStorage.getItem(`onboarding_completed_${user.id}`);
+    } catch {
+      onboardingBypass = false;
+    }
+
     // PERMANENT FIX: Simplified conditions
-    if (!hasPortfolio && 
+    if (!hasPortfolio &&
+        !hasCompletedOnboarding &&
+        !cameFromOnboarding &&
+        !onboardingBypass &&
         portfolioCheckComplete && 
         !redirectAttemptedRef.current && 
         timeSinceRedirect > 10000 && // 10 seconds
@@ -530,97 +529,94 @@ function DashboardContent() {
         expiresAt: now + 60000
       }));
       
-      console.log('[Dashboard] Redirecting to onboarding - no portfolio found');
       // Use hard redirect - router.replace can get stuck on slow loads (4+ sec TTFB)
       window.location.href = '/onboarding';
       return;
-    } else if (hasPortfolio) {
+    } else if (hasPortfolio || hasCompletedOnboarding || cameFromOnboarding || onboardingBypass) {
       // Clear redirect data if portfolio exists
       redirectAttemptedRef.current = false;
       localStorage.removeItem(redirectKey);
+      try {
+        localStorage.removeItem(`onboarding_completed_${user.id}`);
+      } catch {
+        // ignore localStorage failures
+      }
     } else if (redirectCount >= 3) {
       // Stop redirecting after 3 attempts
       console.warn('[Dashboard] Too many redirects - stopping loop. Showing dashboard anyway.');
       localStorage.removeItem(redirectKey);
       redirectAttemptedRef.current = false;
     }
-  }, [authStatus, user, hasPortfolio, portfolioCheckComplete, router, pathname]);
+  }, [authStatus, user, hasPortfolio, hasCompletedOnboarding, portfolioCheckComplete, router, pathname, searchParams]);
 
   // Fetch dashboard data via optimized API (single fetch replaces portfolio + daily + weekly)
   const fetchDashboardData = useCallback(async (userId: string) => {
-    if (fetchingRef.current) {
-      console.log('[Dashboard] Already loading dashboard data, skipping...');
-      return;
-    }
-    
+    if (fetchingRef.current) return;
+
     fetchingRef.current = true;
     setPortfolioLoading(true);
     setSummaryLoading(true);
     setWeeklyLoading(true);
     setSummaryError(false);
     setWeeklyError(false);
-    console.log('[Dashboard] Starting dashboard data load (optimized API)');
-    
-    const timeoutId = setTimeout(() => {
-      if (fetchingRef.current) {
-        console.warn('[Dashboard] Dashboard data fetch timeout after 10s');
-        setPortfolioLoading(false);
-        setSummaryLoading(false);
-        setWeeklyLoading(false);
-        setSummaryError(true);
-        setWeeklyError(true);
-        fetchingRef.current = false;
-      }
-    }, 10000);
-    
+
+    const controller = new AbortController();
+    const abortTimeout = setTimeout(() => controller.abort(), 12000);
+
     try {
-      const controller = new AbortController();
-      const abortTimeout = setTimeout(() => controller.abort(), 8000);
-      
       const response = await fetch(`/api/dashboard-summary-optimized?user_id=${encodeURIComponent(userId)}`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         signal: controller.signal,
       });
-      
+
       clearTimeout(abortTimeout);
-      clearTimeout(timeoutId);
-      
+
       if (response.ok) {
         const json = await response.json();
         if (json.success && json.data) {
-          const { portfolio: portfolioData, dailySummary: aiSummaryData, weeklySummary: weeklySummaryData, insurance: insuranceData, transactions: transactionsData } = json.data;
-          
-          setPortfolioData(portfolioData || EMPTY_PORTFOLIO);
+          const {
+            portfolio: portfolioDataFromApi,
+            dailySummary: aiSummaryData,
+            weeklySummary: weeklySummaryData,
+            insurance: insuranceData,
+            liabilities: liabilitiesFromApi,
+            healthScore: healthScoreFromApi,
+            transactions: transactionsData,
+          } = json.data;
+
+          const resolvedPortfolio = portfolioDataFromApi || EMPTY_PORTFOLIO;
+          setPortfolioData(resolvedPortfolio);
           setAiSummary(aiSummaryData ?? null);
           setWeeklySummary(weeklySummaryData ?? null);
           setInsurance(Array.isArray(insuranceData) ? insuranceData : []);
+          setLiabilitiesData(Array.isArray(liabilitiesFromApi) ? liabilitiesFromApi : []);
           setTransactions(Array.isArray(transactionsData) ? transactionsData : []);
-          
+
+          if (healthScoreFromApi) {
+            setPortfolioHealthScore(healthScoreFromApi);
+          }
+
           mergeDashboardCache(userId, {
-            portfolioData: portfolioData || EMPTY_PORTFOLIO,
+            portfolioData: resolvedPortfolio,
             aiSummary: aiSummaryData ?? null,
             weeklySummary: weeklySummaryData ?? null,
+            portfolioHealthScore: healthScoreFromApi ?? null,
           });
-          setCachedPortfolioData(userId, portfolioData); // Shared cache for Summary page
-          console.log('[Dashboard] Dashboard data loaded successfully');
+          setCachedPortfolioData(userId, resolvedPortfolio); // Shared cache for Summary page
         } else {
-          console.warn('[Dashboard] Dashboard API returned success=false:', json);
           setPortfolioData(EMPTY_PORTFOLIO);
           setSummaryError(true);
           setWeeklyError(true);
         }
       } else {
-        console.error('[Dashboard] Dashboard data fetch failed:', { status: response.status, statusText: response.statusText, url: response.url });
         setPortfolioData(EMPTY_PORTFOLIO);
         setSummaryError(true);
         setWeeklyError(true);
       }
     } catch (error: any) {
-      clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
-        console.warn('[Dashboard] Dashboard data fetch aborted (timeout)');
-      } else {
+      clearTimeout(abortTimeout);
+      if (error.name !== 'AbortError') {
         console.error('[Dashboard] Failed to fetch dashboard data:', error);
       }
       setPortfolioData(EMPTY_PORTFOLIO);
@@ -668,17 +664,6 @@ function DashboardContent() {
     }
   };
 
-  // DEBUG: Log state to help diagnose loading issues
-  useEffect(() => {
-    console.log('[Dashboard] State:', {
-      authStatus,
-      hasUser: !!user?.id,
-      userId: user?.id,
-      hasPortfolio,
-      portfolioCheckComplete,
-      redirectAttempted: redirectAttemptedRef.current,
-    });
-  }, [authStatus, user?.id, hasPortfolio, portfolioCheckComplete]);
 
   // Reset lastFetchedUserIdRef and clear cache when user logs out (allows fresh fetch on next login)
   useEffect(() => {
@@ -694,21 +679,20 @@ function DashboardContent() {
   useEffect(() => {
     if (!user?.id) return;
     
-    // If portfolio check is complete and no portfolio, don't fetch
-    if (portfolioCheckComplete && !hasPortfolio) {
+    // If user truly has no portfolio and has not completed onboarding, redirect guard will handle it.
+    // For onboarding-complete users with empty portfolios, continue and render empty dashboard quickly.
+    if (portfolioCheckComplete && !hasPortfolio && !hasCompletedOnboarding) {
       return;
     }
     
     // Guard: Already fetched for this user - skip (prevents duplicate when portfolioCheckComplete changes)
     if (lastFetchedUserIdRef.current === user.id) {
-      console.log('[Dashboard] Already fetched for user, skipping duplicate fetch');
       return;
     }
     
     // OPTIMIZATION: Use cached data when navigating back (instant load)
     const cached = getCachedDashboardData(user.id);
     if (cached) {
-      console.log('[Dashboard] Using cached data for instant load');
       lastFetchedUserIdRef.current = user.id;
       setPortfolioData(cached.portfolioData);
       setAiSummary(cached.aiSummary);
@@ -728,7 +712,7 @@ function DashboardContent() {
     fetchDashboardData(user.id);
     
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, portfolioCheckComplete]);
+  }, [user?.id, portfolioCheckComplete, hasPortfolio, hasCompletedOnboarding]);
 
 
   const getRiskAlignmentLabel = (status: RiskAlignmentStatus | undefined): string => {
@@ -940,68 +924,7 @@ function DashboardContent() {
     };
   }, [portfolioData.holdings, portfolioData.summary.createdAt, portfolioData.summary.lastUpdated]);
 
-  // Fetch Portfolio Health Score from API (same source as health score page)
-  // OPTIMIZATION: Use cached health score for session - calculated once, reused until cache expires
-  // Skip fetch if user lacks capability - prevents 403 in console for free users
-  useEffect(() => {
-    if (!user?.id || !isDataConsistent) {
-      setPortfolioHealthScore(null);
-      return;
-    }
-    if (!hasCapability(FEATURE_ACCESS.ANALYTICS_HEALTH.capability)) {
-      setPortfolioHealthScore(null);
-      return;
-    }
-
-    const fetchHealthScore = async () => {
-      // OPTIMIZATION: Use cached health score - same score throughout session
-      const cached = getCachedDashboardData(user.id);
-      if (cached?.portfolioHealthScore) {
-        setPortfolioHealthScore(cached.portfolioHealthScore);
-        return;
-      }
-      
-      // Guard: Prevent duplicate simultaneous fetches
-      if (fetchingHealthScoreRef.current) {
-        console.log('[Dashboard] Already loading health score, skipping...');
-        return;
-      }
-      
-      fetchingHealthScoreRef.current = true;
-      setHealthScoreLoading(true);
-      console.log('[Dashboard] Starting health score load');
-      
-      // OPTIMIZATION: Add timeout to prevent hanging
-      const timeoutId = setTimeout(() => {
-        console.warn('[Dashboard] Health score fetch timeout');
-        setHealthScoreLoading(false);
-        setPortfolioHealthScore(null);
-        fetchingHealthScoreRef.current = false;
-      }, 10000);
-      
-      try {
-        const response = await fetchPortfolioHealthScore(user.id);
-        clearTimeout(timeoutId);
-        
-        if (response.success && response.data) {
-          setPortfolioHealthScore(response.data);
-          mergeDashboardCache(user.id, { portfolioHealthScore: response.data });
-          console.log('[Dashboard] Health score loaded successfully');
-        } else {
-          setPortfolioHealthScore(null);
-        }
-      } catch (error) {
-        clearTimeout(timeoutId);
-        console.error('[Dashboard] Error loading health score:', error);
-        setPortfolioHealthScore(null);
-      } finally {
-        setHealthScoreLoading(false);
-        fetchingHealthScoreRef.current = false;
-      }
-    };
-
-    fetchHealthScore();
-  }, [user?.id, isDataConsistent, hasCapability]);
+  // Health score is now fetched inside fetchDashboardData via dashboard-summary-optimized
 
   // GUARD: Show loading while auth state is being determined
   // PERMANENT FIX: Simplified loading logic
@@ -1267,7 +1190,7 @@ function DashboardContent() {
               {portfolioLoading ? (
                 <div className="h-16 w-64 bg-[#F6F8FB] dark:bg-[#334155] rounded animate-pulse mb-4" />
               ) : !isDataConsistent ? (
-                <DataConsolidationMessage className="mb-4" />
+                <DataConsolidationMessage className="mb-4" isEmpty={!portfolioData.hasData} />
               ) : (
                 <>
                   {(() => {
@@ -1324,11 +1247,11 @@ function DashboardContent() {
         {/* ============================================================================ */}
         {/* PORTFOLIO HEALTH SCORE WIDGET */}
         {/* ============================================================================ */}
-        {isDataConsistent && (portfolioHealthScore || healthScoreLoading) && (
+        {isDataConsistent && (portfolioHealthScore || portfolioLoading) && (
           <ErrorBoundary sectionName="Portfolio Health Score">
             <section className="mb-8">
               <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] px-5 py-5">
-              {healthScoreLoading ? (
+              {portfolioLoading ? (
                 <div className="flex items-center gap-4">
                   <div className="w-8 h-8 border-4 border-[#E5E7EB] dark:border-[#334155] border-t-[#2563EB] dark:border-t-[#3B82F6] rounded-full animate-spin" />
                   <span className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Calculating health score...</span>

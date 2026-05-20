@@ -71,6 +71,50 @@ import { classifyAsset } from '@/lib/asset-classification';
 import { getISINsBySchemeCode } from '@/lib/mf-scheme-master';
 
 type Asset = Database['public']['Tables']['assets']['Row'];
+type AssetLookupCache = {
+  byIsin: Map<string, Asset | null>;
+  bySymbol: Map<string, Asset | null>;
+  byExactNameType: Map<string, Asset | null>;
+  byFuzzyNameType: Map<string, Asset | null>;
+};
+
+function createAssetLookupCache(): AssetLookupCache {
+  return {
+    byIsin: new Map(),
+    bySymbol: new Map(),
+    byExactNameType: new Map(),
+    byFuzzyNameType: new Map(),
+  };
+}
+
+function cacheAssetLookupEntries(cache: AssetLookupCache, asset: Asset | null) {
+  if (!asset) return;
+  if (asset.isin) {
+    cache.byIsin.set(asset.isin.toUpperCase(), asset);
+  }
+  if (asset.symbol) {
+    cache.bySymbol.set(asset.symbol.toUpperCase(), asset);
+  }
+  if (asset.name && asset.asset_type) {
+    const key = `${asset.asset_type}::${asset.name}`;
+    cache.byExactNameType.set(key, asset);
+    cache.byFuzzyNameType.set(key, asset);
+  }
+}
+
+const IS_DEV = process.env.NODE_ENV === 'development';
+
+function debugLog(message?: unknown, ...optionalParams: unknown[]) {
+  if (IS_DEV) {
+    console.log(message, ...optionalParams);
+  }
+}
+
+function debugWarn(message?: unknown, ...optionalParams: unknown[]) {
+  if (IS_DEV) {
+    console.warn(message, ...optionalParams);
+  }
+}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -168,6 +212,88 @@ export function normalizeSchemeName(schemeName: string): string {
   return normalized;
 }
 
+type MFSchemeMasterRow = {
+  scheme_code: string;
+  scheme_name: string;
+  fund_house: string | null;
+  isin_growth: string | null;
+  isin_div_payout: string | null;
+  isin_div_reinvest: string | null;
+  scheme_status: string | null;
+  last_updated: string | null;
+};
+type CachedMFSchemeMasterRow = MFSchemeMasterRow & {
+  normalized_scheme_name: string;
+  scheme_name_lower: string;
+  fund_house_lower: string;
+};
+
+const MF_ACTIVE_SCHEMES_CACHE_TTL_MS = 10 * 60 * 1000;
+let mfActiveSchemesCache: { fetchedAt: number; rows: CachedMFSchemeMasterRow[] } | null = null;
+const mfIlikeSchemesCache = new Map<string, { fetchedAt: number; rows: CachedMFSchemeMasterRow[] }>();
+
+function enrichSchemeRow(row: MFSchemeMasterRow): CachedMFSchemeMasterRow {
+  return {
+    ...row,
+    normalized_scheme_name: normalizeSchemeName(row.scheme_name),
+    scheme_name_lower: row.scheme_name.toLowerCase(),
+    fund_house_lower: row.fund_house?.toLowerCase().trim() || '',
+  };
+}
+
+async function getActiveMFSchemes(
+  supabase: ReturnType<typeof createAdminClient>
+): Promise<CachedMFSchemeMasterRow[] | null> {
+  const now = Date.now();
+  if (
+    mfActiveSchemesCache &&
+    now - mfActiveSchemesCache.fetchedAt < MF_ACTIVE_SCHEMES_CACHE_TTL_MS
+  ) {
+    return mfActiveSchemesCache.rows;
+  }
+
+  const { data, error } = await supabase
+    .from('mf_scheme_master')
+    .select('scheme_code, scheme_name, fund_house, isin_growth, isin_div_payout, isin_div_reinvest, scheme_status, last_updated')
+    .eq('scheme_status', 'Active')
+    .order('last_updated', { ascending: false });
+
+  if (error) {
+    return null;
+  }
+
+  const rows = ((data || []) as MFSchemeMasterRow[]).map(enrichSchemeRow);
+  mfActiveSchemesCache = { fetchedAt: now, rows };
+  return rows;
+}
+
+async function getIlikeMFSchemes(
+  supabase: ReturnType<typeof createAdminClient>,
+  normalizedName: string
+): Promise<CachedMFSchemeMasterRow[] | null> {
+  const now = Date.now();
+  const cached = mfIlikeSchemesCache.get(normalizedName);
+  if (cached && now - cached.fetchedAt < MF_ACTIVE_SCHEMES_CACHE_TTL_MS) {
+    return cached.rows;
+  }
+
+  const { data, error } = await supabase
+    .from('mf_scheme_master')
+    .select('scheme_code, scheme_name, fund_house, isin_growth, isin_div_payout, isin_div_reinvest, scheme_status, last_updated')
+    .eq('scheme_status', 'Active')
+    .ilike('scheme_name', `%${normalizedName}%`)
+    .order('last_updated', { ascending: false })
+    .limit(10);
+
+  if (error) {
+    return null;
+  }
+
+  const rows = ((data || []) as MFSchemeMasterRow[]).map(enrichSchemeRow);
+  mfIlikeSchemesCache.set(normalizedName, { fetchedAt: now, rows });
+  return rows;
+}
+
 /**
  * Resolve MF scheme from mf_scheme_master (mf_scheme_master is the ONLY source of truth)
  * 
@@ -195,7 +321,7 @@ async function resolveMFScheme(
   // CSV IS NEVER a source of ISIN truth - ignore CSV ISIN, always resolve from scheme master
   if (!holding.name) {
     const warning = `ISIN not resolved: No scheme name provided for mutual fund. Asset created without ISIN.`;
-    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    debugWarn(`  ⚠️ [MF Upload] ${warning}`);
     if (warnings) warnings.push(warning);
     return null;
   }
@@ -203,29 +329,25 @@ async function resolveMFScheme(
   const normalizedName = normalizeSchemeName(holding.name);
   if (!normalizedName) {
     const warning = `ISIN not resolved for "${holding.name}": Scheme name is empty after normalization. Asset created without ISIN.`;
-    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    debugWarn(`  ⚠️ [MF Upload] ${warning}`);
     if (warnings) warnings.push(warning);
     return null;
   }
   
   // Query mf_scheme_master - ONLY source of truth for ISINs
-  // Filter: ACTIVE schemes only
-  const { data: schemes, error } = await supabase
-    .from('mf_scheme_master')
-    .select('scheme_code, scheme_name, fund_house, isin_growth, isin_div_payout, isin_div_reinvest, scheme_status, last_updated')
-    .eq('scheme_status', 'Active')
-    .order('last_updated', { ascending: false });
-  
-  if (error) {
+  // Filter: ACTIVE schemes only (cached for repeated rows in the same import window)
+  const schemes = await getActiveMFSchemes(supabase);
+
+  if (!schemes) {
     const warning = `ISIN not resolved for "${holding.name}": Error querying scheme master. Asset created without ISIN.`;
-    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    debugWarn(`  ⚠️ [MF Upload] ${warning}`);
     if (warnings) warnings.push(warning);
     return null;
   }
   
   if (!schemes || schemes.length === 0) {
     const warning = `ISIN not resolved for "${holding.name}": Scheme master is empty. Asset created without ISIN.`;
-    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    debugWarn(`  ⚠️ [MF Upload] ${warning}`);
     if (warnings) warnings.push(warning);
     return null;
   }
@@ -235,11 +357,9 @@ async function resolveMFScheme(
   let bestScore = 0;
   
   for (const scheme of schemes) {
-    const schemeNormalized = normalizeSchemeName(scheme.scheme_name);
-    
-    if (schemeNormalized === normalizedName) {
+    if (scheme.normalized_scheme_name === normalizedName) {
       // Prefer: ACTIVE + DIRECT + GROWTH
-      const isDirect = scheme.scheme_name.toLowerCase().includes('direct');
+      const isDirect = scheme.scheme_name_lower.includes('direct');
       const isGrowth = scheme.isin_growth && !scheme.isin_div_payout && !scheme.isin_div_reinvest;
       
       const score = (isDirect ? 100 : 50) + (isGrowth ? 10 : 0);
@@ -259,27 +379,20 @@ async function resolveMFScheme(
   // Strategy 2: ILIKE match with fund_house preference (if no exact match)
   if (!bestMatch) {
     // Try ILIKE match on scheme_name
-    const { data: ilikeSchemes } = await supabase
-      .from('mf_scheme_master')
-      .select('scheme_code, scheme_name, fund_house, isin_growth, isin_div_payout, isin_div_reinvest, scheme_status, last_updated')
-      .eq('scheme_status', 'Active')
-      .ilike('scheme_name', `%${normalizedName}%`)
-      .order('last_updated', { ascending: false })
-      .limit(10);
+    const ilikeSchemes = await getIlikeMFSchemes(supabase, normalizedName);
     
     if (ilikeSchemes && ilikeSchemes.length > 0) {
       // Extract fund house from CSV name (first part before "Mutual Fund" or similar)
       const csvFundHouse = holding.name.match(/^([A-Za-z\s&]+?)(?:\s+(?:Mutual Fund|MF|Fund|Limited|Ltd))?/i)?.[1]?.trim().toLowerCase();
       
       for (const scheme of ilikeSchemes) {
-        const schemeNormalized = normalizeSchemeName(scheme.scheme_name);
-        const schemeFundHouse = scheme.fund_house?.toLowerCase().trim();
+        const schemeFundHouse = scheme.fund_house_lower;
         
         // Prefer schemes with matching fund house
         const fundHouseMatch = csvFundHouse && schemeFundHouse && 
           (schemeFundHouse.includes(csvFundHouse) || csvFundHouse.includes(schemeFundHouse));
         
-        const isDirect = scheme.scheme_name.toLowerCase().includes('direct');
+        const isDirect = scheme.scheme_name_lower.includes('direct');
         const isGrowth = scheme.isin_growth && !scheme.isin_div_payout && !scheme.isin_div_reinvest;
         
         const score = (fundHouseMatch ? 75 : 25) + (isDirect ? 10 : 0) + (isGrowth ? 5 : 0);
@@ -294,7 +407,7 @@ async function resolveMFScheme(
   
   if (!bestMatch) {
     const warning = `ISIN not resolved for "${holding.name}" (normalized: "${normalizedName}"). No matching ACTIVE scheme found in scheme master. Asset created without ISIN.`;
-    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    debugWarn(`  ⚠️ [MF Upload] ${warning}`);
     if (warnings) warnings.push(warning);
     return null;
   }
@@ -304,7 +417,7 @@ async function resolveMFScheme(
   
   if (!resolvedIsin) {
     const warning = `ISIN not resolved for "${holding.name}": Matched scheme "${bestMatch.scheme_name}" but it has no ISIN. Asset created without ISIN.`;
-    console.warn(`  ⚠️ [MF Upload] ${warning}`);
+    debugWarn(`  ⚠️ [MF Upload] ${warning}`);
     if (warnings) warnings.push(warning);
     return null;
   }
@@ -335,7 +448,8 @@ async function resolveMFScheme(
  */
 async function findAsset(
   supabase: ReturnType<typeof createAdminClient>,
-  holding: ParsedHolding
+  holding: ParsedHolding,
+  lookupCache?: AssetLookupCache
 ): Promise<Asset | null> {
   // For MF/Index Fund (NOT ETF), attempt ISIN resolution (BEST EFFORT - NON-BLOCKING)
   // ETFs trade on exchanges like stocks and use trading symbols, not scheme codes
@@ -367,32 +481,51 @@ async function findAsset(
   // 1. Try ISIN first (most reliable)
   const isinToSearch = resolvedIsin || holding.isin;
   if (isinToSearch) {
+    const isinKey = isinToSearch.toUpperCase();
+    if (lookupCache?.byIsin.has(isinKey)) {
+      return lookupCache.byIsin.get(isinKey) || null;
+    }
+
     const { data: assetByIsin } = await supabase
       .from('assets')
       .select('*')
-      .eq('isin', isinToSearch.toUpperCase())
+      .eq('isin', isinKey)
       .single();
     
     if (assetByIsin) {
+      if (lookupCache) cacheAssetLookupEntries(lookupCache, assetByIsin);
       return assetByIsin;
     }
+    lookupCache?.byIsin.set(isinKey, null);
   }
   
   // 2. Try Symbol (reliable for stocks and ETFs, not applicable for MF)
   if (!isMF && holding.symbol) {
+    const symbolKey = holding.symbol.toUpperCase();
+    if (lookupCache?.bySymbol.has(symbolKey)) {
+      return lookupCache.bySymbol.get(symbolKey) || null;
+    }
+
     const { data: assetBySymbol } = await supabase
       .from('assets')
       .select('*')
-      .eq('symbol', holding.symbol.toUpperCase())
+      .eq('symbol', symbolKey)
       .single();
     
     if (assetBySymbol) {
+      if (lookupCache) cacheAssetLookupEntries(lookupCache, assetBySymbol);
       return assetBySymbol;
     }
+    lookupCache?.bySymbol.set(symbolKey, null);
   }
   
   // 3. Try exact name match (for all assets, including MF)
   if (holding.name) {
+    const exactNameKey = `${holding.asset_type}::${holding.name}`;
+    if (lookupCache?.byExactNameType.has(exactNameKey)) {
+      return lookupCache.byExactNameType.get(exactNameKey) || null;
+    }
+
     const { data: assetByName } = await supabase
       .from('assets')
       .select('*')
@@ -401,10 +534,16 @@ async function findAsset(
       .maybeSingle();
     
     if (assetByName) {
+      if (lookupCache) cacheAssetLookupEntries(lookupCache, assetByName);
       return assetByName;
     }
+    lookupCache?.byExactNameType.set(exactNameKey, null);
     
     // 4. Try fuzzy name match (last resort, for all assets)
+    if (lookupCache?.byFuzzyNameType.has(exactNameKey)) {
+      return lookupCache.byFuzzyNameType.get(exactNameKey) || null;
+    }
+
     const { data: assetByFuzzyName } = await supabase
       .from('assets')
       .select('*')
@@ -414,8 +553,10 @@ async function findAsset(
       .maybeSingle();
     
     if (assetByFuzzyName) {
+      if (lookupCache) cacheAssetLookupEntries(lookupCache, assetByFuzzyName);
       return assetByFuzzyName;
     }
+    lookupCache?.byFuzzyNameType.set(exactNameKey, null);
   }
   
   return null;
@@ -450,7 +591,7 @@ async function createAsset(
   
   // ISIN is optional for MF assets - log warning if missing, but proceed
   if (isMF && !holding.isin) {
-    console.warn(`  ⚠️ [MF Upload] ISIN not resolved for "${holding.name}". Created asset without ISIN.`);
+    debugWarn(`  ⚠️ [MF Upload] ISIN not resolved for "${holding.name}". Created asset without ISIN.`);
     // Continue - do NOT throw error
   }
   
@@ -458,7 +599,7 @@ async function createAsset(
   if (isMF && holding.isin) {
     const cleanIsin = holding.isin.toUpperCase().trim();
     if (cleanIsin.length !== 12 || !/^[A-Z0-9]{12}$/.test(cleanIsin)) {
-      console.warn(
+      debugWarn(
         `  ⚠️ [MF Upload] Invalid ISIN format for "${holding.name}": ${holding.isin}. ` +
         `Created asset without ISIN.`
       );
@@ -510,7 +651,7 @@ async function createAsset(
       // Will be enriched later via ISIN backfill
     }
   } else if (isETF && !newAsset.symbol) {
-    console.warn(`  ⚠️ ETF "${newAsset.name}" created without trading symbol - price updates will fail!`);
+    debugWarn(`  ⚠️ ETF "${newAsset.name}" created without trading symbol - price updates will fail!`);
   }
   
   return newAsset;
@@ -536,11 +677,12 @@ async function createAsset(
 async function mergeHolding(
   supabase: ReturnType<typeof createAdminClient>,
   portfolioId: string,
-  assetId: string,
+  asset: Pick<Asset, 'id' | 'asset_type' | 'symbol'>,
   holding: ParsedHolding,
   source: 'csv' | 'manual' | 'sample' | 'api',
   priceMap?: Map<string, StockPrice | null>
 ): Promise<{ created: boolean; merged: boolean }> {
+  const assetId = asset.id;
   // Check if holding already exists
   const { data: existingHolding } = await supabase
     .from('holdings')
@@ -567,21 +709,16 @@ async function mergeHolding(
     // For equity holdings, get current price from stored prices
     // Never default to avg_buy_price for equity
     let currentValue: number | null = null;
-    const asset = await supabase
-      .from('assets')
-      .select('asset_type, symbol')
-      .eq('id', assetId)
-      .single();
     
-    if (asset.data?.asset_type === 'equity' && asset.data?.symbol) {
-      const symbolKey = asset.data.symbol.toUpperCase();
-      const priceData = priceMap?.get(symbolKey) ?? await getStockPrice(asset.data.symbol);
+    if (asset.asset_type === 'equity' && asset.symbol) {
+      const symbolKey = asset.symbol.toUpperCase();
+      const priceData = priceMap?.get(symbolKey) ?? await getStockPrice(asset.symbol);
       if (priceData && priceData.price) {
         currentValue = mergedQty * priceData.price;
       } else {
         // No price available - use invested_value as temporary fallback until price update job runs
         // Database requires NOT NULL, so we can't use null
-        console.warn(`  No price data for ${asset.data.symbol}, using invested_value as temporary current_value until price update`);
+        debugWarn(`  No price data for ${asset.symbol}, using invested_value as temporary current_value until price update`);
         currentValue = mergedInvestedValue;
       }
     } else {
@@ -614,21 +751,16 @@ async function mergeHolding(
     // For equity holdings, get current price from stored prices
     // Never default to avg_buy_price for equity
     let currentValue: number | null = null;
-    const asset = await supabase
-      .from('assets')
-      .select('asset_type, symbol')
-      .eq('id', assetId)
-      .single();
     
-    if (asset.data?.asset_type === 'equity' && asset.data?.symbol) {
-      const symbolKey = asset.data.symbol.toUpperCase();
-      const priceData = priceMap?.get(symbolKey) ?? await getStockPrice(asset.data.symbol);
+    if (asset.asset_type === 'equity' && asset.symbol) {
+      const symbolKey = asset.symbol.toUpperCase();
+      const priceData = priceMap?.get(symbolKey) ?? await getStockPrice(asset.symbol);
       if (priceData && priceData.price) {
         currentValue = holding.quantity * priceData.price;
       } else {
         // No price available - use invested_value as temporary fallback until price update job runs
         // Database requires NOT NULL, so we can't use null
-        console.warn(`  No price data for ${asset.data.symbol}, using invested_value as temporary current_value until price update`);
+        debugWarn(`  No price data for ${asset.symbol}, using invested_value as temporary current_value until price update`);
         currentValue = computedInvestedValue;
       }
     } else {
@@ -674,7 +806,7 @@ async function recalculateMetrics(
   supabase: ReturnType<typeof createAdminClient>,
   portfolioId: string
 ): Promise<void> {
-  console.log('\n=== Recalculating Portfolio Metrics ===');
+  debugLog('\n=== Recalculating Portfolio Metrics ===');
   
   // Get all holdings with asset info
   const { data: holdings, error: holdingsError } = await supabase
@@ -708,7 +840,7 @@ async function recalculateMetrics(
   const totalPct = metrics.equityPct + metrics.debtPct + metrics.goldPct + 
                    metrics.cashPct + metrics.hybridPct + metrics.otherPct;
   if (Math.abs(totalPct - 100) > 1 && metrics.totalInvestedValue > 0) {
-    console.warn(`  WARNING: Allocation percentages sum to ${totalPct.toFixed(1)}%, not 100%`);
+    debugWarn(`  WARNING: Allocation percentages sum to ${totalPct.toFixed(1)}%, not 100%`);
   }
   
   // Upsert metrics
@@ -827,7 +959,7 @@ async function generateInsights(
     if (error) {
       console.error('Failed to insert insights:', error);
     } else {
-      console.log(`Generated ${newInsights.length} insights`);
+      debugLog(`Generated ${newInsights.length} insights`);
     }
   }
 }
@@ -960,6 +1092,7 @@ export async function POST(request: NextRequest) {
     let holdingsMerged = 0;
     let assetsCreated = 0;
     const warnings: string[] = [];
+    const lookupCache = createAssetLookupCache();
     
     for (const holding of validHoldings) {
       try {
@@ -971,7 +1104,7 @@ export async function POST(request: NextRequest) {
         // For MF assets: ISIN resolution is best-effort (non-blocking)
         // For ETFs: Symbol is required for price updates
         // Upload proceeds even if ISIN cannot be resolved
-        let asset = await findAsset(supabase, holding);
+        let asset = await findAsset(supabase, holding, lookupCache);
         
         // Track if ISIN was not resolved for MF assets (after resolution attempt)
         if (isMF && !holding.isin && !hadIsinBefore) {
@@ -986,6 +1119,7 @@ export async function POST(request: NextRequest) {
         if (!asset) {
           // createAsset will allow MF assets without ISIN (logs warning only)
           asset = await createAsset(supabase, holding);
+          cacheAssetLookupEntries(lookupCache, asset);
           assetsCreated++;
           
           // Track if asset was created without ISIN
@@ -1002,7 +1136,7 @@ export async function POST(request: NextRequest) {
         const result = await mergeHolding(
           supabase, 
           portfolio.id, 
-          asset.id, 
+          asset, 
           holding, 
           source === 'onboarding' || source === 'dashboard' ? 'csv' : 'csv',
           priceMap

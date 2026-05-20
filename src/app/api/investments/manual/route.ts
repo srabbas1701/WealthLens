@@ -78,6 +78,8 @@ interface ManualInvestmentRequest {
     // Cash fields
     cashAccountType?: string;
     cashAmount?: number;
+    cashInterestRate?: number;
+    cashLastUpdated?: string;
     // EPF fields
     epfAccountNumber?: string;
     epfBalance?: number;
@@ -554,6 +556,8 @@ export async function POST(req: NextRequest) {
         investedValue = form_data.cashAmount || 0;
         metadata = {
           account_type: form_data.cashAccountType,
+          interest_rate: form_data.cashInterestRate,
+          last_updated: form_data.cashLastUpdated,
         };
         break;
 

@@ -199,7 +199,7 @@ function LoginContent() {
             window.location.href = redirectUrl;
           }
         }
-      }, 300); // Small delay to ensure state is fully propagated
+      }, 50); // Minimal delay — session cookie is set before onAuthStateChange fires
       
       return () => clearTimeout(redirectTimer);
     }
@@ -711,6 +711,8 @@ function LoginContent() {
       'Unsupported phone provider': 'Unsupported phone provider',
       'Email rate limit exceeded': 'Too many attempts. Please wait a few minutes before trying again.',
       'Unable to validate email address': 'Please enter a valid email address.',
+      'Signups not allowed': 'New signups are currently paused. Please contact support or try again later.',
+      'signups not allowed': 'New signups are currently paused. Please contact support or try again later.',
       'Failed to send magic link': 'Unable to send email. Please check Supabase configuration.',
       'Internal Server Error': 'Server error. Please check: 1) Email provider is enabled in Supabase, 2) No rate limits exceeded, 3) Check Supabase Auth Logs for details.',
       '500': 'Server error (500). Check Supabase Dashboard → Authentication → Providers → Email is enabled.',

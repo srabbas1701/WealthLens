@@ -266,9 +266,9 @@ export default function RealEstateAddModal({
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-2xl max-h-[90vh] mx-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg overflow-hidden flex flex-col">
+      <div className="relative modal-shell-standard max-w-2xl max-h-[90vh] mx-4 overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
+        <div className="modal-header-standard">
           <div>
             <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
               Add Property
@@ -664,28 +664,24 @@ export default function RealEstateAddModal({
               <button
                 onClick={handlePrevious}
                 disabled={saving}
-                className="px-4 py-2 text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors disabled:opacity-50"
+                className="btn-secondary-standard disabled:opacity-50"
               >
-                Previous
+                Back
               </button>
             )}
             <button
               onClick={onClose}
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors disabled:opacity-50"
+              className="btn-secondary-standard disabled:opacity-50"
             >
-              Cancel
+              Back
             </button>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
               Step {currentStep} of 3
             </span>
-            <button
-              onClick={handleNext}
-              disabled={saving}
-              className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <button onClick={handleNext} disabled={saving} className="btn-primary-standard px-6 py-2 text-sm">
               {saving ? 'Saving...' : currentStep === 3 ? 'Add Property' : 'Next'}
             </button>
           </div>

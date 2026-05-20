@@ -272,14 +272,14 @@ export function AppHeader({
             <ThemeToggle />
             {authStatus === 'authenticated' && user ? (
               <Link
-                href="/dashboard"
+                href={appData.hasPortfolio ? '/dashboard' : '/onboarding'}
                 onClick={() => {
                   sessionStorage.setItem('navigation_source', 'header');
                   sessionStorage.setItem('navigation_time', Date.now().toString());
                 }}
                 className="px-3 py-1.5 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-xs font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
               >
-                Dashboard
+                {appData.hasPortfolio ? 'My Dashboard' : 'Set Up Portfolio'}
               </Link>
             ) : (
               <Link
@@ -338,7 +338,7 @@ export function AppHeader({
             {!isInDemoMode && authStatus === 'authenticated' && user ? (
               <>
                 <Link
-                  href="/dashboard"
+                  href={appData.hasPortfolio ? '/dashboard' : '/onboarding'}
                   onClick={() => {
                     // CRITICAL FIX: Mark navigation source to prevent redirect loops
                     sessionStorage.setItem('navigation_source', 'header');
@@ -346,7 +346,7 @@ export function AppHeader({
                   }}
                   className="px-3 py-1.5 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-xs font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
                 >
-                  Dashboard
+                  {appData.hasPortfolio ? 'My Dashboard' : 'Set Up Portfolio'}
                 </Link>
                 
                 {/* User Menu */}
@@ -649,12 +649,15 @@ export function AppHeader({
           {/* Show Account menu only when authenticated (not in demo mode) */}
           {!isInDemoMode && authStatus === 'authenticated' && user ? (
             <>
-              <Link
-                href="/dashboard"
-                className="px-4 py-2 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-sm font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
-              >
-                Dashboard
-              </Link>
+              {/* Hide Dashboard link on onboarding pages — it's meaningless for new users */}
+              {!pathname?.startsWith('/onboarding') && (
+                <Link
+                  href="/dashboard"
+                  className="px-4 py-2 rounded-lg text-[#6B7280] dark:text-[#94A3B8] text-sm font-medium hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
+                >
+                  Dashboard
+                </Link>
+              )}
               
               {/* Ask Naira Button — AI-powered portfolio intelligence */}
               <button
@@ -773,13 +776,15 @@ export function AppHeader({
                       {badgeLabel} Plan Active
                     </div>
                   )}
-                  <Link
-                    href="/dashboard"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-[#F9FAFB] dark:bg-[#111827] hover:bg-[#E5E7EB] dark:hover:bg-[#111827]/80 transition-colors"
-                  >
-                    Dashboard
-                  </Link>
+                  {!pathname?.startsWith('/onboarding') && (
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block w-full px-4 py-3 rounded-lg text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] bg-[#F9FAFB] dark:bg-[#111827] hover:bg-[#E5E7EB] dark:hover:bg-[#111827]/80 transition-colors"
+                    >
+                      Dashboard
+                    </Link>
+                  )}
                   <button
                     type="button"
                     onClick={() => {

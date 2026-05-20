@@ -1,7 +1,17 @@
 # WealthLens (investment-copilot)
 
-**Investment portfolio dashboard for Indian retail investors.**  
+> **Phase 1 — Live** | **Phase 2 — In Progress** (target: March 2026)
+
+**Investment portfolio dashboard for Indian retail investors.**
 Unified net worth, holdings by asset class, advanced analytics, real estate tracking, and an AI Portfolio Analyst (Copilot).
+
+### What shipped in Phase 1
+- **Portfolio modules**: Equity, Mutual Funds, Gold, FDs, NPS, PPF, EPF, Bonds, ETFs, Cash, Insurance, Real Estate
+- **AI layer**: Copilot chat, daily/weekly summaries, stock analyst
+- **Analytics**: Health score, stability, sector/geo/marketcap/MF exposure, scenario modelling
+- **Monetisation**: Razorpay subscriptions, Free/Pro/Premium tiers, trials, capability-based feature gates
+- **Auth**: Email + MSG91 phone OTP, session timeout
+- **UX**: Demo mode, dark mode, mobile layout, onboarding flow
 
 ---
 

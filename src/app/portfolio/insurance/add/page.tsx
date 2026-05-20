@@ -7,8 +7,8 @@
  * Steps: Category → Details → Coverage & Premium → Nominee → Document
  */
 
-import { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCapabilities } from '@/lib/capabilities';
 import { FEATURE_ACCESS } from '@/config/feature-access';
 import { LockedFeaturePage } from '@/components/LockedFeaturePage';
@@ -51,6 +51,7 @@ type StepType = 1 | 2 | 3 | 4 | 5;
 export default function AddInsurancePage() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -74,6 +75,14 @@ export default function AddInsurancePage() {
     family_members_count: '',
     document_url: '',
   });
+
+  // Pre-select category when arriving from onboarding tiles
+  useEffect(() => {
+    const category = searchParams?.get('category');
+    if (category === InsuranceCategory.LIFE || category === InsuranceCategory.HEALTH) {
+      setFormData(prev => ({ ...prev, category }));
+    }
+  }, [searchParams]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -254,7 +263,8 @@ export default function AddInsurancePage() {
 
       if (dbError) throw dbError;
 
-      router.push('/portfolio/insurance');
+      const onboardingSource = searchParams?.get('from') === 'onboarding';
+      router.push(onboardingSource ? '/portfolio/insurance?from=onboarding' : '/portfolio/insurance');
     } catch (err) {
       console.error('[Add Insurance] Error:', err);
       setError(err instanceof Error ? err.message : 'Failed to add insurance');
@@ -287,14 +297,21 @@ export default function AddInsurancePage() {
     );
   }
 
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
+
   return (
-    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
-      <AppHeader showBackButton={true} backHref="/portfolio/insurance" backLabel="Back to Insurance" />
+    <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A] overflow-x-hidden">
+      <AppHeader
+        showBackButton={true}
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/portfolio/insurance'}
+        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Insurance'}
+      />
 
       <main className="max-w-2xl mx-auto px-6 py-8 pt-24">
         {/* Progress Indicator */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
+          <div className="overflow-x-auto pb-1">
+            <div className="flex items-center justify-between mb-4 min-w-[540px]">
             {[1, 2, 3, 4, 5].map((step) => (
               <div key={step} className="flex items-center">
                 <div
@@ -317,6 +334,7 @@ export default function AddInsurancePage() {
                 )}
               </div>
             ))}
+            </div>
           </div>
           <div className="text-center">
             <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
@@ -610,9 +628,10 @@ export default function AddInsurancePage() {
             variant="outline"
             onClick={handlePrevious}
             disabled={currentStep === 1}
+            className="btn-secondary-standard"
           >
             <ArrowLeftIcon className="w-4 h-4 mr-2" />
-            Previous
+            Back
           </Button>
 
           <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -622,6 +641,7 @@ export default function AddInsurancePage() {
           <Button
             onClick={handleNext}
             disabled={loading}
+            className="btn-primary-standard"
           >
             {loading ? 'Saving...' : currentStep === 5 ? 'Add Policy' : 'Next'}
             {currentStep < 5 && <ArrowRightIcon className="w-4 h-4 ml-2" />}

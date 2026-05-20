@@ -551,9 +551,9 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
         onClick={step === 'basic' || step === 'error' ? handleClose : undefined}
       />
 
-      <div className="relative w-full max-w-2xl max-h-[90vh] mx-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg overflow-hidden flex flex-col">
+      <div className="relative modal-shell-standard max-w-3xl max-h-[90vh] md:max-h-none mx-4 overflow-hidden md:overflow-visible flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
+        <div className="modal-header-standard">
           <div>
             <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
               {isEditing ? 'Edit EPF Account' : 'Add EPF Account'}
@@ -571,7 +571,7 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
         </div>
 
         {/* Progress Indicator */}
-        <div className="px-6 py-3 bg-[#F9FAFB] dark:bg-[#0F172A] border-b border-[#E5E7EB] dark:border-[#334155]">
+        <div className="px-5 md:px-6 py-2 bg-[#F9FAFB] dark:bg-[#0F172A] border-b border-[#E5E7EB] dark:border-[#334155]">
           <div className="flex items-center gap-2">
             <div className={`flex-1 h-1.5 rounded-full ${step !== 'basic' ? 'bg-[#2563EB] dark:bg-[#3B82F6]' : 'bg-[#E5E7EB] dark:bg-[#334155]'}`} />
             <div className={`flex-1 h-1.5 rounded-full ${step === 'financial' || step === 'saving' || step === 'success' || step === 'error' ? 'bg-[#2563EB] dark:bg-[#3B82F6]' : 'bg-[#E5E7EB] dark:bg-[#334155]'}`} />
@@ -583,24 +583,21 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="flex-1 overflow-y-auto md:overflow-visible px-5 md:px-6 py-4 md:py-5">
           {renderStepContent()}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F9FAFB] dark:bg-[#0F172A] flex items-center justify-between gap-4">
+        <div className="px-5 md:px-6 py-3 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#334155] flex items-center gap-3">
           {step === 'basic' && (
             <>
               <button
                 onClick={handleClose}
-                className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] font-medium transition-colors"
+                className="flex-1 btn-secondary-standard justify-center"
               >
-                Cancel
+                Back
               </button>
-              <button
-                onClick={handleNext}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] font-medium transition-colors"
-              >
+              <button onClick={handleNext} className="flex-1 btn-primary-standard justify-center px-6 py-2">
                 Next
               </button>
             </>
@@ -609,16 +606,12 @@ export default function EPFAddModal({ isOpen, onClose, userId, onSuccess, existi
             <>
               <button
                 onClick={() => setStep('basic')}
-                className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] font-medium transition-colors flex items-center gap-2"
+                className="flex-1 btn-secondary-standard justify-center"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
               </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-6 py-2 bg-[#16A34A] dark:bg-[#22C55E] text-white rounded-lg hover:bg-[#15803D] dark:hover:bg-[#16A34A] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <button onClick={handleSave} disabled={saving} className="flex-1 btn-primary-standard justify-center px-6 py-2">
                 {isEditing ? 'Update EPF Account' : 'Save EPF Account'}
               </button>
             </>

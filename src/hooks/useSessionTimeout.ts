@@ -42,6 +42,7 @@ export function useSessionTimeout({
   const activityCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const sessionCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isLoggingOutRef = useRef<boolean>(false);
+  const lastThrottledActivityRef = useRef<number>(0);
 
   /**
    * Update last activity timestamp
@@ -74,9 +75,14 @@ export function useSessionTimeout({
   }, []);
 
   /**
-   * Handle user activity events
+   * Handle user activity events — throttled to once per second so that
+   * high-frequency events (mousemove, scroll) don't trigger localStorage
+   * writes and timer resets hundreds of times per second.
    */
   const handleActivity = useCallback(() => {
+    const now = Date.now();
+    if (now - lastThrottledActivityRef.current < 1000) return;
+    lastThrottledActivityRef.current = now;
     updateActivity();
   }, [updateActivity]);
 
@@ -227,14 +233,6 @@ export function useSessionTimeout({
       document.addEventListener(event, handleActivity, { passive: true });
     });
 
-    // Track API activity via fetch interception
-    const originalFetch = window.fetch;
-    const interceptedFetch = async (...args: Parameters<typeof fetch>) => {
-      handleActivity();
-      return originalFetch(...args);
-    };
-    window.fetch = interceptedFetch;
-
     // Initialize last activity - CRITICAL: ignore stale localStorage values
     // A stale value (e.g. from hours ago) would cause immediate logout while user is active
     const storedActivity = localStorage.getItem('lastActivity');
@@ -258,7 +256,6 @@ export function useSessionTimeout({
       events.forEach(event => {
         document.removeEventListener(event, handleActivity);
       });
-      window.fetch = originalFetch;
       if (activityCheckIntervalRef.current) {
         clearInterval(activityCheckIntervalRef.current);
       }

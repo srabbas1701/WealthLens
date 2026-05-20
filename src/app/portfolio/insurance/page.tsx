@@ -9,7 +9,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue } from '@/lib/onboarding-queue';
 import { useCapabilities } from '@/lib/capabilities';
 import { FEATURE_ACCESS } from '@/config/feature-access';
 import { LockedFeaturePage } from '@/components/LockedFeaturePage';
@@ -322,6 +324,7 @@ function GroupHeader({
 export default function InsuranceDashboardPage() {
   const { authStatus, user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const [policies, setPolicies] = useState<InsurancePolicy[]>([]);
   const [summary, setSummary] = useState<InsuranceSummary | null>(null);
@@ -329,6 +332,8 @@ export default function InsuranceDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'category' | 'status'>('category');
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
+  const addInsuranceHref = fromOnboarding ? '/portfolio/insurance/add?from=onboarding' : '/portfolio/insurance/add';
 
   useEffect(() => {
     if (authStatus === 'authenticated' && user?.id && hasCapability(FEATURE_ACCESS.INSURANCE.capability)) {
@@ -384,7 +389,7 @@ export default function InsuranceDashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
-        <AppHeader showBackButton={true} backHref="/dashboard" backLabel="Back to Dashboard" />
+        <AppHeader showBackButton={true} backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'} backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'} />
         <div className="max-w-7xl mx-auto px-4 py-12 flex items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
           <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
           Loading insurance data...
@@ -400,7 +405,10 @@ export default function InsuranceDashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
-      <AppHeader showBackButton={true} backHref="/dashboard" backLabel="Back to Dashboard" />
+      <AppHeader showBackButton={true} backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'} backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'} />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={false} />
+      )}
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
 
@@ -419,7 +427,7 @@ export default function InsuranceDashboardPage() {
                 : 'Track all your insurance policies in one place'}
             </p>
           </div>
-          <Link href="/portfolio/insurance/add">
+          <Link href={addInsuranceHref}>
             <Button className="gap-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white">
               <PlusIcon className="w-4 h-4" />
               Add Policy
@@ -539,7 +547,7 @@ export default function InsuranceDashboardPage() {
               <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
                 Add your life, health, motor and other policies to track coverage
               </p>
-              <Link href="/portfolio/insurance/add">
+              <Link href={addInsuranceHref}>
                 <Button variant="outline" size="sm" className="gap-2">
                   <PlusIcon className="w-3.5 h-3.5" />
                   Add Your First Policy

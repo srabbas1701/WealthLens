@@ -8,12 +8,12 @@
 
 'use client';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react/no-unescaped-entities */
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  ArrowLeftIcon,
-  FileIcon,
   CheckCircleIcon,
   InfoIcon,
   AlertTriangleIcon,
@@ -28,7 +28,9 @@ import PremiumDownloadModal from '@/components/PremiumDownloadModal';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
 import { useToast } from '@/components/Toast';
 import { generateBondsPDF } from '@/lib/pdf/generateHoldingsPDF';
-import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
+import { getCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue } from '@/lib/onboarding-queue';
 
 type SortField = 'name' | 'type' | 'coupon' | 'maturityDate' | 'faceValue' | 'investedValue' | 'currentValue' | 'yield' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -151,6 +153,7 @@ const getDaysToMaturity = (maturityDate: string | null): number | null => {
 
 export default function BondsHoldingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
@@ -171,6 +174,7 @@ export default function BondsHoldingsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
   const [selectedBond, setSelectedBond] = useState<BondHolding | null>(null);
   const [bondToDelete, setBondToDelete] = useState<BondHolding | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -200,109 +204,115 @@ export default function BondsHoldingsPage() {
   const fetchData = useCallback(async (userId: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ user_id: userId });
-      const response = await fetch(`/api/portfolio/data?${params}`);
-      
-      if (response.ok) {
+      const fetchPortfolioData = async (mode?: 'lite') => {
+        const params = new URLSearchParams({ user_id: userId });
+        if (mode) params.set('mode', mode);
+        const response = await fetch(`/api/portfolio/data?${params}`);
+        if (!response.ok) return null;
         const result = await response.json();
-        if (result.success && result.data) {
-          const portfolioData = result.data;
-          const bondHoldings = portfolioData.holdings
-            .filter((h: any) => h.assetType === 'Bonds' || h.assetType === 'Bond')
-            .map((h: any) => {
-              // Parse bond metadata from notes (stored as JSON)
-              let bondMetadata: any = {};
-              if (h.notes) {
-                try {
-                  bondMetadata = JSON.parse(h.notes);
-                } catch (e) {
-                  console.warn('Failed to parse bond notes:', e);
-                }
-              }
-              
-              // Extract all bond metadata fields
-              const issuer = bondMetadata.issuer || bondMetadata.bondIssuer || null;
-              const bondType = bondMetadata.bond_type || bondMetadata.bondType || null;
-              const rating = bondMetadata.rating || bondMetadata.bondRating || null;
-              const couponRate = bondMetadata.coupon_rate || bondMetadata.couponRate || bondMetadata.bondCouponRate || null;
-              const yieldToMaturity = bondMetadata.yield_to_maturity || bondMetadata.yieldToMaturity || bondMetadata.bondYieldToMaturity || null;
-              const interestPayoutFrequency = bondMetadata.interest_payout_frequency || bondMetadata.interestPayoutFrequency || bondMetadata.bondInterestPayoutFrequency || null;
-              const principalPayout = bondMetadata.principal_payout || bondMetadata.principalPayout || bondMetadata.bondPrincipalPayout || null;
-              const taxStatus = bondMetadata.tax_status || bondMetadata.taxStatus || bondMetadata.bondTaxStatus || null;
-              const collateralSecurity = bondMetadata.collateral_security || bondMetadata.collateralSecurity || bondMetadata.bondCollateralSecurity || null;
-              const tenureYears = bondMetadata.tenure_years || bondMetadata.tenureYears || bondMetadata.bondTenureYears || null;
-              const tenureMonths = bondMetadata.tenure_months || bondMetadata.tenureMonths || bondMetadata.bondTenureMonths || null;
-              const orderId = bondMetadata.order_id || bondMetadata.orderId || bondMetadata.bondOrderId || null;
-              const orderDate = bondMetadata.order_date || bondMetadata.orderDate || bondMetadata.bondOrderDate || null;
-              const settlementDate = bondMetadata.settlement_date || bondMetadata.settlementDate || bondMetadata.bondSettlementDate || null;
-              const maturityDateStr = bondMetadata.maturity_date || bondMetadata.maturityDate || bondMetadata.bondMaturityDate || null;
-              const faceValuePerUnit = bondMetadata.face_value_per_unit || bondMetadata.faceValuePerUnit || bondMetadata.bondFaceValuePerUnit || null;
-              const units = bondMetadata.units || bondMetadata.bondUnits || h.quantity || null;
+        if (!result?.success || !result?.data) return null;
+        return result.data;
+      };
 
-              // Calculate face value
-              const faceValue = faceValuePerUnit && units
-                ? faceValuePerUnit * units
-                : (h.quantity > 0 && h.quantity !== 1
-                  ? h.investedValue / h.quantity
-                  : h.investedValue);
+      // Fast path first, then safe fallback to existing full response mode.
+      const portfolioData = (await fetchPortfolioData('lite')) ?? (await fetchPortfolioData());
+      if (!portfolioData) return;
 
-              // Current value: use stored value, fallback to invested value (no market estimates)
-              const currentValue = h.currentValue > 0 ? h.currentValue : h.investedValue;
+      const bondHoldings = portfolioData.holdings
+        .filter((h: any) => h.assetType === 'Bonds' || h.assetType === 'Bond')
+        .map((h: any) => {
+          // Parse bond metadata from notes (stored as JSON)
+          let bondMetadata: any = {};
+          if (h.notes) {
+            try {
+              bondMetadata = JSON.parse(h.notes);
+            } catch (e) {
+              console.warn('Failed to parse bond notes:', e);
+            }
+          }
+          
+          // Extract all bond metadata fields
+          const issuer = bondMetadata.issuer || bondMetadata.bondIssuer || null;
+          const bondType = bondMetadata.bond_type || bondMetadata.bondType || null;
+          const rating = bondMetadata.rating || bondMetadata.bondRating || null;
+          const couponRate = bondMetadata.coupon_rate || bondMetadata.couponRate || bondMetadata.bondCouponRate || null;
+          const yieldToMaturity = bondMetadata.yield_to_maturity || bondMetadata.yieldToMaturity || bondMetadata.bondYieldToMaturity || null;
+          const interestPayoutFrequency = bondMetadata.interest_payout_frequency || bondMetadata.interestPayoutFrequency || bondMetadata.bondInterestPayoutFrequency || null;
+          const principalPayout = bondMetadata.principal_payout || bondMetadata.principalPayout || bondMetadata.bondPrincipalPayout || null;
+          const taxStatus = bondMetadata.tax_status || bondMetadata.taxStatus || bondMetadata.bondTaxStatus || null;
+          const collateralSecurity = bondMetadata.collateral_security || bondMetadata.collateralSecurity || bondMetadata.bondCollateralSecurity || null;
+          const tenureYears = bondMetadata.tenure_years || bondMetadata.tenureYears || bondMetadata.bondTenureYears || null;
+          const tenureMonths = bondMetadata.tenure_months || bondMetadata.tenureMonths || bondMetadata.bondTenureMonths || null;
+          const orderId = bondMetadata.order_id || bondMetadata.orderId || bondMetadata.bondOrderId || null;
+          const orderDate = bondMetadata.order_date || bondMetadata.orderDate || bondMetadata.bondOrderDate || null;
+          const settlementDate = bondMetadata.settlement_date || bondMetadata.settlementDate || bondMetadata.bondSettlementDate || null;
+          const maturityDateStr = bondMetadata.maturity_date || bondMetadata.maturityDate || bondMetadata.bondMaturityDate || null;
+          const faceValuePerUnit = bondMetadata.face_value_per_unit || bondMetadata.faceValuePerUnit || bondMetadata.bondFaceValuePerUnit || null;
+          const units = bondMetadata.units || bondMetadata.bondUnits || h.quantity || null;
 
-              // Calculate yield if we have coupon rate
-              const yieldValue = calculateYield(couponRate, interestPayoutFrequency, faceValue, currentValue);
+          // Calculate face value
+          const faceValue = faceValuePerUnit && units
+            ? faceValuePerUnit * units
+            : (h.quantity > 0 && h.quantity !== 1
+              ? h.investedValue / h.quantity
+              : h.investedValue);
 
-              // Determine status and days to maturity
-              const status = getBondStatus(maturityDateStr);
-              const daysToMaturity = getDaysToMaturity(maturityDateStr);
+          // Current value: use stored value, fallback to invested value (no market estimates)
+          const currentValue = h.currentValue > 0 ? h.currentValue : h.investedValue;
 
-              // Check if we have complete data
-              const hasCompleteData = !!(issuer && bondType && couponRate && maturityDateStr);
+          // Calculate yield if we have coupon rate
+          const yieldValue = calculateYield(couponRate, interestPayoutFrequency, faceValue, currentValue);
 
-              return {
-                id: h.id,
-                name: h.name,
-                issuer,
-                type: bondType || getBondType(issuer, h.name),
-                rating,
-                couponRate,
-                yieldToMaturity,
-                interestPayoutFrequency,
-                principalPayout,
-                taxStatus,
-                collateralSecurity,
-                tenureYears,
-                tenureMonths,
-                orderId,
-                orderDate,
-                settlementDate,
-                maturityDate: maturityDateStr,
-                faceValuePerUnit,
-                units,
-                faceValue,
-                investedValue: h.investedValue,
-                currentValue,
-                yield: yieldValue,
-                status,
-                daysToMaturity,
-                hasCompleteData,
-              };
-            });
+          // Determine status and days to maturity
+          const status = getBondStatus(maturityDateStr);
+          const daysToMaturity = getDaysToMaturity(maturityDateStr);
 
-          const totalFace = bondHoldings.reduce((sum: number, h: BondHolding) => sum + h.faceValue, 0);
-          const totalInv = bondHoldings.reduce((sum: number, h: BondHolding) => sum + h.investedValue, 0);
-          const totalCurrent = bondHoldings.reduce((sum: number, h: BondHolding) => sum + h.currentValue, 0);
-          const portfolioPct = portfolioData.metrics.netWorth > 0 
-            ? (totalCurrent / portfolioData.metrics.netWorth) * 100 
-            : 0;
+          // Check if we have complete data
+          const hasCompleteData = !!(issuer && bondType && couponRate && maturityDateStr);
 
-          setHoldings(bondHoldings);
-          setTotalFaceValue(totalFace);
-          setTotalInvested(totalInv);
-          setTotalCurrentValue(totalCurrent);
-          setPortfolioPercentage(portfolioPct);
-        }
-      }
+          return {
+            id: h.id,
+            name: h.name,
+            issuer,
+            type: bondType || getBondType(issuer, h.name),
+            rating,
+            couponRate,
+            yieldToMaturity,
+            interestPayoutFrequency,
+            principalPayout,
+            taxStatus,
+            collateralSecurity,
+            tenureYears,
+            tenureMonths,
+            orderId,
+            orderDate,
+            settlementDate,
+            maturityDate: maturityDateStr,
+            faceValuePerUnit,
+            units,
+            faceValue,
+            investedValue: h.investedValue,
+            currentValue,
+            yield: yieldValue,
+            status,
+            daysToMaturity,
+            hasCompleteData,
+          };
+        });
+
+      const valuationEligibleHoldings = bondHoldings.filter((h: BondHolding) => h.status !== 'Matured');
+      const totalFace = valuationEligibleHoldings.reduce((sum: number, h: BondHolding) => sum + h.faceValue, 0);
+      const totalInv = valuationEligibleHoldings.reduce((sum: number, h: BondHolding) => sum + h.investedValue, 0);
+      const totalCurrent = valuationEligibleHoldings.reduce((sum: number, h: BondHolding) => sum + h.currentValue, 0);
+      const portfolioPct = portfolioData.metrics.netWorth > 0 
+        ? (totalCurrent / portfolioData.metrics.netWorth) * 100 
+        : 0;
+
+      setHoldings(bondHoldings);
+      setTotalFaceValue(totalFace);
+      setTotalInvested(totalInv);
+      setTotalCurrentValue(totalCurrent);
+      setPortfolioPercentage(portfolioPct);
     } catch (error) {
       console.error('Failed to fetch bond holdings:', error);
     } finally {
@@ -318,6 +328,15 @@ export default function BondsHoldingsPage() {
       router.replace('/login?redirect=/portfolio/bonds');
     }
   }, [authStatus, router]);
+
+  // Open add modal from onboarding deep-link (?add=1)
+  useEffect(() => {
+    if (searchParams?.get('add') !== '1' || !user?.id) return;
+    setSelectedBond(null);
+    setShowAddModal(true);
+    const fromOnboarding = searchParams?.get('from') === 'onboarding';
+    router.replace(`/portfolio/bonds${fromOnboarding ? '?from=onboarding' : ''}`, { scroll: false });
+  }, [searchParams, user?.id, router]);
 
   useEffect(() => {
     if (user?.id) {
@@ -400,9 +419,10 @@ export default function BondsHoldingsPage() {
               };
             });
 
-          const totalFace = bondHoldings.reduce((sum: number, h: BondHolding) => sum + h.faceValue, 0);
-          const totalInv = bondHoldings.reduce((sum: number, h: BondHolding) => sum + h.investedValue, 0);
-          const totalCurrent = bondHoldings.reduce((sum: number, h: BondHolding) => sum + h.currentValue, 0);
+          const valuationEligibleHoldings = bondHoldings.filter((h: BondHolding) => h.status !== 'Matured');
+          const totalFace = valuationEligibleHoldings.reduce((sum: number, h: BondHolding) => sum + h.faceValue, 0);
+          const totalInv = valuationEligibleHoldings.reduce((sum: number, h: BondHolding) => sum + h.investedValue, 0);
+          const totalCurrent = valuationEligibleHoldings.reduce((sum: number, h: BondHolding) => sum + h.currentValue, 0);
           const portfolioPct = portfolioData.metrics.netWorth > 0
             ? (totalCurrent / portfolioData.metrics.netWorth) * 100
             : 0;
@@ -506,6 +526,7 @@ export default function BondsHoldingsPage() {
 
   const totalAnnualIncome = useMemo(() => {
     return sortedHoldings.reduce((sum, h) => {
+      if (h.status === 'Matured') return sum;
       if (!h.couponRate || !h.faceValue) return sum;
       let annualCoupon = (h.couponRate / 100) * h.faceValue;
       if (h.couponFrequency) {
@@ -593,6 +614,8 @@ export default function BondsHoldingsPage() {
 
       await fetchData(user.id);
       setShowAddModal(false);
+      const q = readQueue(user.id);
+      if (q && q.current === 'bonds') setHasAddedOneInQueue(true);
       setFormData({
         issuer: '',
         amount: '',
@@ -857,7 +880,7 @@ export default function BondsHoldingsPage() {
         });
       }
     }
-  }, [holdings, sortField, sortDirection, totalCurrentValue, totalInvested, portfolioPercentage, formatCurrency, showToast, sortedHoldings, hasCapability, capabilitiesLoading]);
+  }, [holdings, totalCurrentValue, totalInvested, portfolioPercentage, formatCurrency, showToast, sortedHoldings, hasCapability, capabilitiesLoading]);
 
   if (loading) {
     return (
@@ -870,16 +893,21 @@ export default function BondsHoldingsPage() {
     );
   }
 
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
+
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref="/dashboard"
-        backLabel="Back to Dashboard"
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
+        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
         downloadLabel="Download Bonds"
         onDownload={handleDownload}
       />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+      )}
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Page Title */}
@@ -887,7 +915,7 @@ export default function BondsHoldingsPage() {
           <div>
             <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Bonds Holdings</h1>
             <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-              {holdings.length} holding{holdings.length !== 1 ? 's' : ''} • Total Value: {formatCurrency(totalCurrentValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
+              {holdings.length} holding{holdings.length !== 1 ? 's' : ''} • Active Bonds Value: {formatCurrency(totalCurrentValue)} • {portfolioPercentage.toFixed(1)}% of portfolio
             </p>
           </div>
           <button
@@ -1257,7 +1285,7 @@ export default function BondsHoldingsPage() {
                                     bondMetadata.coupon_frequency = holding.couponFrequency;
                                     bondMetadata.maturity_date = holding.maturityDate;
                                   }
-                                } catch (e) {}
+                                } catch {}
                                 
                                 setSelectedBond(holding);
                                 setFormData({
@@ -1307,7 +1335,7 @@ export default function BondsHoldingsPage() {
                   <tfoot className="bg-[#F9FAFB] dark:bg-[#334155] border-t-2 border-[#E5E7EB] dark:border-[#334155]">
                     <tr>
                       <td className="px-6 py-3.5 text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
-                        Total
+                        Total (Active)
                       </td>
                       <td className="px-4 py-3.5"></td>
                       <td className="px-4 py-3.5"></td>
@@ -1338,7 +1366,7 @@ export default function BondsHoldingsPage() {
             <CheckCircleIcon className="w-5 h-5 text-[#16A34A] dark:text-[#22C55E] flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC]">
-                Verification: Total matches dashboard bonds value ({formatCurrency(totalCurrentValue)}) ✓
+                Verification: Active bonds total matches dashboard bonds value ({formatCurrency(totalCurrentValue)}) ✓
               </p>
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                 Current values shown are from your portfolio data. No market price estimates are used.
@@ -1357,7 +1385,7 @@ export default function BondsHoldingsPage() {
             <div className="space-y-4">
               <div className="text-sm text-[#475569] dark:text-[#CBD5E1] leading-relaxed">
                 <p className="mb-2">
-                  <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Total Bond Holdings:</strong> {formatCurrency(totalCurrentValue)} ({portfolioPercentage.toFixed(1)}% of portfolio)
+                  <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Total Active Bond Holdings:</strong> {formatCurrency(totalCurrentValue)} ({portfolioPercentage.toFixed(1)}% of portfolio)
                 </p>
                 
                 {totalAnnualIncome > 0 && (
@@ -1373,7 +1401,7 @@ export default function BondsHoldingsPage() {
                   <div className="mb-2">
                     <strong className="text-[#0F172A] dark:text-[#F8FAFC]">Upcoming Maturities (next 12 months):</strong>
                     <ul className="list-disc list-inside mt-1 ml-2 text-[#475569] dark:text-[#CBD5E1]">
-                      {upcomingMaturities.map((h, idx) => (
+                      {upcomingMaturities.map((h) => (
                         <li key={h.id}>
                           {h.name} — {formatDate(h.maturityDate)} ({formatDays(h.daysToMaturity)})
                         </li>
@@ -1405,6 +1433,10 @@ export default function BondsHoldingsPage() {
       {showAddModal && (
         <AddBondModal
           onClose={() => {
+            if (fromOnboarding) {
+              router.replace('/onboarding/select?step=add-details');
+              return;
+            }
             setShowAddModal(false);
             setFormData({
               issuer: '',
@@ -1489,6 +1521,7 @@ function AddBondModal({
   formatCurrency: (value: number) => string;
 }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [step, setStep] = useState<'basic' | 'advanced'>('basic');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1542,9 +1575,14 @@ function AddBondModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] md:max-h-none md:overflow-visible flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155]">
-          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Add Bond Holding</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Add Bond Holding</h2>
+            <p className="mt-1 text-xs font-medium text-[#64748B] dark:text-[#94A3B8]">
+              Step {step === 'basic' ? '1' : '2'} of 2
+            </p>
+          </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-[#F3F4F6] dark:hover:bg-[#334155] rounded-lg transition-colors"
@@ -1554,8 +1592,10 @@ function AddBondModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
-          <div>
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto md:overflow-visible p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+          {step === 'basic' && (
+            <>
+              <div>
             <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Issuer Name <span className="text-red-500">*</span>
             </label>
@@ -1568,9 +1608,9 @@ function AddBondModal({
               autoFocus
               placeholder="e.g., NTPC, Government of India"
             />
-          </div>
+              </div>
 
-          <div>
+              <div>
             <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Investment Amount (₹) <span className="text-red-500">*</span>
             </label>
@@ -1584,9 +1624,9 @@ function AddBondModal({
               required
               placeholder="100000"
             />
-          </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:col-span-2">
             <div>
               <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Bond Type
@@ -1628,9 +1668,9 @@ function AddBondModal({
                 <option value="Sovereign">Sovereign</option>
               </select>
             </div>
-          </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:col-span-2">
             <div>
               <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Coupon Rate (%)
@@ -1659,9 +1699,9 @@ function AddBondModal({
                 className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
               />
             </div>
-          </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:col-span-2">
             <div>
               <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Interest Payout
@@ -1695,140 +1735,146 @@ function AddBondModal({
               </select>
             </div>
           </div>
+            </>
+          )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                Tax Status
-              </label>
-              <select
-                value={formData.taxStatus}
-                onChange={(e) => setFormData({ ...formData, taxStatus: e.target.value })}
-                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-              >
-                <option value="">Select status</option>
-                <option value="Taxable">Taxable</option>
-                <option value="Tax Free">Tax Free</option>
-                <option value="Tax Saving">Tax Saving (54EC)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                Collateral Security
-              </label>
-              <select
-                value={formData.collateralSecurity}
-                onChange={(e) => setFormData({ ...formData, collateralSecurity: e.target.value })}
-                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-              >
-                <option value="">Select type</option>
-                <option value="Secured">Secured</option>
-                <option value="Unsecured">Unsecured</option>
-              </select>
-            </div>
-          </div>
+          {step === 'advanced' && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:col-span-2">
+                <div>
+                  <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                    Tax Status
+                  </label>
+                  <select
+                    value={formData.taxStatus}
+                    onChange={(e) => setFormData({ ...formData, taxStatus: e.target.value })}
+                    className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                  >
+                    <option value="">Select status</option>
+                    <option value="Taxable">Taxable</option>
+                    <option value="Tax Free">Tax Free</option>
+                    <option value="Tax Saving">Tax Saving (54EC)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                    Collateral Security
+                  </label>
+                  <select
+                    value={formData.collateralSecurity}
+                    onChange={(e) => setFormData({ ...formData, collateralSecurity: e.target.value })}
+                    className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                  >
+                    <option value="">Select type</option>
+                    <option value="Secured">Secured</option>
+                    <option value="Unsecured">Unsecured</option>
+                  </select>
+                </div>
+              </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2">
-              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                Tenure
-              </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:col-span-2">
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                    Tenure
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      value={formData.tenureYears}
+                      onChange={(e) => setFormData({ ...formData, tenureYears: e.target.value })}
+                      placeholder="Years"
+                      className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                    />
+                    <input
+                      type="number"
+                      value={formData.tenureMonths}
+                      onChange={(e) => setFormData({ ...formData, tenureMonths: e.target.value })}
+                      placeholder="Months"
+                      className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                    Units
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.units}
+                    onChange={(e) => setFormData({ ...formData, units: e.target.value })}
+                    placeholder="100"
+                    className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  Face Value per Unit
+                </label>
                 <input
                   type="number"
-                  value={formData.tenureYears}
-                  onChange={(e) => setFormData({ ...formData, tenureYears: e.target.value })}
-                  placeholder="Years"
-                  className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-                />
-                <input
-                  type="number"
-                  value={formData.tenureMonths}
-                  onChange={(e) => setFormData({ ...formData, tenureMonths: e.target.value })}
-                  placeholder="Months"
+                  value={formData.faceValuePerUnit}
+                  onChange={(e) => setFormData({ ...formData, faceValuePerUnit: e.target.value })}
+                  placeholder="1000"
                   className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                Units
-              </label>
-              <input
-                type="number"
-                value={formData.units}
-                onChange={(e) => setFormData({ ...formData, units: e.target.value })}
-                placeholder="100"
-                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-              />
-            </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-              Face Value per Unit
-            </label>
-            <input
-              type="number"
-              value={formData.faceValuePerUnit}
-              onChange={(e) => setFormData({ ...formData, faceValuePerUnit: e.target.value })}
-              placeholder="1000"
-              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-            />
-          </div>
+              <div>
+                <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  Maturity Date
+                </label>
+                <input
+                  type="date"
+                  value={formData.maturityDate}
+                  onChange={(e) => setFormData({ ...formData, maturityDate: e.target.value })}
+                  className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-              Maturity Date
-            </label>
-            <input
-              type="date"
-              value={formData.maturityDate}
-              onChange={(e) => setFormData({ ...formData, maturityDate: e.target.value })}
-              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-            />
-          </div>
+              <div>
+                <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                  Order ID
+                </label>
+                <input
+                  type="text"
+                  value={formData.orderId}
+                  onChange={(e) => setFormData({ ...formData, orderId: e.target.value })}
+                  placeholder="e.g., ORD123456"
+                  className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-              Order ID
-            </label>
-            <input
-              type="text"
-              value={formData.orderId}
-              onChange={(e) => setFormData({ ...formData, orderId: e.target.value })}
-              placeholder="e.g., ORD123456"
-              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                Order Date
-              </label>
-              <input
-                type="date"
-                value={formData.orderDate}
-                onChange={(e) => setFormData({ ...formData, orderDate: e.target.value })}
-                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
-                Settlement Date
-              </label>
-              <input
-                type="date"
-                value={formData.settlementDate}
-                onChange={(e) => setFormData({ ...formData, settlementDate: e.target.value })}
-                className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:col-span-2">
+                <div>
+                  <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                    Order Date
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.orderDate}
+                    onChange={(e) => setFormData({ ...formData, orderDate: e.target.value })}
+                    className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+                    Settlement Date
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.settlementDate}
+                    onChange={(e) => setFormData({ ...formData, settlementDate: e.target.value })}
+                    className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] text-[#0F172A] dark:text-[#F8FAFC]"
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           {investedValue > 0 && (
-            <div className="bg-[#F3F4F6] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4">
+            <div className="bg-[#F3F4F6] dark:bg-[#334155] border border-[#E5E7EB] dark:border-[#334155] rounded-lg p-4 md:col-span-2">
               <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">Invested Value</div>
               <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                 {formatCurrency(investedValue)}
@@ -1837,24 +1883,44 @@ function AddBondModal({
           )}
 
           {submitError && (
-            <p className="text-sm text-[#DC2626] dark:text-[#EF4444]">{submitError}</p>
+            <p className="text-sm text-[#DC2626] dark:text-[#EF4444] md:col-span-2">{submitError}</p>
           )}
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F3F4F6] dark:hover:bg-[#334155] transition-colors font-semibold"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex-1 px-6 py-3 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Adding...' : 'Add Bond'}
-            </button>
+          <div className="flex items-center gap-3 pt-2 md:col-span-2">
+            {step === 'basic' ? (
+              <>
+                <button type="button" onClick={onClose} className="flex-1 btn-secondary-standard">
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!formData.issuer || !formData.amount || parseFloat(formData.amount) <= 0) {
+                      setSubmitError('Issuer and valid amount are required');
+                      return;
+                    }
+                    setSubmitError(null);
+                    setStep('advanced');
+                  }}
+                  className="flex-1 btn-primary-standard"
+                >
+                  Next
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={() => setStep('basic')} className="flex-1 btn-secondary-standard">
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="flex-1 btn-primary-standard"
+                >
+                  {isLoading ? 'Adding...' : 'Add Bond'}
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>
@@ -1985,7 +2051,7 @@ function EditBondModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Bond Type
@@ -2029,7 +2095,7 @@ function EditBondModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Coupon Rate (%)
@@ -2060,7 +2126,7 @@ function EditBondModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Interest Payout
@@ -2094,7 +2160,7 @@ function EditBondModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Tax Status
@@ -2126,12 +2192,12 @@ function EditBondModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="sm:col-span-2">
               <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Tenure
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
                   type="number"
                   value={formData.tenureYears}
@@ -2200,7 +2266,7 @@ function EditBondModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Order Date
@@ -2241,13 +2307,13 @@ function EditBondModal({
             <p className="text-sm text-[#DC2626] dark:text-[#EF4444]">{submitError}</p>
           )}
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex items-center gap-3 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F3F4F6] dark:hover:bg-[#334155] transition-colors font-semibold"
+              className="flex-1 btn-secondary-standard"
             >
-              Cancel
+              Back
             </button>
             <button
               type="submit"

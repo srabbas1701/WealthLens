@@ -394,10 +394,10 @@ export default function AddLiabilityModal({
         onClick={step === 'type' || step === 'error' ? handleClose : undefined}
       />
 
-      <div className="relative w-full max-w-2xl max-h-[90vh] mx-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg overflow-hidden flex flex-col">
+      <div className="relative modal-shell-standard max-w-2xl max-h-[90vh] mx-4 overflow-hidden flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
+        <div className="modal-header-standard">
           <div>
             <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
               {isEditing ? 'Edit Liability' : 'Add Liability'}
@@ -979,13 +979,13 @@ export default function AddLiabilityModal({
             <>
               <button
                 onClick={step === 'type' ? handleClose : handleBack}
-                className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] font-medium transition-colors flex items-center gap-2"
+                className="btn-secondary-standard"
               >
-                {step === 'type' ? 'Cancel' : <><ArrowLeftIcon className="w-4 h-4" /> Back</>}
+                <ArrowLeftIcon className="w-4 h-4" /> Back
               </button>
               <button
                 onClick={handleNext}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] font-medium transition-colors"
+                className="btn-primary-standard px-6 py-2"
               >
                 Next
               </button>
@@ -995,14 +995,14 @@ export default function AddLiabilityModal({
             <>
               <button
                 onClick={handleBack}
-                className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] font-medium transition-colors flex items-center gap-2"
+                className="btn-secondary-standard"
               >
                 <ArrowLeftIcon className="w-4 h-4" /> Back
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={saving}
-                className="px-6 py-2 bg-[#16A34A] dark:bg-[#22C55E] text-white rounded-lg hover:bg-[#15803D] dark:hover:bg-[#16A34A] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary-standard px-6 py-2"
               >
                 {isEditing ? 'Update Liability' : 'Save Liability'}
               </button>
@@ -1011,7 +1011,7 @@ export default function AddLiabilityModal({
           {step === 'error' && (
             <button
               onClick={handleClose}
-              className="ml-auto px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] font-medium transition-colors"
+              className="ml-auto btn-primary-standard px-6 py-2"
             >
               Close
             </button>

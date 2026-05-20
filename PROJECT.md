@@ -1,7 +1,83 @@
 # WealthLens — Master Project Documentation
 
-**Investment portfolio dashboard for Indian retail investors.**  
+**Investment portfolio dashboard for Indian retail investors.**
 Single source of truth for architecture, features, setup, and references.
+
+---
+
+## Phase Status
+
+| Phase | Status | Date |
+|-------|--------|------|
+| **Phase 1** | ✅ COMPLETE — Live in production | March 2026 |
+| **Phase 2** | 🚧 IN PROGRESS | Target: end of March 2026 |
+
+### Phase 1 Feature Checklist (all ✅ Complete)
+- ✅ Portfolio: Equity holdings (stocks, ETFs)
+- ✅ Portfolio: Mutual Funds (24 schemes, NAV tracking)
+- ✅ Portfolio: Gold (24k/22k, IBJA pricing)
+- ✅ Portfolio: Fixed Deposits
+- ✅ Portfolio: NPS, PPF, EPF
+- ✅ Portfolio: Cash, Bonds
+- ✅ Portfolio: Insurance policies
+- ✅ Portfolio: Real Estate (with loans, rental cashflows, valuation)
+- ✅ Portfolio: Liabilities tracking
+- ✅ AI: Portfolio Copilot (natural language Q&A)
+- ✅ AI: Daily & Weekly AI summaries
+- ✅ AI: Stock Analyst
+- ✅ Analytics: Portfolio Health Score
+- ✅ Analytics: Stability Score
+- ✅ Analytics: Sector, Geography, Market-Cap, MF exposure
+- ✅ Analytics: Scenario modelling
+- ✅ Payments: Razorpay subscription (Free/Pro/Premium)
+- ✅ Payments: Capability-based feature gates
+- ✅ Payments: Trial system
+- ✅ Auth: Email + Phone OTP (MSG91)
+- ✅ Auth: Session timeout
+- ✅ UX: Demo mode
+- ✅ UX: Dark mode
+- ✅ UX: Onboarding flow
+- ✅ UX: Mobile-responsive layout
+- ✅ Infra: RLS on all tables, Vercel deployment, market data cron jobs
+
+---
+
+## Performance Hardening Update (May 2026)
+
+Status: ✅ Completed (safe rollout, no navigation/flow changes)
+
+### Scope completed
+
+- ✅ `src/app/api/portfolio/upload/route.ts`
+  - High-volume parsing logs gated to dev-only.
+- ✅ `src/app/api/portfolio/upload/confirm/route.ts`
+  - Removed redundant asset re-read in merge path.
+  - Added active MF scheme cache.
+  - Added request-scoped asset lookup cache (ISIN/symbol/name).
+  - Added precomputed normalized scheme fields + cached ILIKE fallback.
+  - Gated non-critical warnings/logs to dev-only.
+- ✅ `src/hooks/useSubscription.ts`
+  - Removed duplicate entitlements fetch by using shared capabilities state.
+- ✅ `src/app/api/mf/schemes/list/route.ts`
+  - Standardized cache headers across successful lookup responses.
+- ✅ `src/app/portfolio/mutualfunds/page.tsx`
+  - Deduplicated repeated holdings transform logic.
+- ✅ `src/app/api/portfolio/data/route.ts`
+  - Added additive opt-in `mode=lite` fast path (default behavior unchanged).
+- ✅ `src/app/portfolio/cash/page.tsx`
+  - Lite-first fetch with automatic fallback to full mode.
+- ✅ `src/app/portfolio/fixeddeposits/page.tsx`
+  - Lite-first fetch with automatic fallback to full mode.
+- ✅ `src/app/portfolio/bonds/page.tsx`
+  - Lite-first fetch with automatic fallback to full mode.
+
+### Safety checks completed
+
+- ✅ Lint checks passed on all touched files.
+- ✅ Existing default `/api/portfolio/data` path remains unchanged.
+- ✅ Lite mode is additive and opt-in only.
+- ✅ Onboarding deep-link behavior (`?add=1`, `from=onboarding`) untouched.
+- ✅ No routing/back-button flow modifications in this optimization batch.
 
 ---
 
@@ -457,5 +533,5 @@ Below is a grouped index of current `.md` files for quick reference. Use this ma
 ---
 
 **Document version:** 1.0  
-**Last updated:** February 2025  
+**Last updated:** May 2026  
 **Maintained as:** Single master reference for the WealthLens (investment-copilot) project.

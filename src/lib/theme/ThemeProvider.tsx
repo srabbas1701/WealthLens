@@ -28,15 +28,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // Load theme from localStorage on mount and apply immediately
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as Theme;
-    let initialTheme: Theme = 'light';
-    
-    if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark')) {
-      initialTheme = savedTheme;
-    } else {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      initialTheme = prefersDark ? 'dark' : 'light';
-    }
+    // Default to dark for new visitors; respect saved preference if set
+    let initialTheme: Theme = savedTheme === 'light' ? 'light' : 'dark';
     
     // Apply theme immediately before React hydration
     const root = document.documentElement;

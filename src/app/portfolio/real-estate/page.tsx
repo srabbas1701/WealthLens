@@ -19,7 +19,9 @@
  */
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue } from '@/lib/onboarding-queue';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -437,6 +439,7 @@ function InsightCard({
 
 export default function RealEstateDashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
@@ -445,6 +448,7 @@ export default function RealEstateDashboard() {
   const [activeTab, setActiveTab] = useState<TabValue>('properties');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
   const [dashboardData, setDashboardData] = useState<RealEstateDashboardData | null>(null);
 
   // Toast state
@@ -653,6 +657,15 @@ export default function RealEstateDashboard() {
     }
   }, [authStatus, user?.id, fetchData, hasCapability]);
 
+  // Open add modal from onboarding deep-link (?add=1)
+  useEffect(() => {
+    if (searchParams?.get('add') === '1' && user?.id) {
+      setIsAddModalOpen(true);
+      const fromOnboarding = searchParams?.get('from') === 'onboarding';
+      router.replace(`/portfolio/real-estate${fromOnboarding ? '?from=onboarding' : ''}`, { scroll: false });
+    }
+  }, [searchParams, user?.id, router]);
+
   // Capability guard: show locked page BEFORE any API calls
   if (authStatus === 'authenticated' && !capabilitiesLoading && !hasCapability(FEATURE_ACCESS.REAL_ESTATE.capability)) {
     return (
@@ -665,9 +678,10 @@ export default function RealEstateDashboard() {
 
   const handleAddSuccess = () => {
     setIsAddModalOpen(false);
-    // Refresh data
     if (user?.id) {
-      fetchData(user.id, true); // Skip cache to get fresh data
+      fetchData(user.id, true);
+      const q = readQueue(user.id);
+      if (q && q.current === 'real_estate') setHasAddedOneInQueue(true);
     }
     setToast({ message: 'Property added successfully', type: 'success' });
   };
@@ -744,14 +758,19 @@ export default function RealEstateDashboard() {
     }
   };
 
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
+
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref="/dashboard"
-        backLabel="Back to Dashboard"
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
+        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={false}
       />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+      )}
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 pt-24">
         {/* ==================================================================== */}
@@ -1031,7 +1050,13 @@ export default function RealEstateDashboard() {
       {/* Add Property Modal */}
       <RealEstateAddModal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          if (fromOnboarding) {
+            router.replace('/onboarding/select?step=add-details');
+            return;
+          }
+          setIsAddModalOpen(false);
+        }}
         onSuccess={handleAddSuccess}
       />
 

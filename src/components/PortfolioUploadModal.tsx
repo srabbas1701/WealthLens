@@ -107,9 +107,23 @@ function PortfolioUploadModalInner({
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [preview, setPreview] = useState<UploadPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [detectedHeaders, setDetectedHeaders] = useState<string[]>([]);
   const [result, setResult] = useState<ConfirmUploadResponse | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [importStatusIndex, setImportStatusIndex] = useState(0);
+  /**
+   * Per-row user overrides applied on the preview screen before confirming.
+   * Keyed by `holdings` array index. Lets the user skip individual rows or
+   * fix quantity / average price inline (e.g. when the file had ₹0 price).
+   */
+  const [rowOverrides, setRowOverrides] = useState<
+    Record<number, { skipped?: boolean; quantity?: number; average_price?: number }>
+  >({});
+  /** Index of the row currently being edited inline (qty + price), null when none. */
+  const [editingRowIdx, setEditingRowIdx] = useState<number | null>(null);
+  const [editQty, setEditQty] = useState<string>('');
+  const [editPrice, setEditPrice] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const IMPORT_STATUS_MESSAGES = [
@@ -127,8 +141,14 @@ function PortfolioUploadModalInner({
     setColumnMappings([]);
     setPreview(null);
     setError(null);
+    setErrorCode(null);
+    setDetectedHeaders([]);
     setResult(null);
     setUploadedFile(null);
+    setRowOverrides({});
+    setEditingRowIdx(null);
+    setEditQty('');
+    setEditPrice('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -286,11 +306,15 @@ function PortfolioUploadModalInner({
       } else {
         const errorData = data as UploadErrorResponse;
         setError(errorData.details || errorData.error);
+        setErrorCode(errorData.errorCode || null);
+        setDetectedHeaders(errorData.detectedHeaders || []);
         setStep('error');
       }
     } catch (err) {
       console.error('Upload error:', err);
       setError('Could not process your file. Please try again.');
+      setErrorCode(null);
+      setDetectedHeaders([]);
       setStep('error');
     } finally {
       setIsUploading(false);
@@ -311,10 +335,90 @@ function PortfolioUploadModalInner({
   };
 
   /**
+   * Apply user overrides to a holding row to produce the "effective" row that
+   * will actually be imported. Recomputes invested_value from qty × price.
+   */
+  const applyOverridesToHolding = useCallback((holding: ParsedHolding, idx: number): ParsedHolding => {
+    const ov = rowOverrides[idx];
+    if (!ov) return holding;
+    const quantity = ov.quantity ?? holding.quantity;
+    const average_price = ov.average_price ?? holding.average_price;
+    const invested_value = quantity * average_price;
+    const wasEdited = ov.quantity !== undefined || ov.average_price !== undefined;
+    const isValid = quantity > 0 && average_price > 0;
+    return {
+      ...holding,
+      quantity,
+      average_price,
+      invested_value,
+      isValid,
+      validationNote: wasEdited && isValid ? 'Edited before import' : holding.validationNote,
+    };
+  }, [rowOverrides]);
+
+  /** Toggle a row's "skipped" state (user excluded it from import). */
+  const toggleRowSkip = (idx: number) => {
+    setRowOverrides(prev => ({
+      ...prev,
+      [idx]: { ...prev[idx], skipped: !prev[idx]?.skipped },
+    }));
+  };
+
+  /** Begin inline-editing a row's quantity and price. */
+  const startEditRow = (idx: number, currentQty: number, currentPrice: number) => {
+    setEditingRowIdx(idx);
+    setEditQty(currentQty > 0 ? String(currentQty) : '');
+    setEditPrice(currentPrice > 0 ? String(currentPrice) : '');
+  };
+
+  /** Save inline edits to the row. */
+  const saveEditRow = () => {
+    if (editingRowIdx === null) return;
+    const qty = parseFloat(editQty);
+    const price = parseFloat(editPrice);
+    if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price <= 0) {
+      // Invalid input — flash a brief inline alert via window (no extra toast lib here)
+      alert('Please enter a positive quantity and price.');
+      return;
+    }
+    setRowOverrides(prev => ({
+      ...prev,
+      [editingRowIdx]: { ...prev[editingRowIdx], quantity: qty, average_price: price, skipped: false },
+    }));
+    setEditingRowIdx(null);
+    setEditQty('');
+    setEditPrice('');
+  };
+
+  const cancelEditRow = () => {
+    setEditingRowIdx(null);
+    setEditQty('');
+    setEditPrice('');
+  };
+
+  /**
+   * Holdings with all user overrides applied, used for both the preview
+   * counts/totals and the final confirm payload.
+   */
+  const effectiveHoldings = (preview?.holdings ?? []).map((h, i) => ({
+    holding: applyOverridesToHolding(h, i),
+    skipped: rowOverrides[i]?.skipped ?? false,
+    originalIndex: i,
+  }));
+
+  const includedHoldings = effectiveHoldings.filter(r => !r.skipped && r.holding.isValid);
+  const livePreviewTotal = includedHoldings.reduce((sum, r) => sum + r.holding.invested_value, 0);
+
+  /**
    * Confirm and import the previewed holdings
    */
   const handleConfirm = async () => {
     if (!preview) return;
+
+    if (includedHoldings.length === 0) {
+      alert('Please include at least one holding before importing.');
+      return;
+    }
 
     setStep('importing');
 
@@ -324,7 +428,7 @@ function PortfolioUploadModalInner({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
-          holdings: preview.holdings,
+          holdings: includedHoldings.map(r => r.holding),
           source,
         }),
       });
@@ -682,33 +786,42 @@ function PortfolioUploadModalInner({
           {/* Step 3: Preview */}
           {step === 'preview' && preview && (
             <div className="space-y-6">
-              {/* Summary */}
-              <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 border border-emerald-100 dark:border-emerald-800/50">
-                <div className="flex items-center gap-3 mb-3">
-                  <CheckCircleIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  <span className="font-medium text-emerald-800 dark:text-emerald-300">
-                    Ready to import {preview.summary.validRows} investment{preview.summary.validRows !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <p className="text-emerald-600 dark:text-emerald-400">Total Invested</p>
-                    <p className="font-semibold text-emerald-900 dark:text-emerald-200">
-                      {formatCurrency(preview.summary.totalInvestedValue)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-emerald-600 dark:text-emerald-400">Valid Rows</p>
-                    <p className="font-semibold text-emerald-900 dark:text-emerald-200">{preview.summary.validRows}</p>
-                  </div>
-                  {preview.summary.skippedRows > 0 && (
-                    <div>
-                      <p className="text-amber-600 dark:text-amber-400">Skipped</p>
-                      <p className="font-semibold text-amber-700 dark:text-amber-300">{preview.summary.skippedRows}</p>
+              {/* Summary — live totals reflecting user skip/edit overrides */}
+              {(() => {
+                const includedCount = includedHoldings.length;
+                const skippedByUser = effectiveHoldings.filter(r => r.skipped).length;
+                const invalidCount = effectiveHoldings.filter(r => !r.skipped && !r.holding.isValid).length;
+                return (
+                  <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 border border-emerald-100 dark:border-emerald-800/50">
+                    <div className="flex items-center gap-3 mb-3">
+                      <CheckCircleIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="font-medium text-emerald-800 dark:text-emerald-300">
+                        Ready to import {includedCount} investment{includedCount !== 1 ? 's' : ''}
+                      </span>
                     </div>
-                  )}
-                </div>
-              </div>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-emerald-600 dark:text-emerald-400">Total Invested</p>
+                        <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                          {formatCurrency(livePreviewTotal)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-emerald-600 dark:text-emerald-400">Will Import</p>
+                        <p className="font-semibold text-emerald-900 dark:text-emerald-200">{includedCount}</p>
+                      </div>
+                      {(skippedByUser > 0 || invalidCount > 0) && (
+                        <div>
+                          <p className="text-amber-600 dark:text-amber-400">Excluded</p>
+                          <p className="font-semibold text-amber-700 dark:text-amber-300">
+                            {skippedByUser + invalidCount}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Detected Columns - Show what was auto-mapped */}
               {preview.detectedColumns && (
@@ -770,70 +883,170 @@ function PortfolioUploadModalInner({
                 </div>
               )}
 
-              {/* Preview table */}
+              {/* Preview table — interactive: skip / edit per row before import */}
               <div className="border border-gray-200 dark:border-[#334155] rounded-xl overflow-hidden">
-                <div className="overflow-x-auto max-h-80">
+                <div className="overflow-x-auto max-h-96">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 dark:bg-[#0F172A]/50 sticky top-0">
+                    <thead className="bg-gray-50 dark:bg-[#0F172A]/50 sticky top-0 z-10">
                       <tr>
                         <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Name</th>
                         <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">Type</th>
                         <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Qty</th>
                         <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Avg Price</th>
                         <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-400">Invested</th>
-                        <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-400">Status</th>
+                        <th className="px-4 py-3 text-center font-medium text-gray-600 dark:text-gray-400">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-[#334155]">
-                      {preview.holdings.map((holding, index) => (
-                        <tr 
-                          key={index}
-                          className={holding.isValid ? 'bg-white dark:bg-[#1E293B]' : 'bg-amber-50/50 dark:bg-amber-900/20'}
-                        >
-                          <td className="px-4 py-3">
-                            <div>
-                              <p className="font-medium text-gray-900 dark:text-white truncate max-w-48">
+                      {effectiveHoldings.map(({ holding, skipped, originalIndex }) => {
+                        const isEditing = editingRowIdx === originalIndex;
+                        const hasIssue = !holding.isValid;
+                        const wasEdited = rowOverrides[originalIndex]?.quantity !== undefined ||
+                                          rowOverrides[originalIndex]?.average_price !== undefined;
+
+                        // Row background — visually communicates state
+                        const rowBg = skipped
+                          ? 'bg-gray-100 dark:bg-[#0F172A]/60 opacity-60'
+                          : hasIssue
+                            ? 'bg-amber-50/60 dark:bg-amber-900/20'
+                            : wasEdited
+                              ? 'bg-blue-50/60 dark:bg-blue-900/20'
+                              : 'bg-white dark:bg-[#1E293B]';
+
+                        return (
+                          <tr key={originalIndex} className={rowBg}>
+                            {/* Name + symbol/isin */}
+                            <td className="px-4 py-3 align-top">
+                              <p className={`font-medium truncate max-w-48 ${
+                                skipped ? 'line-through text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'
+                              }`}>
                                 {holding.name}
                               </p>
                               {(holding.symbol || holding.isin) && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-48">
                                   {holding.symbol || holding.isin}
                                 </p>
                               )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                            {formatAssetType(holding.asset_type)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-gray-900 dark:text-white">
-                            {holding.quantity.toLocaleString('en-IN')}
-                          </td>
-                          <td className="px-4 py-3 text-right text-gray-900 dark:text-white">
-                            ₹{holding.average_price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                          </td>
-                          <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
-                            {formatCurrency(holding.invested_value)}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {holding.isValid ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-xs">
-                                <CheckCircleIcon className="w-3 h-3" />
-                                Ready
-                              </span>
-                            ) : (
-                              <span 
-                                className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full text-xs"
-                                title={holding.validationNote}
-                              >
-                                <AlertTriangleIcon className="w-3 h-3" />
-                                Skip
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                              {hasIssue && !isEditing && (
+                                <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                                  ⚠ Missing qty or price — edit or skip
+                                </p>
+                              )}
+                              {wasEdited && !isEditing && !skipped && (
+                                <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                                  ✓ Edited before import
+                                </p>
+                              )}
+                            </td>
+
+                            {/* Asset type */}
+                            <td className="px-4 py-3 align-top text-gray-600 dark:text-gray-400">
+                              {formatAssetType(holding.asset_type)}
+                            </td>
+
+                            {/* Qty — editable */}
+                            <td className="px-4 py-3 align-top text-right">
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  min="0"
+                                  value={editQty}
+                                  onChange={(e) => setEditQty(e.target.value)}
+                                  className="w-24 text-right px-2 py-1 text-sm bg-white dark:bg-[#0F172A] border border-blue-400 dark:border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="Qty"
+                                />
+                              ) : (
+                                <span className="text-gray-900 dark:text-white">
+                                  {holding.quantity.toLocaleString('en-IN', { maximumFractionDigits: 4 })}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Avg Price — editable */}
+                            <td className="px-4 py-3 align-top text-right">
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={editPrice}
+                                  onChange={(e) => setEditPrice(e.target.value)}
+                                  className="w-24 text-right px-2 py-1 text-sm bg-white dark:bg-[#0F172A] border border-blue-400 dark:border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="Price"
+                                />
+                              ) : (
+                                <span className="text-gray-900 dark:text-white">
+                                  ₹{holding.average_price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Invested */}
+                            <td className="px-4 py-3 align-top text-right font-medium text-gray-900 dark:text-white">
+                              {isEditing
+                                ? formatCurrency((parseFloat(editQty) || 0) * (parseFloat(editPrice) || 0))
+                                : formatCurrency(holding.invested_value)}
+                            </td>
+
+                            {/* Action — context-aware buttons */}
+                            <td className="px-4 py-3 align-top">
+                              {isEditing ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={saveEditRow}
+                                    className="px-2 py-1 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                                    aria-label="Save edits"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={cancelEditRow}
+                                    className="px-2 py-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                                    aria-label="Cancel edit"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : skipped ? (
+                                <button
+                                  onClick={() => toggleRowSkip(originalIndex)}
+                                  className="px-2.5 py-1 text-xs font-medium border border-gray-300 dark:border-[#334155] text-gray-600 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-[#334155]"
+                                  aria-label="Include this row in import"
+                                >
+                                  Include
+                                </button>
+                              ) : (
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => startEditRow(originalIndex, holding.quantity, holding.average_price)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                                    aria-label="Edit quantity and price"
+                                    title="Edit quantity and price"
+                                  >
+                                    <EditIcon className="w-3 h-3" />
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => toggleRowSkip(originalIndex)}
+                                    className="px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded"
+                                    aria-label="Skip this row"
+                                    title="Don't import this row"
+                                  >
+                                    Skip
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
+                </div>
+                {/* Helper hint below the table */}
+                <div className="px-4 py-2 bg-gray-50 dark:bg-[#0F172A]/40 border-t border-gray-100 dark:border-[#334155] text-xs text-gray-600 dark:text-gray-400">
+                  💡 Use <strong>Edit</strong> to fix missing quantity/price, or <strong>Skip</strong> to exclude rows you don&apos;t want to import.
                 </div>
               </div>
 
@@ -878,8 +1091,8 @@ function PortfolioUploadModalInner({
             <div className="py-12 text-center">
               <div className="w-16 h-16 mx-auto mb-6 border-4 border-emerald-200 dark:border-emerald-800 border-t-emerald-600 dark:border-t-emerald-400 rounded-full animate-spin" />
               <p className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                {preview?.holdings?.filter(h => h.isValid).length
-                  ? `Importing ${preview.holdings.filter(h => h.isValid).length} holdings...`
+                {includedHoldings.length > 0
+                  ? `Importing ${includedHoldings.length} holding${includedHoldings.length !== 1 ? 's' : ''}...`
                   : 'Importing your portfolio...'}
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -923,23 +1136,184 @@ function PortfolioUploadModalInner({
             </div>
           )}
 
-          {/* Step 6: Error */}
+          {/* Step 6: Error — structured, actionable guidance */}
           {step === 'error' && (
-            <div className="py-8 text-center">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                <AlertTriangleIcon className="w-10 h-10 text-amber-600 dark:text-amber-400" />
+            <div className="py-6">
+              {/* Icon + title */}
+              <div className="text-center mb-5">
+                <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                  <AlertTriangleIcon className="w-7 h-7 text-amber-600 dark:text-amber-400" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
+                  {errorCode === 'empty_headers' ? 'Column headers not found' :
+                   errorCode === 'size_error' ? 'File is too large' :
+                   errorCode === 'type_error' ? 'Unsupported file type' :
+                   errorCode === 'file_error' ? 'Could not read file' :
+                   errorCode === 'capital_gains_report' ? 'This is a transaction report, not a holdings file' :
+                   errorCode === 'all_zero_values' ? 'No quantity or price found' :
+                   'File format not recognised'}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 max-w-sm mx-auto">
+                  {error || 'We couldn\'t process your file. Check the format guide below and try again.'}
+                </p>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                Something didn't work
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
-                {error || 'We couldn\'t process your file. Please check the format and try again.'}
-              </p>
 
+              {/* Where to download the RIGHT file — shown for wrong-file-type errors */}
+              {(errorCode === 'capital_gains_report' || errorCode === 'all_zero_values') && (
+                <div className="mb-4 rounded-lg border border-blue-200 dark:border-blue-800/40 bg-blue-50 dark:bg-blue-900/20 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-blue-200 dark:border-blue-800/40">
+                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">
+                      Where to find your holdings file
+                    </p>
+                  </div>
+                  <div className="divide-y divide-blue-100 dark:divide-blue-800/30">
+                    <div className="px-3 py-2 flex items-start gap-2.5">
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 shrink-0 mt-0.5">CAS</span>
+                      <p className="text-xs text-gray-700 dark:text-gray-300">
+                        Email from NSDL/CDSL — request at <code className="text-[11px]">nsdl.co.in</code> or <code className="text-[11px]">cdslindia.com</code>
+                      </p>
+                    </div>
+                    <div className="px-3 py-2 flex items-start gap-2.5">
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 shrink-0 mt-0.5">Zerodha</span>
+                      <p className="text-xs text-gray-700 dark:text-gray-300">
+                        Console → <strong>Holdings</strong> → Download CSV (not the Tax P&amp;L report)
+                      </p>
+                    </div>
+                    <div className="px-3 py-2 flex items-start gap-2.5">
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 shrink-0 mt-0.5">Groww</span>
+                      <p className="text-xs text-gray-700 dark:text-gray-300">
+                        My Investments → <strong>Download Statement</strong> → choose &ldquo;Holdings&rdquo;
+                      </p>
+                    </div>
+                    <div className="px-3 py-2 flex items-start gap-2.5">
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 shrink-0 mt-0.5">Kuvera</span>
+                      <p className="text-xs text-gray-700 dark:text-gray-300">
+                        My Investments → <strong>Export CSV</strong>
+                      </p>
+                    </div>
+                    <div className="px-3 py-2 flex items-start gap-2.5">
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 shrink-0 mt-0.5">Other</span>
+                      <p className="text-xs text-gray-700 dark:text-gray-300">
+                        Look for &ldquo;Holdings&rdquo;, &ldquo;Portfolio Statement&rdquo;, or &ldquo;Current Investments&rdquo; — avoid &ldquo;Capital Gains&rdquo;, &ldquo;Tax P&amp;L&rdquo;, or transaction reports.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Detected headers — shown when we have them */}
+              {detectedHeaders.length > 0 && (
+                <div className="mb-4 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 p-3">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                    What we found in your file&apos;s first row
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detectedHeaders.slice(0, 16).map((h, i) => (
+                      <span
+                        key={i}
+                        className={`inline-block text-xs px-2 py-0.5 rounded font-mono ${
+                          h.startsWith('__EMPTY') || h.trim() === ''
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        {h.startsWith('__EMPTY') ? '(empty)' : h}
+                      </span>
+                    ))}
+                    {detectedHeaders.length > 16 && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500 self-center">
+                        +{detectedHeaders.length - 16} more
+                      </span>
+                    )}
+                  </div>
+                  {errorCode === 'empty_headers' && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 flex items-start gap-1.5">
+                      <span className="mt-0.5">⚠️</span>
+                      <span>Row 1 looks like account/personal details, not column headers. Open the file, delete rows above the column names, and re-save as CSV.</span>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Expected format guide — only for header / format errors, not for wrong-file-type errors */}
+              {(errorCode === 'empty_headers' || errorCode === 'ambiguous_types' || errorCode === 'all_zero_values' || !errorCode) && (
+                <div className="mb-5 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="bg-gray-50 dark:bg-gray-800/60 px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                      Expected CSV column headers
+                    </p>
+                  </div>
+                  <div className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                    {/* Mutual Funds */}
+                    <div className="px-3 py-2.5 flex items-start gap-3">
+                      <span className="text-base mt-0.5 shrink-0">💰</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 mb-1">Mutual Funds</p>
+                        <div className="flex flex-wrap gap-1">
+                          {['Scheme Name', 'Units / Quantity', 'Invested Amount', 'ISIN (optional)'].map(col => (
+                            <code key={col} className="text-[11px] bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                              {col}
+                            </code>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Stocks */}
+                    <div className="px-3 py-2.5 flex items-start gap-3">
+                      <span className="text-base mt-0.5 shrink-0">📈</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 mb-1">Stocks / Shares</p>
+                        <div className="flex flex-wrap gap-1">
+                          {['Stock Name or Symbol', 'Quantity', 'Average Buy Price', 'ISIN (optional)'].map(col => (
+                            <code key={col} className="text-[11px] bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                              {col}
+                            </code>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {/* ETFs */}
+                    <div className="px-3 py-2.5 flex items-start gap-3">
+                      <span className="text-base mt-0.5 shrink-0">📊</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 mb-1">ETFs</p>
+                        <div className="flex flex-wrap gap-1">
+                          {['ETF Name (include "ETF")', 'Quantity', 'Average Buy Price'].map(col => (
+                            <code key={col} className="text-[11px] bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                              {col}
+                            </code>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Fixed Deposits */}
+                    <div className="px-3 py-2.5 flex items-start gap-3">
+                      <span className="text-base mt-0.5 shrink-0">🏦</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 mb-1">Fixed Deposits / RDs</p>
+                        <div className="flex flex-wrap gap-1">
+                          {['Bank Name', 'Invested Amount', 'Interest Rate', 'Maturity Date'].map(col => (
+                            <code key={col} className="text-[11px] bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                              {col}
+                            </code>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border-t border-amber-200 dark:border-amber-800/40">
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      💡 <strong>Tip:</strong> Row 1 must be the column header row. Delete any title rows, account summary rows, or blank rows above the headers before uploading.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
               <div className="flex items-center justify-center gap-3">
                 <button
                   onClick={handleClose}
-                  className="px-6 py-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium"
+                  className="px-6 py-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium text-sm"
                 >
                   Cancel
                 </button>
@@ -947,8 +1321,10 @@ function PortfolioUploadModalInner({
                   onClick={() => {
                     setStep('upload');
                     setError(null);
+                    setErrorCode(null);
+                    setDetectedHeaders([]);
                   }}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"
+                  className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-lg font-medium text-sm hover:bg-emerald-700 transition-colors"
                 >
                   <RefreshIcon className="w-4 h-4" />
                   Try Again

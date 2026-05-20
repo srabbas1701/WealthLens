@@ -9,11 +9,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import ManualInvestmentModal from '@/components/ManualInvestmentModal';
 import {
-  ArrowLeftIcon,
-  FileIcon,
   CheckCircleIcon,
   InfoIcon,
   ChevronDownIcon,
@@ -21,7 +20,7 @@ import {
 } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { AppHeader, useCurrency } from '@/components/AppHeader';
-import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
+import { readQueue } from '@/lib/onboarding-queue';
 
 type SortField = 'name' | 'accountType' | 'balance' | 'interestRate' | 'lastUpdated';
 type SortDirection = 'asc' | 'desc';
@@ -35,15 +34,35 @@ interface CashHolding {
   lastUpdated: string;
 }
 
+function isCashLikeHolding(h: any): boolean {
+  const assetType = String(h?.assetType ?? '').toLowerCase();
+  const topLevelBucket = String(h?.topLevelBucket ?? '').toLowerCase();
+  const assetClass = String(h?.assetClass ?? '').toLowerCase();
+  const name = String(h?.name ?? '').toLowerCase();
+
+  // Direct types and buckets
+  if (assetType === 'cash') return true;
+  if (topLevelBucket === 'cash') return true;
+  if (assetClass.includes('cash') || assetClass.includes('liquid')) return true;
+
+  // Common cash-equivalent labels that may come from imported/normalized data
+  const cashKeywords = ['savings', 'liquid', 'money market', 'cash', 'bank account', 'current account', 'wallet'];
+  return cashKeywords.some((k) => assetType.includes(k) || name.includes(k));
+}
+
 export default function CashHoldingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<CashHolding[]>([]);
   const [totalBalance, setTotalBalance] = useState(0);
   const [portfolioPercentage, setPortfolioPercentage] = useState(0);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
   
   const [sortField, setSortField] = useState<SortField>('balance');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -51,60 +70,69 @@ export default function CashHoldingsPage() {
   const fetchData = useCallback(async (userId: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ user_id: userId });
-      const response = await fetch(`/api/portfolio/data?${params}`);
-      
-      if (response.ok) {
+      const fetchPortfolioData = async (mode?: 'lite') => {
+        const params = new URLSearchParams({ user_id: userId });
+        if (mode) params.set('mode', mode);
+        const response = await fetch(`/api/portfolio/data?${params}`);
+        if (!response.ok) return null;
         const result = await response.json();
-        if (result.success && result.data) {
-          const portfolioData = result.data;
-          const cashHoldings = portfolioData.holdings
-            .filter((h: any) => h.assetType === 'Cash')
-            .map((h: any) => {
-              // Parse cash metadata from notes (stored as JSON)
-              let cashMetadata: any = {};
-              if (h.notes) {
-                try {
-                  cashMetadata = JSON.parse(h.notes);
-                } catch (e) {
-                  console.warn('Failed to parse cash notes:', e);
-                }
-              }
-              
-              // Account type from metadata or default
-              const accountType = cashMetadata.account_type || cashMetadata.cashAccountType || 'Savings Account';
-              
-              // Interest rate from metadata (if available)
-              const interestRate = cashMetadata.interest_rate || cashMetadata.rate || null;
-              
-              // Balance is the current value
-              const balance = h.currentValue > 0 ? h.currentValue : h.investedValue;
-              
-              // Last updated from holding's updated_at or created_at
-              // Note: API returns these fields, but they may not be in the response
-              // Use current date as fallback
-              const lastUpdated = new Date().toISOString();
-              
-              return {
-                id: h.id,
-                name: h.name,
-                accountType,
-                balance,
-                interestRate,
-                lastUpdated,
-              };
-            });
+        if (!result?.success || !result?.data) return null;
+        return result.data;
+      };
 
-          const total = cashHoldings.reduce((sum: number, h: CashHolding) => sum + h.balance, 0);
-          const portfolioPct = portfolioData.metrics.netWorth > 0 
-            ? (total / portfolioData.metrics.netWorth) * 100 
-            : 0;
+      // Fast path first, then safe fallback to existing full response mode.
+      const portfolioData = (await fetchPortfolioData('lite')) ?? (await fetchPortfolioData());
+      if (!portfolioData) return;
 
-          setHoldings(cashHoldings);
-          setTotalBalance(total);
-          setPortfolioPercentage(portfolioPct);
-        }
-      }
+      const cashHoldings = portfolioData.holdings
+        .filter((h: any) => isCashLikeHolding(h))
+        .map((h: any) => {
+          // Parse cash metadata from notes (stored as JSON)
+          let cashMetadata: any = {};
+          if (h.notes) {
+            try {
+              cashMetadata = JSON.parse(h.notes);
+            } catch (e) {
+              console.warn('Failed to parse cash notes:', e);
+            }
+          }
+          
+          // Account type from metadata or default
+          const accountType = cashMetadata.account_type || cashMetadata.cashAccountType || 'Savings Account';
+          
+          // Interest rate from metadata (if available)
+          const interestRate = cashMetadata.interest_rate || cashMetadata.rate || null;
+          
+          // Balance is the current value
+          const balance = h.currentValue > 0 ? h.currentValue : h.investedValue;
+          
+          // Prefer manually provided date, then holding timestamps, then now.
+          const lastUpdated =
+            cashMetadata.last_updated ||
+            h.updatedAt ||
+            h.updated_at ||
+            h.createdAt ||
+            h.created_at ||
+            new Date().toISOString();
+          
+          return {
+            id: h.id,
+            name: h.name,
+            accountType,
+            balance,
+            interestRate,
+            lastUpdated,
+          };
+        });
+
+      const total = cashHoldings.reduce((sum: number, h: CashHolding) => sum + h.balance, 0);
+      const portfolioPct = portfolioData.metrics.netWorth > 0 
+        ? (total / portfolioData.metrics.netWorth) * 100 
+        : 0;
+
+      setHoldings(cashHoldings);
+      setTotalBalance(total);
+      setPortfolioPercentage(portfolioPct);
     } catch (error) {
       console.error('Failed to fetch cash holdings:', error);
     } finally {
@@ -126,6 +154,16 @@ export default function CashHoldingsPage() {
       fetchData(user.id);
     }
   }, [user?.id, fetchData]);
+
+  // Auto-open add flow via deep-link (?add=1), then clean URL.
+  useEffect(() => {
+    if (searchParams?.get('add') !== '1') return;
+    setShowAddModal(true);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('add');
+    const qs = params.toString();
+    router.replace(qs ? `/portfolio/cash?${qs}` : '/portfolio/cash');
+  }, [searchParams, router]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -222,6 +260,15 @@ export default function CashHoldingsPage() {
     }
   }, [totalBalance, portfolioPercentage]);
 
+  const handleAddSuccess = () => {
+    setShowAddModal(false);
+    if (user?.id) {
+      fetchData(user.id);
+      const q = readQueue(user.id);
+      if (q && q.current === 'savings_cash') setHasAddedOneInQueue(true);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F6F8FB] flex items-center justify-center">
@@ -232,23 +279,34 @@ export default function CashHoldingsPage() {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref="/dashboard"
-        backLabel="Back to Dashboard"
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
+        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
       />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+      )}
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Page Title */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Cash Holdings</h1>
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
-            {holdings.length} account{holdings.length !== 1 ? 's' : ''} • Total Balance: {formatCurrency(totalBalance)} • {portfolioPercentage.toFixed(1)}% of portfolio
-          </p>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">Cash Holdings</h1>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">
+              {holdings.length} account{holdings.length !== 1 ? 's' : ''} • Total Balance: {formatCurrency(totalBalance)} • {portfolioPercentage.toFixed(1)}% of portfolio
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddModal(true)}
+            className="btn-primary-standard px-4 py-2 self-start"
+          >
+            Add Cash Account
+          </button>
         </div>
 
         {/* Mobile Card Layout */}
@@ -426,6 +484,21 @@ export default function CashHoldingsPage() {
           </div>
         )}
       </main>
+
+      <ManualInvestmentModal
+        isOpen={showAddModal}
+        onClose={() => {
+          if (fromOnboarding) {
+            router.replace('/onboarding/select?step=add-details');
+            return;
+          }
+          setShowAddModal(false);
+        }}
+        userId={user?.id || ''}
+        source={fromOnboarding ? 'onboarding' : 'dashboard'}
+        category="savings_cash"
+        onSuccess={handleAddSuccess}
+      />
     </div>
   );
 }

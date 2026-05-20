@@ -24,6 +24,7 @@ const CAPABILITY_LABELS: Record<string, string> = {
   view_basic_analytics: 'Basic Analytics',
   view_advanced_analytics: 'Advanced Analytics',
   run_scenarios: 'Scenario Analysis',
+  manage_commodities: 'Commodities',
   manage_real_assets: 'Real Estate & Real Assets',
   manage_liabilities: 'Liabilities',
   manage_insurance: 'Insurance',

@@ -11,7 +11,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue } from '@/lib/onboarding-queue';
 import {
   ArrowLeftIcon,
   PlusIcon,
@@ -80,8 +82,10 @@ const GOLD_TYPE_LABELS: Record<GoldTypeGroup, string> = {
 
 export default function GoldHoldingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<GoldHolding[]>([]);
@@ -134,15 +138,35 @@ export default function GoldHoldingsPage() {
           
           // Filter gold holdings
           const goldHoldings: GoldHolding[] = portfolioData.holdings
-            .filter((h: any) => {
-              const assetType = (h.assetType || '').toLowerCase();
-              return assetType === 'gold' || h.asset?.asset_type === 'gold';
+            .filter((h: unknown) => {
+              const row = h as { assetType?: string; asset?: { asset_type?: string }; notes?: string };
+              const assetType = (row.assetType || '').toLowerCase();
+              if (!(assetType === 'gold' || row.asset?.asset_type === 'gold')) return false;
+              try {
+                const notes = row.notes ? JSON.parse(row.notes) : {};
+                return !notes?.silver_type;
+              } catch {
+                return true;
+              }
             })
-            .map((h: any) => {
-              const notes = h.notes ? JSON.parse(h.notes) : {};
+            .map((h: unknown) => {
+              const row = h as {
+                id?: string;
+                asset_id?: string;
+                name?: string;
+                quantity?: number;
+                created_at?: string;
+                notes?: string;
+                investedValue?: number;
+                invested_value?: number;
+                currentValue?: number;
+                current_value?: number;
+                asset?: { name?: string };
+              };
+              const notes = row.notes ? JSON.parse(row.notes as string) : {};
               // Use camelCase field names from portfolio data API
-              const investedValue = h.investedValue || h.invested_value || 0;
-              const currentValue = h.currentValue || h.current_value || 0;
+              const investedValue = (row.investedValue as number) || (row.invested_value as number) || 0;
+              const currentValue = (row.currentValue as number) || (row.current_value as number) || 0;
               const gainLoss = currentValue - investedValue;
               const gainLossPct = investedValue > 0 ? (gainLoss / investedValue) * 100 : 0;
               const portfolioValue = portfolioData.metrics?.netWorth || portfolioData.metrics?.totalValue || 0;
@@ -154,16 +178,16 @@ export default function GoldHoldingsPage() {
                 : undefined;
 
               return {
-                id: h.id,
-                asset_id: h.asset_id,
+                id: row.id as string,
+                asset_id: row.asset_id as string,
                 goldType: notes.gold_type || 'gold',
-                name: h.name || h.asset?.name || 'Gold Holding',
+                name: row.name || row.asset?.name || 'Gold Holding',
                 investedValue,
                 currentValue,
-                quantity: h.quantity || 0,
+                quantity: (row.quantity as number) || 0,
                 // For ETFs, always use 'unit', not 'gram'
                 unitType: notes.gold_type === 'etf' ? 'unit' : (notes.unit_type || 'gram'),
-                purchaseDate: notes.purchase_date || h.created_at,
+                purchaseDate: notes.purchase_date || (row.created_at as string),
                 gainLoss,
                 gainLossPct,
                 allocationPct,
@@ -257,6 +281,16 @@ export default function GoldHoldingsPage() {
     }
   }, [authStatus, router]);
 
+  // Open add modal from onboarding deep-link (?add=1)
+  useEffect(() => {
+    if (searchParams?.get('add') === '1' && user?.id) {
+      setEditingHolding(null);
+      setShowAddModal(true);
+      const fromOnboarding = searchParams?.get('from') === 'onboarding';
+      router.replace(`/portfolio/gold${fromOnboarding ? '?from=onboarding' : ''}`, { scroll: false });
+    }
+  }, [searchParams, user?.id, router]);
+
   useEffect(() => {
     if (user?.id) {
       fetchData(user.id);
@@ -268,6 +302,8 @@ export default function GoldHoldingsPage() {
     setEditingHolding(null);
     if (user?.id) {
       fetchData(user.id);
+      const q = readQueue(user.id);
+      if (q && (q.current === 'gold' || q.current === 'silver')) setHasAddedOneInQueue(true);
     }
   };
 
@@ -438,13 +474,18 @@ export default function GoldHoldingsPage() {
 
   const hasData = holdings.length > 0;
 
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
+
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref="/dashboard"
-        backLabel="Back to Dashboard"
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
+        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
       />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+      )}
 
       <main className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Header */}
@@ -849,6 +890,10 @@ export default function GoldHoldingsPage() {
         <GoldAddModal
           isOpen={showAddModal}
           onClose={() => {
+            if (fromOnboarding) {
+              router.replace('/onboarding/select?step=add-details');
+              return;
+            }
             setShowAddModal(false);
             setEditingHolding(null);
           }}

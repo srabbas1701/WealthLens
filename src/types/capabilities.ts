@@ -56,6 +56,7 @@ export const CAPABILITY_KEYS = {
   VIEW_BASIC_ANALYTICS: 'view_basic_analytics',
   VIEW_ADVANCED_ANALYTICS: 'view_advanced_analytics',
   RUN_SCENARIOS: 'run_scenarios',
+  MANAGE_COMMODITIES: 'manage_commodities',
   MANAGE_REAL_ASSETS: 'manage_real_assets',
   MANAGE_LIABILITIES: 'manage_liabilities',
   MANAGE_INSURANCE: 'manage_insurance',

@@ -92,6 +92,19 @@ export interface UploadErrorResponse {
   success: false;
   error: string;
   details?: string;
+  /** Machine-readable error code for the modal to pick the right UI variant */
+  errorCode?:
+    | 'empty_headers'
+    | 'ambiguous_types'
+    | 'no_valid_rows'
+    | 'file_error'
+    | 'size_error'
+    | 'type_error'
+    | 'capital_gains_report'
+    | 'transaction_report'
+    | 'all_zero_values';
+  /** The raw column headers the parser actually detected in the file */
+  detectedHeaders?: string[];
 }
 
 /**

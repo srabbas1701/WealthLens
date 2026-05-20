@@ -61,6 +61,19 @@ import {
 // ============================================================================
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const IS_DEV = process.env.NODE_ENV === 'development';
+
+function debugLog(message?: unknown, ...optionalParams: unknown[]) {
+  if (IS_DEV) {
+    console.log(message, ...optionalParams);
+  }
+}
+
+function debugWarn(message?: unknown, ...optionalParams: unknown[]) {
+  if (IS_DEV) {
+    console.warn(message, ...optionalParams);
+  }
+}
 
 // ============================================================================
 // COLUMN DETECTION SYSTEM
@@ -231,6 +244,321 @@ function fuzzyMatchColumn(columnName: string, variations: string[]): boolean {
   });
 }
 
+// ============================================================================
+// SMART HEADER DETECTION
+// ============================================================================
+
+/**
+ * Combined keyword list used to score rows for "likelihood of being a header".
+ * Drawn from all known column-variation arrays so the scorer stays in sync
+ * with the column detector automatically.
+ */
+const ALL_HEADER_KEYWORDS = [
+  ...NAME_VARIATIONS,
+  ...QUANTITY_VARIATIONS,
+  ...TOTAL_INVESTED_VARIATIONS,
+  ...AVERAGE_PRICE_VARIATIONS,
+  ...ISIN_VARIATIONS,
+  ...FOLIO_VARIATIONS,
+  ...AMC_VARIATIONS,
+  ...SYMBOL_VARIATIONS,
+  ...EXCHANGE_VARIATIONS,
+  ...SECTOR_TYPE_VARIATIONS,
+];
+
+/** Minimum keyword matches for a row to be considered a header. */
+const HEADER_SCORE_THRESHOLD = 2;
+
+/**
+ * "Transactional" keywords — markers of a section listing already-completed
+ * orders, sold positions, or realised P&L (NOT current holdings).
+ *
+ * Two clusters:
+ *  • Sold / realised — sell prices, capital gains, etc.
+ *  • Order / trade history — order id, execution date, order status.
+ *
+ * We deliberately exclude generic terms like "buy date" / "buy price" which
+ * legitimately appear in both holdings and P&L statements.
+ */
+const TRANSACTIONAL_HEADER_KEYWORDS = [
+  // sold / realised
+  'sell date', 'sale date', 'redemption date',
+  'sell price', 'sale price', 'redemption price',
+  'sell value', 'sale value',
+  'sold quantity', 'qty sold', 'sold qty',
+  'realised p', 'realized p',         // catches "Realised P&L", "Realised PnL", "Realized P&L"
+  'realised gain', 'realized gain',
+  'realised loss', 'realized loss',
+  'realised profit', 'realized profit',
+  'capital gain', 'capital gains',
+  'stcg', 'ltcg', 'short term capital', 'long term capital',
+  'indexed cost', 'indexation',
+  // order / trade history
+  'order id', 'order number', 'order no', 'order status',
+  'exchange order', 'broker order',
+  'trade id', 'trade number', 'trade date', 'trade time',
+  'execution date', 'execution time',
+  'transaction id', 'transaction date', 'transaction type',
+];
+
+/**
+ * Markers for a CURRENT-HOLDINGS section. Rows like "Closing date / Closing
+ * price / Closing value / Unrealised P&L / Market value" identify a holdings
+ * section even when the file ALSO contains a separate transactional section.
+ */
+const HOLDINGS_HEADER_KEYWORDS = [
+  'closing date', 'closing price', 'closing value', 'closing balance',
+  'market value', 'market price',
+  'current value', 'current price',
+  'present value', 'present price',
+  'unrealised', 'unrealized',
+  'available quantity', 'free quantity', 'free balance',
+  'as on', 'as of',
+];
+
+type SectionKind = 'holdings' | 'transactional' | 'unknown';
+
+/**
+ * Classify a candidate header row as "holdings", "transactional", or "unknown".
+ *
+ *  - transactional → contains sell/realised/capital-gain markers (skip section)
+ *  - holdings      → contains closing/market/unrealised markers (use section)
+ *  - unknown       → plain "Name / Quantity / Buy Price" — treat as holdings (default)
+ *
+ * If a row contains BOTH kinds (rare), holdings markers win — typically the file
+ * has separate sections and this row is the holdings header that happens to also
+ * mention "buy price" etc.
+ */
+function classifySection(headerRow: unknown[]): SectionKind {
+  const joined = headerRow.map(c => String(c ?? '').trim().toLowerCase()).join(' | ');
+  const hasHoldings = HOLDINGS_HEADER_KEYWORDS.some(kw => joined.includes(kw));
+  if (hasHoldings) return 'holdings';
+  const hasTxn = TRANSACTIONAL_HEADER_KEYWORDS.some(kw => joined.includes(kw));
+  if (hasTxn) return 'transactional';
+  return 'unknown';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION-AWARE HEADER DETECTION (principled, token-based, shape-aware)
+//
+// The header detector must answer ONE question for every row:
+//   "Could this row plausibly be a column-header row?"
+//
+// A row is a header iff:
+//   1. It contains NO data-shaped cells (numbers, dates, ISINs, currency, etc.)
+//   2. Multiple of its cells match known portfolio column keywords as WHOLE
+//      tokens — not substring matches.
+//
+// Both rules are categorical, not heuristic. Data rows score 0; real headers
+// score N where N = number of matching label cells. There is no overlap.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ISIN_PATTERN = /^[A-Z]{2}[A-Z0-9]{10}$/;
+/** Anywhere in the cell: dd-mm-yyyy, yyyy/mm/dd, dd.mm.yyyy, dd-mm-yy, etc. */
+const DATE_PATTERN = /\d{1,4}[\/\-.]\d{1,2}[\/\-.]\d{1,4}/;
+/** HH:MM with optional AM/PM — matches anywhere in cell. */
+const TIME_PATTERN = /\b\d{1,2}:\d{2}(\s?[ap]m)?/i;
+/** Currency / monetary symbols. */
+const CURRENCY_PATTERN = /[₹$€£¥]/;
+/** Pure number (with optional sign, thousand separators, decimal). */
+const PURE_NUMERIC_PATTERN = /^-?[\d,]+(\.\d+)?$/;
+
+/**
+ * Tokenize text into lowercase whole words.
+ *  - "Average Buy Price (₹)"  →  ["average", "buy", "price"]
+ *  - "no. of units"           →  ["no", "of", "units"]
+ *  - "P&L"                    →  ["p", "and", "l"]
+ */
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(t => t.length > 0);
+}
+
+/**
+ * Whole-word keyword match between a cell value and a single keyword.
+ *
+ *  - Exact token-sequence match wins.
+ *  - Multi-token keywords match if all their tokens appear in the cell, with
+ *    at most a few extra tokens (handles "Average Buy Price (₹)" matching
+ *    "buy price").
+ *  - Single-token keywords match only if the cell contains that exact token
+ *    AND has at most 4 total tokens (so a sentence like
+ *    "Note: This is your name" can't match "name").
+ *
+ * Crucially, this REJECTS substring matches like "BUY" → "buy price". As
+ * tokens, cell `[buy]` and keyword `[buy, price]` differ in token-set, so no
+ * match. This is the #1 bug the previous fuzzy substring matcher caused.
+ */
+function cellMatchesKeyword(cellTokens: string[], keyword: string): boolean {
+  const kwTokens = tokenize(keyword);
+  if (cellTokens.length === 0 || kwTokens.length === 0) return false;
+
+  if (cellTokens.length === kwTokens.length &&
+      cellTokens.every((t, i) => t === kwTokens[i])) {
+    return true;
+  }
+
+  if (kwTokens.length >= 2) {
+    const cellSet = new Set(cellTokens);
+    const allKwInCell = kwTokens.every(t => cellSet.has(t));
+    if (allKwInCell && cellTokens.length <= kwTokens.length + 2) return true;
+    return false;
+  }
+
+  // Single-token keyword (e.g. "name", "quantity", "isin", "qty").
+  if (cellTokens.length <= 4 && cellTokens.includes(kwTokens[0])) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Cell shape classifier — answers "is this cell a label or a data value?"
+ *
+ * Returns true if the cell contains any data-shaped content that disqualifies
+ * the entire row from being a header:
+ *   • ISIN code (12-char alphanumeric starting with 2 letters)
+ *   • Date or date-time anywhere in the cell
+ *   • Currency symbol
+ *   • A pure numeric value with absolute magnitude ≥ 10 (small ints like
+ *     "1", "2" are allowed as they may be index columns)
+ *   • Excessively long text (> 80 chars — a label would never be this long)
+ */
+function isDataShapedCell(cellText: string): boolean {
+  if (cellText.length === 0) return false;
+  if (cellText.length > 80) return true;
+  if (ISIN_PATTERN.test(cellText)) return true;
+  if (CURRENCY_PATTERN.test(cellText)) return true;
+  if (DATE_PATTERN.test(cellText)) return true;
+  if (TIME_PATTERN.test(cellText)) return true;
+  if (PURE_NUMERIC_PATTERN.test(cellText)) {
+    const n = parseFloat(cellText.replace(/,/g, ''));
+    if (Number.isFinite(n) && Math.abs(n) >= 10) return true;
+  }
+  return false;
+}
+
+/**
+ * Score a row as a header candidate.
+ *
+ *  - Returns 0 immediately if any cell is data-shaped (categorical rejection).
+ *  - Otherwise returns the count of label cells that match a known column
+ *    keyword via whole-word token matching.
+ *
+ * Real headers (e.g. "Stock Name | Quantity | Price") return 3+. Data rows
+ * (e.g. "TATA MOTORS | 8 | 7968.4 | 27-09-2024") return 0 because of the date.
+ */
+function scoreRowAsHeader(row: unknown[]): number {
+  // Pass 1: shape pre-filter — any data-like cell disqualifies the row.
+  for (const cell of row) {
+    if (typeof cell !== 'string' && typeof cell !== 'number') continue;
+    const s = String(cell ?? '').trim();
+    if (s === '' || s.startsWith('__EMPTY')) continue;
+    if (isDataShapedCell(s)) return 0;
+  }
+
+  // Pass 2: count cells matching known column keywords as whole tokens.
+  let score = 0;
+  for (const cell of row) {
+    if (typeof cell !== 'string') continue;
+    const s = cell.trim();
+    if (s === '' || s.startsWith('__EMPTY')) continue;
+    const cellTokens = tokenize(s);
+    if (cellTokens.length === 0) continue;
+    for (const kw of ALL_HEADER_KEYWORDS) {
+      if (cellMatchesKeyword(cellTokens, kw)) {
+        score++;
+        break;
+      }
+    }
+  }
+  return score;
+}
+
+/**
+ * Trailer / footer / disclaimer keywords that strongly indicate the row is NOT a holding.
+ * Matched anywhere in the row's joined text (lower-cased).
+ */
+const TRAILER_KEYWORDS = [
+  'grand total', 'total :', 'total:', 'total amount', 'sub total', 'subtotal',
+  'disclaimer', 'note:', 'notes:', 'declaration',
+  'closing balance', 'opening balance',
+  'end of report', 'end of statement', 'page ', 'continued on',
+  'this is computer generated', 'this statement',
+  'mutual fund folios', 'demat account', 'consolidated account statement',
+];
+
+/**
+ * Detect whether a "data row" is actually junk:
+ *  - Trailer/footer/disclaimer text
+ *  - Mostly empty (e.g. blank separator row, total row with only one cell populated)
+ *  - Header row repeating itself somewhere lower in the file
+ * Returns reason for skipping (string) or null if it looks like a real holding row.
+ */
+function detectJunkRow(
+  rowArr: unknown[],
+  totalColumns: number,
+  headerKeywordsLower: string[]
+): string | null {
+  // Convert all cells to strings, trim, drop empties
+  const cells = rowArr.map(c => String(c ?? '').trim());
+  const nonEmptyCount = cells.filter(c => c !== '').length;
+  const joined = cells.join(' ').toLowerCase();
+
+  // RULE 1: Almost-empty row (e.g. blank separator, total row with just "Total" in one column)
+  // Real holding rows have at least name, qty, and price — that's 3 cells minimum.
+  if (nonEmptyCount < 3) {
+    return 'too few populated columns';
+  }
+
+  // RULE 2: Less than 40% of columns populated (likely a totals/summary row)
+  if (totalColumns >= 5 && nonEmptyCount < Math.ceil(totalColumns * 0.4)) {
+    return 'sparse row (likely a totals/summary line)';
+  }
+
+  // RULE 3: Trailer keywords (disclaimers, totals, page-end notes)
+  for (const keyword of TRAILER_KEYWORDS) {
+    if (joined.includes(keyword)) {
+      return `trailer text matched ("${keyword}")`;
+    }
+  }
+
+  // RULE 4: Row is the header repeating (e.g. CAS statements often reprint headers per section)
+  // If 2+ cells in this row exactly match known header keywords, it's a repeat header.
+  let headerMatchCount = 0;
+  for (const cell of cells) {
+    if (cell === '' || cell.length > 40) continue; // headers are short
+    const norm = normalizeColumnName(cell);
+    if (norm.length < 2) continue;
+    if (headerKeywordsLower.some(kw => kw === norm || kw.includes(norm) || norm.includes(kw))) {
+      headerMatchCount++;
+    }
+  }
+  if (headerMatchCount >= 2) {
+    return 'looks like a repeated header row';
+  }
+
+  // RULE 5: Row has no numeric value at all (real holdings have qty / price / amount)
+  // We use a fairly tolerant check: at least one cell parseable as a positive number.
+  const hasNumeric = cells.some(c => {
+    if (c === '') return false;
+    const cleaned = c.replace(/[,₹$\s]/g, '');
+    const n = Number(cleaned);
+    return Number.isFinite(n) && n !== 0;
+  });
+  if (!hasNumeric) {
+    return 'no numeric data in row';
+  }
+
+  return null; // Looks like a real holding row
+}
+
 /**
  * Column map interface for detected columns
  */
@@ -280,17 +608,17 @@ function detectColumns(headers: string[]): ColumnMap {
     // Check totalInvested first to avoid matching "invested" when we have "avg price"
     if (map.totalInvested === null && fuzzyMatchColumn(header, TOTAL_INVESTED_VARIATIONS)) {
       map.totalInvested = index;
-      console.log(`[Column Detection] Matched "${header}" to totalInvested`);
+      debugLog(`[Column Detection] Matched "${header}" to totalInvested`);
     }
     // Only match averagePrice if we haven't matched totalInvested
     else if (map.averagePrice === null && fuzzyMatchColumn(header, AVERAGE_PRICE_VARIATIONS)) {
       map.averagePrice = index;
-      console.log(`[Column Detection] Matched "${header}" to averagePrice`);
+      debugLog(`[Column Detection] Matched "${header}" to averagePrice`);
     }
     
     if (map.sectorType === null && fuzzyMatchColumn(header, SECTOR_TYPE_VARIATIONS)) {
       map.sectorType = index;
-      console.log(`[Column Detection] Matched "${header}" to sectorType`);
+      debugLog(`[Column Detection] Matched "${header}" to sectorType`);
     }
     
     if (map.isin === null && fuzzyMatchColumn(header, ISIN_VARIATIONS)) {
@@ -415,7 +743,7 @@ function detectAssetTypeFromRow(
     
     // If MF indicators present, sector column describes MF category, not asset type
     if (hasMFIndicators) {
-      console.log(`[Detection] Row "${name}" has MF indicators - ignoring Sector="${sectorValue}"`);
+      debugLog(`[Detection] Row "${name}" has MF indicators - ignoring Sector="${sectorValue}"`);
       // Don't set sectorSignal - let other signals handle it
     }
     // If NO MF indicators, sector column might describe asset type
@@ -424,18 +752,18 @@ function detectAssetTypeFromRow(
       if (sectorValue === 'etf') {
         signals.sectorSignal = 'etf';
         confidence = Math.max(confidence, 95);
-        console.log(`[Detection] Sector="ETF" for ${name}`);
+        debugLog(`[Detection] Sector="ETF" for ${name}`);
       }
       else if (sectorValue === 'mutual fund' || sectorValue === 'mf' || 
                sectorValue === 'mutualfund' || sectorValue === 'mutual') {
         signals.sectorSignal = 'mutual_fund';
         confidence = Math.max(confidence, 95);
-        console.log(`[Detection] Sector="Mutual Fund" for ${name}`);
+        debugLog(`[Detection] Sector="Mutual Fund" for ${name}`);
       }
       else if (sectorValue === 'stock' || sectorValue === 'stocks') {
         signals.sectorSignal = 'equity';
         confidence = Math.max(confidence, 90);
-        console.log(`[Detection] Sector="Stock" for ${name}`);
+        debugLog(`[Detection] Sector="Stock" for ${name}`);
       }
       // Only match "equity" if it's combined with "stock"
       else if (sectorValue.includes('equity') && sectorValue.includes('stock')) {
@@ -660,32 +988,291 @@ function isBlacklisted(header: string): { blacklisted: boolean; reason?: string 
 /**
  * Parse uploaded file
  */
-async function parseFile(buffer: Buffer, fileName: string): Promise<{ rows: RawUploadRow[]; headers: string[] }> {
+/**
+ * Parse uploaded file with SMART HEADER ROW DETECTION.
+ *
+ * Problem: Many real-world files (CAS statements, broker exports, fund-house
+ * reports) begin with several rows of metadata — account name, PAN, address,
+ * report date, etc. — before the actual column headers.  The default XLSX
+ * `sheet_to_json` call assumes row 1 is always the header, producing
+ * `__EMPTY`, `__EMPTY_1`… placeholder keys for those empty metadata cells,
+ * which then fails column detection.
+ *
+ * Solution:
+ *  1. Read ALL rows as plain arrays (header: 1 — no header assumption).
+ *  2. Score each of the first MAX_HEADER_SCAN_ROWS rows against all known
+ *     column-name keywords. The row with the highest score is the header.
+ *  3. Use everything after it as data rows.
+ *  4. If no row scores ≥ HEADER_SCORE_THRESHOLD, fall back to row 0 so
+ *     downstream validation produces the "unrecognised format" error path.
+ *
+ * Returns `metadataRowsSkipped` so the caller can surface a friendly info
+ * notice: "Skipped N rows of account details automatically."
+ */
+/** Custom error thrown when the only sections we can find are transactional (no current holdings). */
+class CapitalGainsReportError extends Error {
+  constructor(public detectedHeaders: string[]) {
+    super('Transactional report detected — no current-holdings section found');
+  }
+}
+
+interface SheetSection {
+  headerRowIndex: number;
+  score: number;
+  kind: SectionKind;
+  /** Inclusive start, exclusive end — data rows belong to [start, end). */
+  dataStart: number;
+  dataEnd: number;
+  rawHeaderRow: unknown[];
+}
+
+/**
+ * Walk every row in the sheet and return all section headers.
+ *
+ * Because `scoreRowAsHeader` is categorical (data rows are shape-rejected and
+ * return 0), we trust it directly. Any row scoring ≥ HEADER_SCORE_THRESHOLD is
+ * a section start; its data range runs until the next section header or EOF.
+ *
+ * This works for every shape of file:
+ *   • Clean CSV with row 0 as the header → 1 section, all rows are data.
+ *   • CAS / broker statement with metadata block → 1 section starting wherever
+ *     the column header lives (could be row 5, row 24, anywhere).
+ *   • Multi-section P&L file (Realised + Unrealised) → 2 sections, each
+ *     scoped to its own data range.
+ *   • Order-history / capital-gains files → 1 section, classified as
+ *     transactional and rejected upstream.
+ */
+function findSectionsInSheet(allRows: unknown[][]): SheetSection[] {
+  const sections: SheetSection[] = [];
+
+  for (let i = 0; i < allRows.length; i++) {
+    const score = scoreRowAsHeader(allRows[i]);
+    if (score < HEADER_SCORE_THRESHOLD) continue;
+
+    let dataEnd = i + 1;
+    while (dataEnd < allRows.length) {
+      if (scoreRowAsHeader(allRows[dataEnd]) >= HEADER_SCORE_THRESHOLD) break;
+      dataEnd++;
+    }
+
+    sections.push({
+      headerRowIndex: i,
+      score,
+      kind: classifySection(allRows[i]),
+      dataStart: i + 1,
+      dataEnd,
+      rawHeaderRow: allRows[i],
+    });
+
+    i = dataEnd - 1;
+  }
+
+  return sections;
+}
+
+/**
+ * Try to extract holdings from a single sheet.
+ *
+ *  - Finds every section header in the sheet.
+ *  - Skips transactional sections (already-sold records).
+ *  - Picks the best holdings/unknown section (most data rows, then highest header score).
+ *  - Throws CapitalGainsReportError if the sheet has ONLY transactional sections.
+ *  - Returns null if the sheet has no recognisable header at all.
+ */
+function tryParseSheet(
+  sheetName: string,
+  allRows: unknown[][],
+  headerKeywordsLower: string[]
+): {
+  rows: RawUploadRow[];
+  headers: string[];
+  metadataRowsSkipped: number;
+  trailerRowsSkipped: number;
+  sectionInfo: { totalSections: number; transactionalSkipped: number };
+} | null {
+  if (allRows.length === 0) return null;
+
+  const sections = findSectionsInSheet(allRows);
+  if (sections.length === 0) {
+    debugLog(`[Upload] Sheet "${sheetName}": no recognisable header in any of ${allRows.length} rows`);
+    return null;
+  }
+
+  // Separate transactional sections from candidate (holdings + unknown) sections
+  const transactionalSections = sections.filter(s => s.kind === 'transactional');
+  const candidateSections = sections.filter(s => s.kind !== 'transactional');
+
+  debugLog(
+    `[Upload] Sheet "${sheetName}": found ${sections.length} section${sections.length > 1 ? 's' : ''} ` +
+    `(${candidateSections.length} holdings/unknown, ${transactionalSections.length} transactional)`
+  );
+
+  if (candidateSections.length === 0) {
+    // Every section is transactional — this is a pure capital-gains/sold report.
+    const firstHeaders = transactionalSections[0].rawHeaderRow
+      .map(c => String(c ?? '').trim())
+      .filter(h => h !== '');
+    throw new CapitalGainsReportError(firstHeaders);
+  }
+
+  // Pre-compute trailing row count for each candidate (used to pick the best one)
+  const candidatesWithDataCount = candidateSections.map(section => {
+    let dataRowCount = 0;
+    for (let i = section.dataStart; i < section.dataEnd; i++) {
+      const row = allRows[i];
+      if (row.some(cell => String(cell ?? '').trim() !== '')) dataRowCount++;
+    }
+    return { section, dataRowCount };
+  });
+
+  // Sort: prefer holdings over unknown; then more data rows; then higher score.
+  candidatesWithDataCount.sort((a, b) => {
+    const kindRank = (k: SectionKind) => (k === 'holdings' ? 0 : 1);
+    const kindDiff = kindRank(a.section.kind) - kindRank(b.section.kind);
+    if (kindDiff !== 0) return kindDiff;
+    if (b.dataRowCount !== a.dataRowCount) return b.dataRowCount - a.dataRowCount;
+    return b.section.score - a.section.score;
+  });
+
+  const chosen = candidatesWithDataCount[0].section;
+  debugLog(
+    `[Upload] Sheet "${sheetName}": chose ${chosen.kind} section at row ${chosen.headerRowIndex + 1} ` +
+    `(score: ${chosen.score}, data rows: ${candidatesWithDataCount[0].dataRowCount})`
+  );
+
+  // ── Build headers from chosen section's header row ────────────────────────
+  const headers = chosen.rawHeaderRow.map((cell, idx) => {
+    const str = String(cell ?? '').trim();
+    return str !== '' ? str : (idx === 0 ? '__EMPTY' : `__EMPTY_${idx}`);
+  });
+
+  // ── Take only the data rows belonging to this section ─────────────────────
+  const dataRows = allRows.slice(chosen.dataStart, chosen.dataEnd);
+  const nonEmptyDataRows = dataRows.filter(row =>
+    row.some(cell => String(cell ?? '').trim() !== '')
+  );
+  if (nonEmptyDataRows.length === 0) return null;
+
+  // ── Filter junk: totals, disclaimers, repeated headers, sparse rows ───────
+  let trailerRowsSkipped = 0;
+  const cleanedDataRows: unknown[][] = [];
+  for (const row of nonEmptyDataRows) {
+    const reason = detectJunkRow(row, headers.length, headerKeywordsLower);
+    if (reason) {
+      trailerRowsSkipped++;
+      if (trailerRowsSkipped <= 5) {
+        const preview = row.slice(0, 4).map(c => String(c ?? '').trim()).join(' | ');
+        debugLog(`[Upload] Sheet "${sheetName}" skipping junk row (${reason}): "${preview}…"`);
+      }
+      continue;
+    }
+    cleanedDataRows.push(row);
+  }
+
+  if (cleanedDataRows.length === 0) return null;
+
+  const rows: RawUploadRow[] = cleanedDataRows.map(rowArr => {
+    const obj: RawUploadRow = {};
+    headers.forEach((header, idx) => {
+      obj[header] = String(rowArr[idx] ?? '');
+    });
+    return obj;
+  });
+
+  return {
+    rows,
+    headers,
+    metadataRowsSkipped: chosen.headerRowIndex,
+    trailerRowsSkipped,
+    sectionInfo: {
+      totalSections: sections.length,
+      transactionalSkipped: transactionalSections.length,
+    },
+  };
+}
+
+async function parseFile(
+  buffer: Buffer,
+  fileName: string
+): Promise<{
+  rows: RawUploadRow[];
+  headers: string[];
+  metadataRowsSkipped: number;
+  trailerRowsSkipped: number;
+  sheetUsed: string;
+  sectionInfo: { totalSections: number; transactionalSkipped: number };
+}> {
   const XLSX = await import('xlsx');
-  
+
   const workbook = XLSX.read(buffer, {
     type: 'buffer',
     raw: false,
     cellDates: true,
   });
-  
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) {
-    throw new Error('No data found in file');
+
+  const sheetNames = workbook.SheetNames;
+  if (sheetNames.length === 0) throw new Error('No data found in file');
+
+  const headerKeywordsLower = ALL_HEADER_KEYWORDS.map(k => normalizeColumnName(k));
+
+  // Try each sheet in order. The first sheet that yields a parseable header + data wins.
+  // Capital-gains errors propagate immediately — they're definitive (not "try next sheet").
+  let firstFailureSheet: string | null = null;
+  for (const sheetName of sheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const allRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+      header: 1,
+      defval: '',
+      raw: false,
+    });
+
+    const result = tryParseSheet(sheetName, allRows, headerKeywordsLower);
+    if (result) {
+      if (sheetNames.length > 1 && sheetName !== sheetNames[0]) {
+        debugLog(`[Upload] Used sheet "${sheetName}" (sheet ${sheetNames.indexOf(sheetName) + 1} of ${sheetNames.length})`);
+      }
+      return { ...result, sheetUsed: sheetName };
+    }
+    if (!firstFailureSheet) firstFailureSheet = sheetName;
   }
-  
-  const sheet = workbook.Sheets[sheetName];
-  const jsonData = XLSX.utils.sheet_to_json<RawUploadRow>(sheet, {
+
+  // No sheet yielded a usable header — fall back to first sheet so downstream
+  // `validateAssetTypes` can return the proper "empty_headers"/"ambiguous_types" error.
+  debugWarn(`[Upload] No usable header in any sheet of ${sheetNames.length} sheets — falling back to sheet 0`);
+  const fallbackSheet = workbook.Sheets[sheetNames[0]];
+  const allRows = XLSX.utils.sheet_to_json<unknown[]>(fallbackSheet, {
+    header: 1,
     defval: '',
     raw: false,
   });
-  
-  if (jsonData.length === 0) {
-    throw new Error('No data rows found in file');
-  }
-  
-  const headers = Object.keys(jsonData[0]);
-  return { rows: jsonData, headers };
+
+  if (allRows.length === 0) throw new Error('No data rows found in file');
+
+  const rawHeaderRow = allRows[0] as unknown[];
+  const headers = rawHeaderRow.map((cell, idx) => {
+    const str = String(cell ?? '').trim();
+    return str !== '' ? str : (idx === 0 ? '__EMPTY' : `__EMPTY_${idx}`);
+  });
+
+  const dataRows = (allRows.slice(1) as unknown[][]).filter(r =>
+    r.some(c => String(c ?? '').trim() !== '')
+  );
+  const rows: RawUploadRow[] = dataRows.map(rowArr => {
+    const obj: RawUploadRow = {};
+    headers.forEach((header, idx) => {
+      obj[header] = String(rowArr[idx] ?? '');
+    });
+    return obj;
+  });
+
+  return {
+    rows,
+    headers,
+    metadataRowsSkipped: 0,
+    trailerRowsSkipped: 0,
+    sheetUsed: sheetNames[0],
+    sectionInfo: { totalSections: 0, transactionalSkipped: 0 },
+  };
 }
 
 /**
@@ -718,7 +1305,7 @@ function transformRows(rows: RawUploadRow[], headers: string[]): {
   const holdings: ParsedHolding[] = [];
   const warnings: string[] = [];
   
-  console.log(`[Upload] Parsed ${rows.length} rows with headers:`, headers);
+  debugLog(`[Upload] Parsed ${rows.length} rows with headers:`, headers);
   
   // STEP 1: Detect columns using fuzzy matching
   const columnMap = detectColumns(headers);
@@ -736,7 +1323,7 @@ function transformRows(rows: RawUploadRow[], headers: string[]): {
     warnings.push(`Missing required columns: ${missing.join(', ')}. Your headers: ${headers.join(', ')}`);
   }
   
-  console.log(`[Upload] Detected columns:`, {
+  debugLog(`[Upload] Detected columns:`, {
     name: columnMap.name !== null ? headers[columnMap.name] : 'Not found',
     quantity: columnMap.quantity !== null ? headers[columnMap.quantity] : 'Not found',
     totalInvested: columnMap.totalInvested !== null ? headers[columnMap.totalInvested] : 'Not found',
@@ -757,7 +1344,7 @@ function transformRows(rows: RawUploadRow[], headers: string[]): {
     const detection = detectAssetTypeFromRow(row, columnMap, i + 2);
     detections.push(detection);
     
-    console.log(`[Upload] Row ${i + 1}: "${detection.name}" → ${detection.assetType} (${detection.confidence}% confidence)`);
+    debugLog(`[Upload] Row ${i + 1}: "${detection.name}" → ${detection.assetType} (${detection.confidence}% confidence)`);
   }
   
   // STEP 3: Validate upload
@@ -785,11 +1372,11 @@ function transformRows(rows: RawUploadRow[], headers: string[]): {
   
   if (validation.warning) {
     warnings.push(validation.warning);
-    console.warn(`[Upload] Warning: ${validation.warning}`);
+    debugWarn(`[Upload] Warning: ${validation.warning}`);
   }
   
-  console.log(`[Upload] Asset type distribution:`, validation.assetTypeCounts);
-  console.log(`[Upload] Confidence: High=${detections.filter(d => d.confidence >= 70).length}, Medium=${detections.filter(d => d.confidence >= 50 && d.confidence < 70).length}, Low=${detections.filter(d => d.confidence < 50).length}`);
+  debugLog(`[Upload] Asset type distribution:`, validation.assetTypeCounts);
+  debugLog(`[Upload] Confidence: High=${detections.filter(d => d.confidence >= 70).length}, Medium=${detections.filter(d => d.confidence >= 50 && d.confidence < 70).length}, Low=${detections.filter(d => d.confidence < 50).length}`);
   
   // Identify ignored columns (calculated values we don't use)
   const ignoredColumns: { header: string; reason: string }[] = [];
@@ -927,6 +1514,7 @@ export async function POST(request: NextRequest) {
         { 
           success: false, 
           error: 'File too large',
+          errorCode: 'size_error',
           details: 'Please upload a file smaller than 5MB'
         },
         { status: 400 }
@@ -942,6 +1530,7 @@ export async function POST(request: NextRequest) {
         { 
           success: false, 
           error: 'Unsupported file type',
+          errorCode: 'type_error',
           details: 'Please upload a CSV or Excel file (.csv, .xls, .xlsx)'
         },
         { status: 400 }
@@ -953,18 +1542,43 @@ export async function POST(request: NextRequest) {
     
     let rows: RawUploadRow[];
     let headers: string[];
-    
+    let metadataRowsSkipped = 0;
+    let trailerRowsSkipped = 0;
+    let sheetUsed = '';
+    let sectionInfo = { totalSections: 0, transactionalSkipped: 0 };
+
     try {
       const parsed = await parseFile(buffer, file.name);
       rows = parsed.rows;
       headers = parsed.headers;
+      metadataRowsSkipped = parsed.metadataRowsSkipped;
+      trailerRowsSkipped = parsed.trailerRowsSkipped;
+      sheetUsed = parsed.sheetUsed;
+      sectionInfo = parsed.sectionInfo;
     } catch (parseError) {
+      // Specific error: every section in this file is a sold/transaction record
+      if (parseError instanceof CapitalGainsReportError) {
+        return NextResponse.json<UploadErrorResponse>(
+          {
+            success: false,
+            error: 'This is a transaction report, not a holdings file',
+            errorCode: 'capital_gains_report',
+            detectedHeaders: parseError.detectedHeaders,
+            details:
+              'This file lists individual transactions (orders, buys/sells, or capital gains) ' +
+              'rather than your current positions. To track your portfolio, please upload a ' +
+              'holdings statement instead.',
+          },
+          { status: 400 }
+        );
+      }
       console.error('File parsing error:', parseError);
       return NextResponse.json<UploadErrorResponse>(
-        { 
-          success: false, 
+        {
+          success: false,
           error: 'Could not read file',
-          details: 'Please ensure your file is a valid CSV or Excel file'
+          errorCode: 'file_error',
+          details: 'Please ensure your file is a valid CSV or Excel file (.csv, .xls, .xlsx)',
         },
         { status: 400 }
       );
@@ -972,14 +1586,70 @@ export async function POST(request: NextRequest) {
     
     // Transform to normalized holdings
     const { holdings, warnings, columnMappings, ignoredColumns, validation } = transformRows(rows, headers);
-    
+
+    // ── Sanity check: if every row has 0 quantity AND 0 price, the file is the wrong type ──
+    // (e.g. user uploaded a tax statement or summary report instead of holdings)
+    if (holdings.length > 0) {
+      const allZero = holdings.every(h =>
+        (Number(h.quantity) || 0) === 0 && (Number(h.average_price) || 0) === 0
+      );
+      if (allZero) {
+        return NextResponse.json<UploadErrorResponse>(
+          {
+            success: false,
+            error: 'No quantity or price found in any row',
+            errorCode: 'all_zero_values',
+            detectedHeaders: headers,
+            details:
+              'We read your file but every row has zero quantity and zero price. ' +
+              'This is usually a summary or tax report rather than a holdings statement. ' +
+              'Please upload your current holdings file instead.',
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Surface friendly notices about what we auto-cleaned
+    if (sheetUsed && sheetUsed !== 'Sheet1') {
+      warnings.unshift(`Imported from sheet "${sheetUsed}".`);
+    }
+    if (trailerRowsSkipped > 0) {
+      warnings.unshift(
+        `Skipped ${trailerRowsSkipped} non-holding row${trailerRowsSkipped > 1 ? 's' : ''} ` +
+        `(totals, disclaimers, footers).`
+      );
+    }
+    if (metadataRowsSkipped > 0) {
+      warnings.unshift(
+        `Skipped ${metadataRowsSkipped} header row${metadataRowsSkipped > 1 ? 's' : ''} ` +
+        `(account details, report title) and read the column headers at row ${metadataRowsSkipped + 1}.`
+      );
+    }
+    if (sectionInfo.transactionalSkipped > 0) {
+      warnings.unshift(
+        `Found ${sectionInfo.transactionalSkipped} section${sectionInfo.transactionalSkipped > 1 ? 's' : ''} ` +
+        `of already-sold trades — those were skipped. Imported your current holdings only.`
+      );
+    }
+
     // Check validation result - reject if 80%+ ambiguous
     if (validation && !validation.valid) {
+      // Detect if the problem is empty/placeholder headers (XLSX __EMPTY_ pattern)
+      const emptyHeaderCount = headers.filter(h => h.startsWith('__EMPTY') || h.trim() === '').length;
+      const hasEmptyHeaders = headers.length > 0 && (emptyHeaderCount / headers.length) > 0.5;
+
       return NextResponse.json<UploadErrorResponse>(
         {
           success: false,
-          error: validation.error || 'Cannot confidently detect asset types',
-          details: validation.warning
+          error: hasEmptyHeaders
+            ? 'File headers not found in first row'
+            : 'Could not identify asset types in this file',
+          errorCode: hasEmptyHeaders ? 'empty_headers' : 'ambiguous_types',
+          detectedHeaders: headers,
+          details: hasEmptyHeaders
+            ? 'Your file\'s first row contains account details instead of column names. Open the file in Excel or Google Sheets, delete the top rows until row 1 shows column headers like "Scheme Name", "Quantity", "Price", then save as CSV and re-upload.'
+            : 'The column headers in your file don\'t match any recognised format. Check the expected format below and ensure your file\'s first row contains column names.',
         },
         { status: 400 }
       );
@@ -1036,12 +1706,12 @@ export async function POST(request: NextRequest) {
     // Add invalid holdings back (not grouped)
     const invalidHoldings = holdings.filter(h => !h.isValid);
     
-    console.log('\n=== Upload Summary ===');
-    console.log(`Total rows: ${holdings.length}`);
-    console.log(`Valid rows: ${validHoldings.length}`);
-    console.log(`After grouping: ${groupedHoldings.length} unique holdings`);
-    console.log(`Total invested value: ${formatIndianCurrency(metrics.totalInvestedValue)}`);
-    console.log(`Asset allocation: Equity ${metrics.equityPct.toFixed(1)}%, Debt ${metrics.debtPct.toFixed(1)}%, Gold ${metrics.goldPct.toFixed(1)}%`);
+    debugLog('\n=== Upload Summary ===');
+    debugLog(`Total rows: ${holdings.length}`);
+    debugLog(`Valid rows: ${validHoldings.length}`);
+    debugLog(`After grouping: ${groupedHoldings.length} unique holdings`);
+    debugLog(`Total invested value: ${formatIndianCurrency(metrics.totalInvestedValue)}`);
+    debugLog(`Asset allocation: Equity ${metrics.equityPct.toFixed(1)}%, Debt ${metrics.debtPct.toFixed(1)}%, Gold ${metrics.goldPct.toFixed(1)}%`);
     
     const response: UploadPreviewResponse = {
       success: true,

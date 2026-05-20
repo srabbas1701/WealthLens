@@ -561,7 +561,7 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
             <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-6">
               Select the type of gold holding you want to add
             </p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {GOLD_TYPES.map((type) => (
                 <button
                   key={type.id}
@@ -673,7 +673,7 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
                 <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                   Quantity &amp; Total Grams
                 </label>
-                <div className="flex gap-4">
+                <div className="flex flex-col sm:flex-row gap-4">
                   <input
                     type="number"
                     value={formData.physicalQuantity ?? ''}
@@ -859,7 +859,7 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
                 <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                   Quantity <span className="text-red-500">*</span>
                 </label>
-                <div className="flex gap-4">
+                <div className="flex flex-col sm:flex-row gap-4">
                   <input
                     type="number"
                     value={formData.quantity || ''}
@@ -1097,7 +1097,7 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
             <div className="bg-[#F6F8FB] dark:bg-[#334155] rounded-lg p-6 space-y-4">
               <h3 className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-4">Holding Summary</h3>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Holding Type</p>
                   <p className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
@@ -1232,15 +1232,15 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       <div 
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         onClick={step === 'select' || step === 'error' || step === 'success' ? handleClose : undefined}
       />
 
-      <div className="relative w-full max-w-2xl max-h-[90vh] mx-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg overflow-hidden flex flex-col">
+      <div className="relative modal-shell-standard w-full max-w-3xl h-[calc(100dvh-1rem)] sm:h-auto max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] mx-0 sm:mx-4 overflow-hidden flex flex-col min-h-0">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
+        <div className="modal-header-standard">
           <div>
             <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
               {isEditing ? 'Edit Gold Holding' : 'Add Gold Holding'}
@@ -1269,18 +1269,18 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 md:p-6">
           {renderStepContent()}
         </div>
 
         {/* Footer / Actions */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#334155]">
+        <div className="shrink-0 flex items-center gap-3 px-4 sm:px-5 md:px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#334155]">
           {step === 'select' && (
             <button
               onClick={handleClose}
-              className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors"
+              className="flex-1 btn-secondary-standard justify-center"
             >
-              Cancel
+              Back
             </button>
           )}
 
@@ -1289,26 +1289,19 @@ export default function GoldAddModal({ isOpen, onClose, userId, onSuccess, exist
               <button
                 onClick={handleBack}
                 disabled={saving}
-                className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] transition-colors disabled:opacity-50 flex items-center gap-2"
+                className="flex-1 btn-secondary-standard justify-center disabled:opacity-50"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
               </button>
-              <button
-                onClick={step === 'form' ? handleNext : handleSave}
-                disabled={saving}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 font-medium"
-              >
+              <button onClick={step === 'form' ? handleNext : handleSave} disabled={saving} className="flex-1 btn-primary-standard justify-center px-6 py-2">
                 {step === 'form' ? 'Next' : saving ? 'Saving...' : isEditing ? 'Update' : 'Save'}
               </button>
             </>
           )}
 
           {(step === 'success' || step === 'error') && (
-            <button
-              onClick={handleClose}
-              className="ml-auto px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium"
-            >
+            <button onClick={handleClose} className="flex-1 btn-primary-standard justify-center px-6 py-2">
               Close
             </button>
           )}

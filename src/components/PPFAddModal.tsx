@@ -412,7 +412,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
     switch (step) {
       case 'basic':
         return (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="p-4 bg-[#EFF6FF] dark:bg-[#1E3A8A] border border-[#2563EB]/20 dark:border-[#3B82F6]/20 rounded-lg flex items-start gap-3">
               <InfoIcon className="w-5 h-5 text-[#2563EB] dark:text-[#3B82F6] flex-shrink-0 mt-0.5" />
               <div>
@@ -425,7 +425,8 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               </div>
             </div>
 
-            <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
               <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 PPF Account Number <span className="text-[#DC2626]">*</span>
               </label>
@@ -476,8 +477,9 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                 Letters, spaces, hyphens, and apostrophes only (no numbers allowed)
               </p>
             </div>
+            </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                   Opening Date <span className="text-[#DC2626]">*</span>
@@ -510,7 +512,8 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               </div>
             </div>
 
-            <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
               <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Bank / Post Office <span className="text-[#DC2626]">*</span>
               </label>
@@ -548,12 +551,13 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                 className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#334155] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F8FAFC] placeholder:text-[#9CA3AF] dark:placeholder:text-[#64748B] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
               />
             </div>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-3">
                 Account Status
               </label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[
                   { value: 'active', label: 'Active', desc: 'Currently active' },
                   { value: 'matured', label: 'Matured', desc: 'Completed 15 years' },
@@ -586,14 +590,15 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
 
       case 'financial':
         return (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="p-4 bg-[#F0FDF4] dark:bg-[#14532D] border border-[#16A34A]/20 dark:border-[#22C55E]/20 rounded-lg">
               <p className="text-sm text-[#15803D] dark:text-[#86EFAC]">
                 Enter your current PPF balance and contribution details. Interest earned will be auto-calculated.
               </p>
             </div>
 
-            <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
               <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Current Balance <span className="text-[#DC2626]">*</span>
               </label>
@@ -634,8 +639,10 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                 Total you've contributed (₹) - Cannot exceed current balance (Min: ₹500/year, Max: ₹1.5L/year)
               </p>
             </div>
+            </div>
 
-            <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
               <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                 Interest Earned
               </label>
@@ -673,6 +680,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
                 Government-set PPF rate (currently 7.1% for FY 2024-25) - Must be between 0.1% and 20%
               </p>
+            </div>
             </div>
 
             {averageInterestRate > 0 && (
@@ -717,7 +725,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
 
                 {hasExtension && (
                   <>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                           Extension Start Date
@@ -939,15 +947,15 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div 
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         onClick={step === 'basic' || step === 'error' ? handleClose : undefined}
       />
 
-      <div className="relative w-full max-w-2xl max-h-[90vh] mx-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg overflow-hidden flex flex-col">
+      <div className="relative modal-shell-standard w-full max-w-4xl max-h-none mx-4 overflow-visible flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
+        <div className="modal-header-standard">
           <div>
             <h2 className="text-lg font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
               {isEditing ? 'Edit PPF Account' : 'Add PPF Account'}
@@ -966,25 +974,25 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="p-4 sm:p-5 md:p-6">
           {renderStepContent()}
         </div>
 
         {/* Footer / Actions */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#334155]">
+        <div className="shrink-0 flex items-center gap-3 px-4 sm:px-5 md:px-6 py-3 border-t border-[#E5E7EB] dark:border-[#334155] bg-[#F6F8FB] dark:bg-[#334155]">
           {step === 'basic' && (
             <>
               <button
                 onClick={handleClose}
-                className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#1E293B] transition-colors"
+                className="flex-1 btn-secondary-standard justify-center"
               >
-                Cancel
+                Back
               </button>
               <button
                 onClick={() => {
                   if (validateBasic()) setStep('financial');
                 }}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+                className="flex-1 btn-primary-standard justify-center px-6 py-2"
               >
                 Next: Financial Details
               </button>
@@ -995,7 +1003,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
             <>
               <button
                 onClick={() => setStep('basic')}
-                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#1E293B] transition-colors"
+                className="flex-1 btn-secondary-standard justify-center"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
@@ -1005,7 +1013,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
                   if (validateFinancial()) setStep('review');
                 }}
                 disabled={!!realtimeError}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 btn-primary-standard justify-center px-6 py-2"
               >
                 Review & Save
               </button>
@@ -1016,7 +1024,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
             <>
               <button
                 onClick={() => setStep('financial')}
-                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#1E293B] transition-colors"
+                className="flex-1 btn-secondary-standard justify-center"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
@@ -1024,7 +1032,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50"
+                className="flex-1 btn-primary-standard justify-center px-6 py-2"
               >
                 {isEditing ? 'Update PPF Account' : 'Save PPF Account'}
               </button>
@@ -1035,7 +1043,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
             <button
               onClick={handleClose}
               disabled={step === 'saving'}
-              className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#1E293B] transition-colors disabled:opacity-50"
+              className="flex-1 btn-secondary-standard justify-center disabled:opacity-50"
             >
               Close
             </button>
@@ -1044,7 +1052,7 @@ export default function PPFAddModal({ isOpen, onClose, userId, onSuccess, existi
           {step === 'error' && (
             <button
               onClick={() => setStep('review')}
-              className="px-4 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors"
+              className="flex-1 btn-primary-standard justify-center px-4 py-2"
             >
               Try Again
             </button>

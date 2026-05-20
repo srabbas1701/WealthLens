@@ -12,6 +12,8 @@ import { calculatePortfolioXIRR } from '@/lib/xirr-calculator';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue, advanceQueue, clearQueue, QUEUE_ASSET_ROUTES } from '@/lib/onboarding-queue';
 import {
   ArrowLeftIcon,
   FileIcon,
@@ -58,6 +60,70 @@ interface MFHolding {
   purchaseDate: string | null; // Purchase date (YYYY-MM-DD) for XIRR calculation
 }
 
+function buildMFHoldingsFromPortfolioData(portfolioData: any): {
+  mfHoldings: MFHolding[];
+  total: number;
+  invested: number;
+  portfolioPct: number;
+} {
+  const mfHoldings = (portfolioData?.holdings || [])
+    .filter((h: any) => h.assetType === 'Mutual Funds')
+    .map((h: any) => {
+      let metadata: any = {};
+      try {
+        if (h.notes) {
+          metadata = typeof h.notes === 'string' ? JSON.parse(h.notes) : h.notes;
+        }
+      } catch (e) {
+        console.warn('[MF Page] Failed to parse notes:', e);
+      }
+
+      const amc = metadata.amc || 'Other';
+      const category = metadata.category || 'Other';
+      const plan = metadata.plan || 'Direct - Growth';
+      const folio = metadata.folio || '';
+      const purchaseDate = h.purchaseDate || metadata.purchase_date || null;
+
+      const units = h.quantity || 0;
+      const avgBuyNav = h.averagePrice || 0;
+      const investedValue = h.investedValue || 0;
+      const currentValue = h.currentValue || h.investedValue;
+      const latestNav = units > 0 ? currentValue / units : 0;
+
+      const xirr = purchaseDate
+        ? calculatePortfolioXIRR(investedValue, currentValue, purchaseDate)
+        : null;
+
+      return {
+        id: h.id,
+        name: h.name,
+        amc,
+        category,
+        plan,
+        folio,
+        units,
+        avgBuyNav,
+        latestNav,
+        currentValue,
+        investedValue,
+        xirr,
+        gainLoss: currentValue - investedValue,
+        gainLossPercent: investedValue > 0
+          ? ((currentValue - investedValue) / investedValue) * 100
+          : 0,
+        allocationPct: h.allocationPct,
+        navDate: h.navDate || null,
+        purchaseDate: purchaseDate || null,
+      } as MFHolding;
+    });
+
+  const total = mfHoldings.reduce((sum, h) => sum + h.currentValue, 0);
+  const invested = mfHoldings.reduce((sum, h) => sum + h.investedValue, 0);
+  const portfolioPct = (total / portfolioData.metrics.netWorth) * 100;
+
+  return { mfHoldings, total, invested, portfolioPct };
+}
+
 export default function MutualFundsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -67,6 +133,8 @@ export default function MutualFundsPage() {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [showIntelligenceModal, setShowIntelligenceModal] = useState(false);
   const fetchingRef = useRef(false); // Prevent duplicate simultaneous fetches
+  // Onboarding queue: show "Done, next →" banner CTA after first successful add
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
 
   const { data: marketDataStatus, loading: marketDataStatusLoading } = useMarketDataStatus();
 
@@ -162,67 +230,8 @@ export default function MutualFundsPage() {
           // Cache the portfolio data for other pages
           setCachedPortfolioData(userId, portfolioData);
 
-          const mfHoldings = portfolioData.holdings
-            .filter((h: any) => h.assetType === 'Mutual Funds')
-            .map((h: any, idx: number) => {
-              // Parse metadata from notes
-              let metadata: any = {};
-              try {
-                if (h.notes) {
-                  metadata = typeof h.notes === 'string' ? JSON.parse(h.notes) : h.notes;
-                }
-              } catch (e) {
-                console.warn('[MF Page] Failed to parse notes:', e);
-              }
-              
-              // Extract metadata fields (use metadata if available, otherwise fallback to extraction)
-              const amc = metadata.amc || 'Other';
-              const category = metadata.category || 'Other';
-              const plan = metadata.plan || 'Direct - Growth';
-              const folio = metadata.folio || ''; // Use actual folio from metadata, empty string if not set
-              
-              // Get purchase date: prefer dedicated column, fallback to metadata, then null
-              const purchaseDate = h.purchaseDate || metadata.purchase_date || null;
-              
-              // Calculate NAV fields
-              const units = h.quantity || 0;
-              const avgBuyNav = h.averagePrice || 0;
-              const investedValue = h.investedValue || 0;
-              const currentValue = h.currentValue || h.investedValue;
-              const latestNav = units > 0 ? currentValue / units : 0;
-              
-              // Calculate actual XIRR using purchase date
-              // If no purchase date, XIRR cannot be calculated accurately
-              const xirr = purchaseDate 
-                ? calculatePortfolioXIRR(investedValue, currentValue, purchaseDate)
-                : null;
-              
-              return {
-                id: h.id,
-                name: h.name,
-                amc,
-                category,
-                plan,
-                folio,
-                units,
-                avgBuyNav,
-                latestNav,
-                currentValue,
-                investedValue: h.investedValue,
-                xirr,
-                gainLoss: currentValue - h.investedValue,
-                gainLossPercent: h.investedValue > 0 
-                  ? ((currentValue - h.investedValue) / h.investedValue) * 100 
-                  : 0,
-                allocationPct: h.allocationPct,
-                navDate: h.navDate || null, // Extract NAV date from API response
-                purchaseDate: purchaseDate || null, // Store purchase date for edit form
-              };
-            });
-
-          const total = mfHoldings.reduce((sum: number, h: MFHolding) => sum + h.currentValue, 0);
-          const invested = mfHoldings.reduce((sum: number, h: MFHolding) => sum + h.investedValue, 0);
-          const portfolioPct = (total / portfolioData.metrics.netWorth) * 100;
+          const { mfHoldings, total, invested, portfolioPct } =
+            buildMFHoldingsFromPortfolioData(portfolioData);
 
           setHoldings(mfHoldings);
           setTotalValue(total);
@@ -283,60 +292,8 @@ export default function MutualFundsPage() {
         // Process cached data immediately (no loading screen)
         try {
           const portfolioData = cached;
-          const mfHoldings = portfolioData.holdings
-            .filter((h: any) => h.assetType === 'Mutual Funds')
-            .map((h: any) => {
-              let metadata: any = {};
-              try {
-                if (h.notes) {
-                  metadata = typeof h.notes === 'string' ? JSON.parse(h.notes) : h.notes;
-                }
-              } catch (e) {
-                console.warn('[MF Page] Failed to parse notes:', e);
-              }
-
-              const amc = metadata.amc || 'Other';
-              const category = metadata.category || 'Other';
-              const plan = metadata.plan || 'Direct - Growth';
-              const folio = metadata.folio || '';
-              const purchaseDate = h.purchaseDate || metadata.purchase_date || null;
-
-              const units = h.quantity || 0;
-              const avgBuyNav = h.averagePrice || 0;
-              const investedValue = h.investedValue || 0;
-              const currentValue = h.currentValue || h.investedValue;
-              const latestNav = units > 0 ? currentValue / units : 0;
-
-              const xirr = purchaseDate
-                ? calculatePortfolioXIRR(investedValue, currentValue, purchaseDate)
-                : null;
-
-              return {
-                id: h.id,
-                name: h.name,
-                amc,
-                category,
-                plan,
-                folio,
-                units,
-                avgBuyNav,
-                latestNav,
-                currentValue,
-                investedValue: h.investedValue,
-                xirr,
-                gainLoss: currentValue - h.investedValue,
-                gainLossPercent: h.investedValue > 0
-                  ? ((currentValue - h.investedValue) / h.investedValue) * 100
-                  : 0,
-                allocationPct: h.allocationPct,
-                navDate: h.navDate || null,
-                purchaseDate: purchaseDate || null,
-              };
-            });
-
-          const total = mfHoldings.reduce((sum: number, h: MFHolding) => sum + h.currentValue, 0);
-          const invested = mfHoldings.reduce((sum: number, h: MFHolding) => sum + h.investedValue, 0);
-          const portfolioPct = (total / portfolioData.metrics.netWorth) * 100;
+          const { mfHoldings, total, invested, portfolioPct } =
+            buildMFHoldingsFromPortfolioData(portfolioData);
 
           setHoldings(mfHoldings);
           setTotalValue(total);
@@ -568,7 +525,15 @@ export default function MutualFundsPage() {
         message: `${mfData.name} has been added successfully.`,
         duration: 5000,
       });
-      
+
+      // Onboarding queue: mark that user added at least one, reveal "Done, next →" CTA
+      if (user?.id) {
+        const q = readQueue(user.id);
+        if (q && q.current === 'mutual_funds') {
+          setHasAddedOneInQueue(true);
+        }
+      }
+
     } catch (error: any) {
       console.error('Error adding MF:', error);
       showToast({
@@ -1070,12 +1035,15 @@ export default function MutualFundsPage() {
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
         backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
         downloadLabel="Download Mutual Funds"
         onDownload={handleDownload}
       />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+      )}
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Page Title */}
@@ -1085,7 +1053,7 @@ export default function MutualFundsPage() {
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <Link
                 href="/portfolio/mutualfunds/add"
-                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm min-w-[44px] min-h-[44px]"
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm min-w-[44px] min-h-[44px]"
                 title="Add MF"
               >
                 <Plus className="w-5 h-5 shrink-0" />
@@ -1642,6 +1610,10 @@ export default function MutualFundsPage() {
       {showAddMFModal && (
         <AddMFModal
           onClose={() => {
+            if (fromOnboarding) {
+              router.replace('/onboarding/select?step=add-details');
+              return;
+            }
             setShowAddMFModal(false);
             setFormData({ 
               name: '', 
@@ -1744,8 +1716,7 @@ function AddMFModal({
     const fetchAMCs = async () => {
       setLoadingAMCs(true);
       try {
-        // Add cache-busting parameter to ensure fresh data
-        const response = await fetch(`/api/mf/schemes/list?t=${Date.now()}`);
+        const response = await fetch('/api/mf/schemes/list');
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           console.error('Error fetching AMCs - response not ok:', response.status, errorData);
@@ -1754,12 +1725,6 @@ function AddMFModal({
         }
         
         const data = await response.json();
-        console.log('AMCs API response:', data);
-        console.log('AMCs API response type:', Array.isArray(data) ? 'array' : typeof data);
-        console.log('AMCs API response length:', Array.isArray(data) ? data.length : 'N/A');
-        if (Array.isArray(data) && data.length > 0) {
-          console.log('First 5 AMCs:', data.slice(0, 5));
-        }
         
         // Ensure we have an array of strings (AMC names), not scheme names
         if (Array.isArray(data)) {
@@ -1777,11 +1742,6 @@ function AddMFModal({
             }
             return isValid;
           }).map((item: string) => item.trim());
-          
-          console.log(`Loaded ${validAMCs.length} valid AMCs`);
-          if (validAMCs.length > 0) {
-            console.log('Sample valid AMCs:', validAMCs.slice(0, 10));
-          }
           setAmcList(validAMCs);
         } else {
           console.error('AMCs API did not return an array:', typeof data, data);
@@ -1935,28 +1895,28 @@ function AddMFModal({
 
   return (
     <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-card">
-          <h2 className="text-2xl font-bold text-foreground">Add Mutual Fund</h2>
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto md:max-h-none md:overflow-visible">
+        <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155] sticky top-0 bg-white dark:bg-[#1E293B]">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Add Mutual Fund</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-accent rounded-lg transition-colors"
+            className="p-2 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] rounded-lg transition-colors"
             type="button"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
           {/* AMC Field - First */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               AMC (Asset Management Company) <span className="text-destructive">*</span>
             </label>
             <select
               value={formData.amc}
               onChange={(e) => setFormData({ ...formData, amc: e.target.value, category: '', plan: '', name: '', scheme_code: '', isin: '' })}
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
               disabled={loadingAMCs}
             >
@@ -1972,7 +1932,7 @@ function AddMFModal({
               )}
             </select>
             {loadingAMCs && (
-              <p className="text-xs text-muted-foreground mt-1">Loading AMCs...</p>
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">Loading AMCs...</p>
             )}
             {!loadingAMCs && amcList.length === 0 && (
               <p className="text-xs text-destructive mt-1">
@@ -1983,13 +1943,13 @@ function AddMFModal({
 
           {/* Category Field - Second */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Category <span className="text-destructive">*</span>
             </label>
             <select
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value, plan: '', name: '', scheme_code: '', isin: '' })}
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
               disabled={!formData.amc || loadingCategories}
             >
@@ -2001,16 +1961,16 @@ function AddMFModal({
               ))}
             </select>
             {loadingCategories && (
-              <p className="text-xs text-muted-foreground mt-1">Loading categories...</p>
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">Loading categories...</p>
             )}
             {formData.amc && !loadingCategories && categoryList.length === 0 && (
-              <p className="text-xs text-muted-foreground mt-1">No categories found for this AMC</p>
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">No categories found for this AMC</p>
             )}
           </div>
 
           {/* Plan Field - Third */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Plan <span className="text-destructive">*</span>
             </label>
             <select
@@ -2019,7 +1979,7 @@ function AddMFModal({
                 const newPlan = e.target.value;
                 setFormData({ ...formData, plan: newPlan, name: '', scheme_code: '', isin: '' });
               }}
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
               disabled={!formData.amc || !formData.category || loadingPlans}
             >
@@ -2031,22 +1991,22 @@ function AddMFModal({
               ))}
             </select>
             {loadingPlans && (
-              <p className="text-xs text-muted-foreground mt-1">Loading plans...</p>
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">Loading plans...</p>
             )}
             {formData.amc && formData.category && !loadingPlans && planList.length === 0 && (
-              <p className="text-xs text-muted-foreground mt-1">No plans found for this AMC and Category</p>
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">No plans found for this AMC and Category</p>
             )}
           </div>
 
           {/* Scheme Name Field - Fourth (filtered by AMC + Category + Plan) */}
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Scheme Name <span className="text-destructive">*</span>
             </label>
             <select
               value={formData.name}
               onChange={(e) => handleSchemeChange(e.target.value)}
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
               disabled={!formData.amc || !formData.category || !formData.plan || loadingSchemes}
             >
@@ -2058,15 +2018,15 @@ function AddMFModal({
               ))}
             </select>
             {loadingSchemes && (
-              <p className="text-xs text-muted-foreground mt-1">Loading schemes...</p>
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">Loading schemes...</p>
             )}
             {formData.amc && formData.category && formData.plan && !loadingSchemes && schemeList.length === 0 && (
-              <p className="text-xs text-muted-foreground mt-1">No schemes found for this combination</p>
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">No schemes found for this combination</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Folio Number
             </label>
             <input
@@ -2074,12 +2034,12 @@ function AddMFModal({
               value={formData.folio}
               onChange={(e) => setFormData({ ...formData, folio: e.target.value })}
               placeholder="e.g., 12345/67"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Units <span className="text-destructive">*</span>
             </label>
             <input
@@ -2089,13 +2049,13 @@ function AddMFModal({
               placeholder="100.50"
               min="0.0001"
               step="0.0001"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Average Buy NAV (₹) <span className="text-destructive">*</span>
             </label>
             <input
@@ -2105,29 +2065,29 @@ function AddMFModal({
               placeholder="50.25"
               min="0.01"
               step="0.01"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
-              Purchase Date <span className="text-muted-foreground text-xs">(for XIRR calculation)</span>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
+              Purchase Date <span className="text-[#6B7280] dark:text-[#94A3B8] text-xs">(for XIRR calculation)</span>
             </label>
             <input
               type="date"
               value={formData.purchaseDate}
               onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
               max={new Date().toISOString().split('T')[0]} // Cannot be future date
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
             />
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
               Required for accurate XIRR calculation. For SIP, use the first purchase date.
             </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               ISIN (Auto-filled)
             </label>
             <input
@@ -2135,31 +2095,31 @@ function AddMFModal({
               value={formData.isin}
               readOnly
               placeholder="Auto-filled based on scheme and plan"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg text-muted-foreground cursor-not-allowed"
+              className="w-full px-4 py-3 bg-[#F8FAFC] dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg text-[#9CA3AF] dark:text-[#64748B] cursor-not-allowed"
             />
           </div>
 
           {investedValue > 0 && (
-            <div className="bg-accent border border-border rounded-lg p-4">
-              <div className="text-sm text-muted-foreground mb-1">Invested Value</div>
-              <div className="text-2xl font-bold text-foreground">
+            <div className="bg-[#EFF6FF] dark:bg-[#1E3A8A]/30 border border-[#BFDBFE] dark:border-[#1E40AF] rounded-lg p-4 md:col-span-2">
+              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">Invested Value</div>
+              <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                 {formatCurrency(investedValue)}
               </div>
             </div>
           )}
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-2 md:col-span-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+              className="flex-1 btn-secondary-standard"
             >
-              Cancel
+              Back
             </button>
             <button
               type="submit"
               disabled={isLoading || !formData.name || !formData.units || !formData.avgBuyNav || !formData.amc || !formData.category || !formData.plan}
-              className="flex-1 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-6 py-3 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Adding...' : 'Add MF'}
             </button>
@@ -2309,9 +2269,9 @@ function EditMFModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+              className="flex-1 btn-secondary-standard"
             >
-              Cancel
+              Back
             </button>
             <button
               type="submit"

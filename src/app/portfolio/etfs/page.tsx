@@ -11,6 +11,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue } from '@/lib/onboarding-queue';
 import {
   ArrowLeftIcon,
   FileIcon,
@@ -124,6 +126,7 @@ export default function ETFHoldingsPage() {
   const [selectedETF, setSelectedETF] = useState<ETFHolding | null>(null);
   const [etfToDelete, setEtfToDelete] = useState<ETFHolding | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
   
   // Intelligence state (premium)
   const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
@@ -427,7 +430,12 @@ export default function ETFHoldingsPage() {
         message: `${etfData.name} has been added successfully.`,
         duration: 5000,
       });
-      
+
+      if (user?.id) {
+        const q = readQueue(user.id);
+        if (q && q.current === 'etf') setHasAddedOneInQueue(true);
+      }
+
     } catch (error: any) {
       console.error('Error adding ETF:', error);
       showToast({
@@ -796,12 +804,15 @@ export default function ETFHoldingsPage() {
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref={fromOnboarding ? '/onboarding' : '/dashboard'}
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
         backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
         downloadLabel="Download ETFs"
         onDownload={handleDownload}
       />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+      )}
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Page Title */}
@@ -811,7 +822,7 @@ export default function ETFHoldingsPage() {
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <Link
                 href="/portfolio/etfs/add"
-                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm min-w-[44px] min-h-[44px]"
+                className="inline-flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2.5 md:min-w-[140px] bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 font-semibold text-sm min-w-[44px] min-h-[44px]"
                 title="Add ETF"
               >
                 <Plus className="w-5 h-5 shrink-0" />
@@ -1388,6 +1399,10 @@ export default function ETFHoldingsPage() {
       {showAddETFModal && (
         <AddETFModal
           onClose={() => {
+            if (fromOnboarding) {
+              router.replace('/onboarding/select?step=add-details');
+              return;
+            }
             setShowAddETFModal(false);
             setFormData({ 
               name: '', 
@@ -1501,12 +1516,12 @@ function AddETFModal({
 
   return (
     <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-card">
-          <h2 className="text-2xl font-bold text-foreground">Add ETF</h2>
+      <div className="bg-white dark:bg-[#1E293B] border border-[#E5E7EB] dark:border-[#334155] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] dark:border-[#334155] sticky top-0 bg-white dark:bg-[#1E293B]">
+          <h2 className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">Add ETF</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-accent rounded-lg transition-colors"
+            className="p-2 hover:bg-[#F6F8FB] dark:hover:bg-[#334155] rounded-lg transition-colors"
             type="button"
           >
             <X className="w-5 h-5" />
@@ -1515,7 +1530,7 @@ function AddETFModal({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               ETF Name <span className="text-destructive">*</span>
             </label>
             <input
@@ -1523,13 +1538,13 @@ function AddETFModal({
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g., Nippon India ETF Nifty 50"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Symbol
             </label>
             <input
@@ -1537,18 +1552,18 @@ function AddETFModal({
               value={formData.symbol}
               onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
               placeholder="e.g., NIFTYBEES"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Category <span className="text-destructive">*</span>
             </label>
             <select
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
             >
               <option value="Equity">Equity</option>
@@ -1560,7 +1575,7 @@ function AddETFModal({
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Units <span className="text-destructive">*</span>
             </label>
             <input
@@ -1570,13 +1585,13 @@ function AddETFModal({
               placeholder="100.50"
               min="0.01"
               step="0.01"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
+            <label className="block text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-2">
               Average Buy Price (₹) <span className="text-destructive">*</span>
             </label>
             <input
@@ -1586,15 +1601,15 @@ function AddETFModal({
               placeholder="150.25"
               min="0.01"
               step="0.01"
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
+              className="w-full px-4 py-3 bg-white dark:bg-[#0F172A] border border-[#E5E7EB] dark:border-[#334155] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 dark:focus:ring-[#3B82F6]/30 focus:border-[#2563EB] dark:focus:border-[#3B82F6] text-[#0F172A] dark:text-[#F8FAFC]"
               required
             />
           </div>
 
           {investedValue > 0 && (
-            <div className="bg-accent border border-border rounded-lg p-4">
-              <div className="text-sm text-muted-foreground mb-1">Invested Value</div>
-              <div className="text-2xl font-bold text-foreground">
+            <div className="bg-[#EFF6FF] dark:bg-[#1E3A8A]/30 border border-[#BFDBFE] dark:border-[#1E40AF] rounded-lg p-4">
+              <div className="text-sm text-[#6B7280] dark:text-[#94A3B8] mb-1">Invested Value</div>
+              <div className="text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC]">
                 {formatCurrency(investedValue)}
               </div>
             </div>
@@ -1604,14 +1619,14 @@ function AddETFModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
+              className="flex-1 btn-secondary-standard"
             >
-              Cancel
+              Back
             </button>
             <button
               type="submit"
               disabled={isLoading || !formData.name || !formData.units || !formData.averagePrice}
-              className="flex-1 px-6 py-3 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-6 py-3 bg-[#2563EB] dark:bg-[#3B82F6] text-white rounded-lg hover:bg-[#1D4ED8] dark:hover:bg-[#2563EB] transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Adding...' : 'Add ETF'}
             </button>
@@ -1732,7 +1747,7 @@ function EditETFModal({
               onClick={onClose}
               className="flex-1 px-6 py-3 border border-border rounded-lg text-foreground hover:bg-accent transition-colors font-semibold"
             >
-              Cancel
+              Back
             </button>
             <button
               type="submit"

@@ -43,8 +43,8 @@ export default function RootLayout({
                 function applyTheme() {
                   try {
                     const theme = localStorage.getItem('theme');
-                    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                    const isDark = theme === 'dark' || (!theme && prefersDark);
+                    // Default to dark when no saved preference
+                    const isDark = theme === 'dark' || !theme;
                     
                     const html = document.documentElement;
                     if (isDark) {

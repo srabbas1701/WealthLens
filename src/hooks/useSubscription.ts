@@ -9,11 +9,13 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
+import { useCapabilities } from '@/hooks/useCapabilities';
 import type { UserPlan } from '@/types/plans';
 import { FEATURE_ACCESS } from '@/config/feature-access';
 
 export function useSubscription() {
   const { user } = useAuth();
+  const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const [isPremium, setIsPremium] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userPlan, setUserPlan] = useState<UserPlan | null>(null);
@@ -35,16 +37,12 @@ export function useSubscription() {
       try {
         setLoading(true);
         
-        // Fetch plan and entitlements (single source of truth for capabilities)
-        const [planResponse, entitlementsResponse] = await Promise.all([
-          fetch('/api/plans/user'),
-          fetch('/api/entitlements'),
-        ]);
+        // Fetch plan only. Capabilities come from useCapabilities().
+        const planResponse = await fetch('/api/plans/user');
 
         // Handle plan data
-        let planData = null;
         if (planResponse.ok) {
-          planData = await planResponse.json();
+          const planData = await planResponse.json();
           if (planData.plan) {
             setUserPlan({
               user_id: user.id,
@@ -52,19 +50,6 @@ export function useSubscription() {
               plan: planData.plan,
             });
           }
-        }
-
-        // Premium status from entitlements API only (no client-side inference)
-        if (entitlementsResponse.ok) {
-          const entitlements = await entitlementsResponse.json();
-          const hasPremiumCapability = [
-            FEATURE_ACCESS.ANALYTICS_HEALTH.capability,
-            FEATURE_ACCESS.DOWNLOAD.capability,
-            FEATURE_ACCESS.AI_HELP.capability,
-          ].some((key) => entitlements[key] === true);
-          setIsPremium(hasPremiumCapability);
-        } else {
-          setIsPremium(false);
         }
 
         // Usage tracking would come from a separate endpoint if needed
@@ -85,9 +70,25 @@ export function useSubscription() {
     fetchSubscription();
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setIsPremium(false);
+      return;
+    }
+    if (capabilitiesLoading) return;
+
+    const hasPremiumCapability = [
+      FEATURE_ACCESS.ANALYTICS_HEALTH.capability,
+      FEATURE_ACCESS.DOWNLOAD.capability,
+      FEATURE_ACCESS.AI_HELP.capability,
+    ].some((key) => hasCapability(key));
+
+    setIsPremium(hasPremiumCapability);
+  }, [user?.id, capabilitiesLoading, hasCapability]);
+
   return {
     isPremium,
-    loading,
+    loading: loading || capabilitiesLoading,
     usage,
     plan: userPlan?.plan || null,
   };

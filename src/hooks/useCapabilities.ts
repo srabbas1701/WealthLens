@@ -20,7 +20,7 @@ const REMAINING_BY_KEY: Record<string, 'ai_remaining' | 'scenario_remaining'> = 
 };
 
 // ─── Module-level cache (survives route navigation) ───────────────────────────
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes — plan capabilities are stable within a session
 
 interface EntitlementsCache {
   userId: string;

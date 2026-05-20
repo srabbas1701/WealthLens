@@ -83,6 +83,8 @@ interface FormData {
   purchase_date?: string;
   // Cash fields (optional)
   account_type?: string;
+  cash_interest_rate?: number;
+  cash_last_updated?: string;
   // EPF fields (optional)
   epf_account_number?: string;
   // PPF fields (optional)
@@ -100,6 +102,8 @@ function getAssetTypeFromCategory(category?: string): AssetTypeOption | null {
   const categoryToAssetType: Record<string, AssetTypeOption> = {
     'fixed_deposits': 'fd',
     'gold': 'gold',
+    'savings_cash': 'cash',
+    'cash': 'cash',
     'epf_ppf_nps': null, // Keep as null so user can choose EPF, PPF, or NPS
     'pension_retirement': null, // Could map to NPS, but let user choose
   };
@@ -136,6 +140,7 @@ export default function ManualInvestmentModal({
   });
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const canReturnToAssetSelector = !category && !editingData;
 
   // Initialize with category or editing data if provided
   useEffect(() => {
@@ -205,7 +210,7 @@ export default function ManualInvestmentModal({
         handleClose();
       } else {
         handleClose();
-        router.push('/portfolio/mutualfunds?add=1');
+        router.push(`/portfolio/mutualfunds?add=1${source === 'onboarding' ? '&from=onboarding' : ''}`);
       }
       return;
     }
@@ -215,7 +220,7 @@ export default function ManualInvestmentModal({
         handleClose();
       } else {
         handleClose();
-        router.push('/portfolio/stocks?add=1');
+        router.push(`/portfolio/stocks?add=1${source === 'onboarding' ? '&from=onboarding' : ''}`);
       }
       return;
     }
@@ -225,7 +230,7 @@ export default function ManualInvestmentModal({
         handleClose();
       } else {
         handleClose();
-        router.push('/portfolio/etfs?add=1');
+        router.push(`/portfolio/etfs?add=1${source === 'onboarding' ? '&from=onboarding' : ''}`);
       }
       return;
     }
@@ -339,7 +344,9 @@ export default function ManualInvestmentModal({
         apiFormData.goldPurchaseDate = formData.purchase_date;
       } else if (formData.assetType === 'cash') {
         apiFormData.cashAmount = formData.invested_value;
-        apiFormData.cashAccountType = formData.name || formData.account_type || 'Savings Account';
+        apiFormData.cashAccountType = formData.account_type || formData.name || 'Savings Account';
+        apiFormData.cashInterestRate = formData.cash_interest_rate;
+        apiFormData.cashLastUpdated = formData.cash_last_updated;
       } else if (formData.assetType === 'epf') {
         apiFormData.epfAccountNumber = formData.epf_account_number;
         apiFormData.epfBalance = formData.invested_value;
@@ -411,7 +418,7 @@ export default function ManualInvestmentModal({
         onClick={step === 'select' || step === 'error' ? handleClose : undefined}
       />
 
-      <div className="relative w-full max-w-2xl max-h-[90vh] mx-4 bg-white dark:bg-[#1E293B] rounded-xl border border-[#E5E7EB] dark:border-[#334155] shadow-lg overflow-hidden flex flex-col">
+      <div className="relative modal-shell-standard max-w-2xl max-h-[90vh] mx-4 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] dark:border-[#334155]">
           <div>
@@ -475,7 +482,7 @@ export default function ManualInvestmentModal({
               {/* Required: Invested Value */}
               <div>
                 <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
-                  Invested Amount <span className="text-[#DC2626]">*</span>
+                  {formData.assetType === 'cash' ? 'Cash Amount' : 'Invested Amount'} <span className="text-[#DC2626]">*</span>
                 </label>
                 <input
                   type="number"
@@ -868,17 +875,53 @@ export default function ManualInvestmentModal({
               )}
 
               {formData.assetType === 'cash' && (
-                <div>
-                  <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
-                    Account Type <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.account_type || formData.name || ''}
-                    onChange={(e) => setFormData({ ...formData, account_type: e.target.value, name: e.target.value })}
-                    placeholder="e.g., Savings Account, Current Account"
-                    className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
-                  />
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                      Account Type <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                    </label>
+                    <select
+                      value={formData.account_type || ''}
+                      onChange={(e) => setFormData({ ...formData, account_type: e.target.value || undefined, name: e.target.value || undefined })}
+                      className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                    >
+                      <option value="">Select account type</option>
+                      <option value="Savings Account">Savings Account</option>
+                      <option value="Current Account">Current Account</option>
+                      <option value="Salary Account">Salary Account</option>
+                      <option value="Liquid Fund">Liquid Fund</option>
+                      <option value="Money Market Fund">Money Market Fund</option>
+                      <option value="Cash Wallet">Cash Wallet</option>
+                      <option value="Other Cash">Other Cash</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Interest Rate (%) <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.cash_interest_rate ?? ''}
+                        onChange={(e) => setFormData({ ...formData, cash_interest_rate: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
+                        placeholder="3.5"
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] placeholder:text-[#9CA3AF] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F1F5F9] mb-2">
+                        Last Updated <span className="text-[#6B7280] text-xs font-normal">(optional)</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.cash_last_updated || ''}
+                        onChange={(e) => setFormData({ ...formData, cash_last_updated: e.target.value || undefined })}
+                        className="w-full px-4 py-3 rounded-lg border border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1E293B] text-[#0F172A] dark:text-[#F1F5F9] focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -908,7 +951,7 @@ export default function ManualInvestmentModal({
                     <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">{getAssetName()}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] uppercase mb-1">Invested Amount</p>
+                    <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] uppercase mb-1">{formData.assetType === 'cash' ? 'Cash Amount' : 'Invested Amount'}</p>
                     <p className="font-medium text-[#0F172A] dark:text-[#F8FAFC]">
                       {formatCurrency(formData.invested_value || 0)}
                     </p>
@@ -979,12 +1022,26 @@ export default function ManualInvestmentModal({
                   </div>
                 )}
 
-                {formData.assetType === 'cash' && formData.account_type && (
+                {formData.assetType === 'cash' && (formData.account_type || formData.cash_interest_rate !== undefined || formData.cash_last_updated) && (
                   <div className="pt-4 border-t border-[#E5E7EB] dark:border-[#334155] space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-[#6B7280]">Account Type</span>
-                      <span className="text-[#0F172A]">{formData.account_type}</span>
-                    </div>
+                    {formData.account_type && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Account Type</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.account_type}</span>
+                      </div>
+                    )}
+                    {formData.cash_interest_rate !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Interest Rate</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.cash_interest_rate}%</span>
+                      </div>
+                    )}
+                    {formData.cash_last_updated && (
+                      <div className="flex justify-between">
+                        <span className="text-[#6B7280] dark:text-[#94A3B8]">Last Updated</span>
+                        <span className="text-[#0F172A] dark:text-[#F8FAFC]">{formData.cash_last_updated}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1092,17 +1149,23 @@ export default function ManualInvestmentModal({
           {step === 'select' && (
             <button
               onClick={handleClose}
-              className="px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#334155] transition-colors"
+              className="btn-secondary-standard"
             >
-              Cancel
+              Back
             </button>
           )}
 
           {step === 'form' && (
             <>
               <button
-                onClick={() => setStep('select')}
-                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#334155] transition-colors"
+                onClick={() => {
+                  if (canReturnToAssetSelector) {
+                    setStep('select');
+                  } else {
+                    handleClose();
+                  }
+                }}
+                className="btn-secondary-standard"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
@@ -1110,7 +1173,7 @@ export default function ManualInvestmentModal({
               <button
                 onClick={handleFormSubmit}
                 disabled={!canProceedToReview}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary-standard px-6 py-2"
               >
                 Review
               </button>
@@ -1121,7 +1184,7 @@ export default function ManualInvestmentModal({
             <>
               <button
                 onClick={() => setStep('form')}
-                className="flex items-center gap-2 px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-white dark:hover:bg-[#334155] transition-colors"
+                className="btn-secondary-standard"
               >
                 <ArrowLeftIcon className="w-4 h-4" />
                 Back
@@ -1129,7 +1192,7 @@ export default function ManualInvestmentModal({
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-6 py-2 bg-[#2563EB] dark:bg-[#3B82F6] text-white font-medium rounded-lg hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors disabled:opacity-50"
+                className="btn-primary-standard px-6 py-2"
               >
                 {editingHoldingId ? 'Update' : 'Save'} Holding
               </button>
@@ -1148,7 +1211,7 @@ export default function ManualInvestmentModal({
           {step === 'error' && (
             <button
               onClick={() => setStep('form')}
-              className="px-4 py-2 bg-[#2563EB] text-white font-medium rounded-lg hover:bg-[#1E40AF] transition-colors"
+              className="btn-primary-standard px-4 py-2"
             >
               Try Again
             </button>

@@ -14,7 +14,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue } from '@/lib/onboarding-queue';
 import {
   ArrowLeftIcon,
   InfoIcon,
@@ -54,11 +56,13 @@ interface EPFHolding {
 
 export default function EPFHoldingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<EPFHolding[]>([]);
@@ -170,6 +174,16 @@ export default function EPFHoldingsPage() {
     }
   }, [authStatus, router]);
 
+  // Open add modal from onboarding deep-link (?add=1)
+  useEffect(() => {
+    if (searchParams?.get('add') === '1' && user?.id) {
+      setEditingHolding(null);
+      setShowAddModal(true);
+      const fromOnboarding = searchParams?.get('from') === 'onboarding';
+      router.replace(`/portfolio/epf${fromOnboarding ? '?from=onboarding' : ''}`, { scroll: false });
+    }
+  }, [searchParams, user?.id, router]);
+
   useEffect(() => {
     if (user?.id) {
       // Try cache first for instant load
@@ -241,6 +255,8 @@ export default function EPFHoldingsPage() {
     setEditingHolding(null);
     if (user?.id) {
       fetchData(user.id);
+      const q = readQueue(user.id);
+      if (q && q.current === 'epf') setHasAddedOneInQueue(true);
     }
   };
 
@@ -388,16 +404,21 @@ export default function EPFHoldingsPage() {
 
   const hasData = holdings.length > 0 && totalBalance > 0;
 
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
+
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref="/dashboard"
-        backLabel="Back to Dashboard"
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
+        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
         downloadLabel="Download EPF"
         onDownload={handleDownload}
       />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+      )}
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Header */}
@@ -770,6 +791,10 @@ export default function EPFHoldingsPage() {
       <EPFAddModal
         isOpen={showAddModal}
         onClose={() => {
+          if (fromOnboarding) {
+            router.replace('/onboarding/select?step=add-details');
+            return;
+          }
           setShowAddModal(false);
           setEditingHolding(null);
         }}

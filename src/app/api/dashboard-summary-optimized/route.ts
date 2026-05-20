@@ -14,10 +14,9 @@
  */
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 300; // Cache for 5 mins, already on portfolio/data
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
 import { getDailySummary, getLatestDailySummary, getWeeklySummary, getLatestWeeklySummary } from '@/lib/db/copilot-context';
 
 // ============================================================================
@@ -55,6 +54,10 @@ interface DashboardSummaryResponse {
     weeklySummary: unknown;
     /** Insurance policies from insurance_policies table */
     insurance: unknown[];
+    /** Active liabilities from liabilities table */
+    liabilities: unknown[];
+    /** Portfolio health score (null if user lacks capability) */
+    healthScore: unknown | null;
     /** Transactions - placeholder for future (no table exists yet) */
     transactions: unknown[];
   };
@@ -77,28 +80,47 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabaseClient = createAdminClient();
+    // Single shared Supabase client for all helper functions
+    const supabase = createAdminClient();
     const today = new Date().toISOString().split('T')[0];
 
-    // Fetch portfolio data via internal API (same process, no HTTP hop)
-    const portfolioApiUrl = new URL(request.url);
+    // Build internal API URLs (same-process fetch — no external network hop)
+    const baseUrl = new URL(request.url);
+
+    const portfolioApiUrl = new URL(baseUrl);
     portfolioApiUrl.pathname = '/api/portfolio/data';
     portfolioApiUrl.search = `?user_id=${encodeURIComponent(userId)}`;
 
-    const [portfolioRes, dailySummaryRaw, weeklySummaryRaw, insuranceData, transactionsData] =
-      await Promise.all([
-        fetch(portfolioApiUrl.toString(), {
-          headers: request.headers
-        }),
-        getDailySummary(supabaseClient, userId, today)
-          .then(s => s ?? getLatestDailySummary(supabaseClient, userId))
-          .catch(() => null),
-        getWeeklySummary(supabaseClient, userId, today)
-          .then(s => s ?? getLatestWeeklySummary(supabaseClient, userId))
-          .catch(() => null),
-        fetchInsurance(userId),
-        fetchTransactions(userId),
-      ]);
+    const healthScoreApiUrl = new URL(baseUrl);
+    healthScoreApiUrl.pathname = '/api/portfolio/health-score';
+    healthScoreApiUrl.search = `?user_id=${encodeURIComponent(userId)}`;
+
+    const liabilitiesApiUrl = new URL(baseUrl);
+    liabilitiesApiUrl.pathname = '/api/liabilities';
+    liabilitiesApiUrl.search = `?user_id=${encodeURIComponent(userId)}`;
+
+    // Fire all 7 fetches in parallel — total time = slowest individual fetch
+    const [
+      portfolioRes,
+      healthScoreRes,
+      liabilitiesRes,
+      dailySummaryRaw,
+      weeklySummaryRaw,
+      insuranceData,
+      transactionsData,
+    ] = await Promise.all([
+      fetch(portfolioApiUrl.toString(), { headers: request.headers }),
+      fetch(healthScoreApiUrl.toString(), { headers: request.headers }).catch(() => null),
+      fetch(liabilitiesApiUrl.toString(), { headers: request.headers }).catch(() => null),
+      getDailySummary(supabase, userId, today)
+        .then(s => s ?? getLatestDailySummary(supabase, userId))
+        .catch(() => null),
+      getWeeklySummary(supabase, userId, today)
+        .then(s => s ?? getLatestWeeklySummary(supabase, userId))
+        .catch(() => null),
+      fetchInsurance(userId, supabase),
+      fetchTransactions(userId),
+    ]);
 
     const portfolioJson = await portfolioRes.json();
     const portfolioData = portfolioJson.success && portfolioJson.data
@@ -130,16 +152,31 @@ export async function GET(request: NextRequest) {
           },
         };
 
-    const dailySummaryData = dailySummaryRaw;
-    const weeklySummaryData = weeklySummaryRaw;
+    // Health score: null if user lacks capability (403) or fetch failed
+    let healthScoreData: unknown | null = null;
+    if (healthScoreRes && healthScoreRes.ok) {
+      const healthScoreJson = await healthScoreRes.json();
+      healthScoreData = healthScoreJson.success ? healthScoreJson.data : null;
+    }
+
+    // Liabilities: already mapped by /api/liabilities route
+    let liabilitiesData: unknown[] = [];
+    if (liabilitiesRes && liabilitiesRes.ok) {
+      const liabilitiesJson = await liabilitiesRes.json();
+      liabilitiesData = liabilitiesJson.success && Array.isArray(liabilitiesJson.data)
+        ? liabilitiesJson.data
+        : [];
+    }
 
     const response: DashboardSummaryResponse = {
       success: true,
       data: {
         portfolio: portfolioData,
-        dailySummary: dailySummaryData,
-        weeklySummary: weeklySummaryData,
+        dailySummary: dailySummaryRaw,
+        weeklySummary: weeklySummaryRaw,
         insurance: insuranceData,
+        liabilities: liabilitiesData,
+        healthScore: healthScoreData,
         transactions: transactionsData,
       },
     };
@@ -155,11 +192,10 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * Fetch insurance policies for user (runs in parallel with other fetches)
+ * Fetch insurance policies for user (shares the admin client from the main handler)
  */
-async function fetchInsurance(userId: string): Promise<unknown[]> {
+async function fetchInsurance(userId: string, supabase: ReturnType<typeof createAdminClient>): Promise<unknown[]> {
   try {
-    const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('insurance_policies')
       .select('*')

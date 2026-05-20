@@ -53,6 +53,40 @@ interface PortfolioSummaryData {
   lastUpdated: string;
 }
 
+function parseNotesSafely(notes: unknown): Record<string, any> {
+  if (!notes) return {};
+  if (typeof notes === 'object') return notes as Record<string, any>;
+  if (typeof notes === 'string') {
+    try {
+      return JSON.parse(notes);
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function isMaturedBondOrFD(holding: any): boolean {
+  const assetType = String(holding?.assetType || '').toLowerCase();
+  if (!assetType.includes('bond') && !assetType.includes('fixed deposit')) return false;
+
+  const notes = parseNotesSafely(holding?.notes);
+  const maturityDate =
+    notes.maturity_date ||
+    notes.maturityDate ||
+    notes.bondMaturityDate ||
+    notes.fdMaturityDate ||
+    null;
+  if (!maturityDate) return false;
+
+  const maturity = new Date(maturityDate);
+  if (Number.isNaN(maturity.getTime())) return false;
+  const today = new Date();
+  maturity.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return maturity < today;
+}
+
 export default function PortfolioSummaryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -96,6 +130,8 @@ export default function PortfolioSummaryPage() {
         return h.topLevelBucket === bucketMap[bucketFilter] || h.topLevelBucket === bucketFilter;
       });
     }
+    // Matured bonds/FDs remain visible in dedicated holding pages, but are excluded from summary valuation.
+    filteredHoldings = filteredHoldings.filter((h: any) => !isMaturedBondOrFD(h));
     const allAssetTypes = new Set(filteredHoldings.map((h: any) => h.assetType).filter(Boolean));
     const assetSummaries: AssetSummary[] = Array.from(allAssetTypes).map((assetType: string) => {
       const assetHoldings = filteredHoldings.filter((h: any) => h.assetType === assetType);
@@ -255,79 +291,9 @@ export default function PortfolioSummaryPage() {
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {
-          // Transform dashboard data into summary format
           const portfolioData = result.data;
-          
-          // Filter holdings by bucket if bucket filter is provided
-          let filteredHoldings = portfolioData.holdings;
-          if (bucketFilter) {
-            filteredHoldings = portfolioData.holdings.filter((h: any) => {
-              // Map bucket names to match holdings' topLevelBucket
-              const bucketMap: Record<string, string> = {
-                'Growth': 'Growth',
-                'IncomeAllocation': 'IncomeAllocation',
-                'Commodity': 'Commodity',
-                'Cash': 'Cash',
-              };
-              return h.topLevelBucket === bucketMap[bucketFilter] || h.topLevelBucket === bucketFilter;
-            });
-          }
-          
-          // CRITICAL: Calculate from filtered holdings
-          // This ensures no asset types are missed (like Gold if it's missing from allocation)
-          const allAssetTypes = new Set(filteredHoldings.map((h: any) => h.assetType).filter(Boolean));
-          
-          const assetSummaries: AssetSummary[] = Array.from(allAssetTypes).map((assetType: string) => {
-            const assetHoldings = filteredHoldings.filter((h: any) => h.assetType === assetType);
-            const totalInvested = assetHoldings.reduce((sum: number, h: any) => sum + (h.investedValue || 0), 0);
-            const totalCurrent = assetHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || 0), 0);
-            const gainLoss = totalCurrent - totalInvested;
-            
-            // Find corresponding allocation item for value (if exists)
-            const allocationItem = portfolioData.allocation.find((a: any) => a.name === assetType);
-            
-            // Use current value (totalCurrent) - this is the source of truth
-            // Fallback to allocation value only if current is 0
-            const totalValue = totalCurrent > 0 ? totalCurrent : (allocationItem?.value || 0);
-            
-            return {
-              assetType: assetType,
-              totalValue: totalValue,
-              investedValue: totalInvested,
-              gainLoss: gainLoss,
-              gainLossPercent: totalInvested > 0 ? (gainLoss / totalInvested) * 100 : 0,
-              holdingsCount: assetHoldings.length,
-              topHoldings: assetHoldings
-                .sort((a: any, b: any) => (b.investedValue || 0) - (a.investedValue || 0))
-                .slice(0, 5)
-                .map((h: any) => ({
-                  name: h.name,
-                  value: h.investedValue || 0,
-                  percentage: totalValue > 0 ? ((h.investedValue || 0) / totalValue) * 100 : 0,
-                })),
-            };
-          }).sort((a, b) => b.totalValue - a.totalValue); // Sort by total value descending
-
-          // CRITICAL: Calculate totals from filtered holdings
-          // This ensures totals match the sum of filtered holdings
-          const totalInvestedFromHoldings = filteredHoldings.reduce((sum: number, h: any) => sum + (h.investedValue || 0), 0);
-          const totalCurrentFromHoldings = filteredHoldings.reduce((sum: number, h: any) => sum + (h.currentValue || 0), 0);
-          const totalInvested = assetSummaries.reduce((sum, a) => sum + a.investedValue, 0);
-          const totalGainLoss = assetSummaries.reduce((sum, a) => sum + a.gainLoss, 0);
-          
-          // For filtered view, use filtered totals; for full view, use portfolio totals
-          const totalValue = bucketFilter ? totalCurrentFromHoldings : portfolioData.metrics.netWorth;
-
           lastFetchedRef.current = cacheKey;
-          setData({
-            totalValue,
-            totalInvested,
-            totalGainLoss,
-            totalGainLossPercent: totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0,
-            totalHoldings: filteredHoldings.length,
-            assetSummaries,
-            lastUpdated: new Date().toISOString(),
-          });
+          setData(transformToSummaryData(portfolioData));
         }
       }
     } catch (error) {
@@ -387,8 +353,8 @@ export default function PortfolioSummaryPage() {
   // Map asset type names to route paths
   const getAssetRoute = (assetType: string): string => {
     const routeMap: Record<string, string> = {
-      'Stocks': '/portfolio/equity',
-      'Equity': '/portfolio/equity',
+      'Stocks': '/portfolio/stocks',
+      'Equity': '/portfolio/stocks',
       'Mutual Funds': '/portfolio/mutualfunds',
       'Fixed Deposits': '/portfolio/fixeddeposits',
       'Fixed Deposit': '/portfolio/fixeddeposits',
@@ -402,6 +368,7 @@ export default function PortfolioSummaryPage() {
       'NPS': '/portfolio/nps',
       'Index Funds': '/portfolio/mutualfunds',
       'Gold': '/portfolio/gold',
+      'Silver': '/portfolio/silver',
       'Real Estate': '/portfolio/real-estate',
       'Other': '/portfolio/summary',
     };

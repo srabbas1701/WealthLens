@@ -9,7 +9,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue } from '@/lib/onboarding-queue';
 import React from 'react';
 import {
   ArrowLeftIcon,
@@ -89,11 +91,13 @@ interface FDFormData {
 
 export default function FixedDepositsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [holdings, setHoldings] = useState<FDHolding[]>([]);
@@ -142,84 +146,88 @@ export default function FixedDepositsPage() {
       setLoading(true);
     }
     try {
-      const params = new URLSearchParams({ user_id: userId });
-      const response = await fetch(`/api/portfolio/data?${params}`);
-
-      if (response.ok) {
+      const fetchPortfolioData = async (mode?: 'lite') => {
+        const params = new URLSearchParams({ user_id: userId });
+        if (mode) params.set('mode', mode);
+        const response = await fetch(`/api/portfolio/data?${params}`);
+        if (!response.ok) return null;
         const result = await response.json();
-        if (result.success && result.data) {
-          const portfolioData = result.data;
+        if (!result?.success || !result?.data) return null;
+        return result.data;
+      };
 
-          // Cache for other pages
-          setCachedPortfolioData(userId, portfolioData);
-          const fdHoldings = portfolioData.holdings
-            .filter((h: any) => h.assetType === 'Fixed Deposit' || h.assetType === 'Fixed Deposits')
-            .map((h: any) => {
-              let fdMetadata: any = {};
-              if (h.notes) {
-                try {
-                  fdMetadata = JSON.parse(h.notes);
-                } catch (e) {
-                  console.warn('Failed to parse FD notes:', e);
-                }
-              }
-              
-              const bank = h.name || 'Unknown Bank';
-              const principal = h.investedValue;
-              const rate = fdMetadata.interest_rate || fdMetadata.fdRate || fdMetadata.rate || 6.5;
-              const startDateStr = fdMetadata.start_date || fdMetadata.fdStartDate || fdMetadata.startDate;
-              const maturityDateStr = fdMetadata.maturity_date || fdMetadata.fdMaturityDate || fdMetadata.maturityDate;
-              
-              let startDate: Date;
-              let maturityDate: Date;
-              
-              if (startDateStr && maturityDateStr) {
-                startDate = new Date(startDateStr);
-                maturityDate = new Date(maturityDateStr);
-              } else {
-                startDate = new Date();
-                startDate.setMonth(startDate.getMonth() - 6);
-                maturityDate = new Date(startDate);
-                maturityDate.setFullYear(maturityDate.getFullYear() + 1);
-              }
-              
-              const today = new Date();
-              const daysLeft = Math.max(0, Math.floor((maturityDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
-              
-              let currentValue = principal;
-              if (startDateStr && maturityDateStr) {
-                const yearsRaw = Math.max(0, (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365));
-                const years = Math.min(yearsRaw, FD_MAX_TENOR_YEARS);
-                currentValue = principal * Math.pow(1 + rate / 100, years);
-              }
-              
-              return {
-                id: h.id,
-                bank,
-                fdNumber: fdMetadata.fdNumber || `FD${h.id.slice(0, 8).toUpperCase()}`,
-                principal,
-                rate,
-                startDate: startDate.toISOString(),
-                maturityDate: maturityDate.toISOString(),
-                currentValue,
-                daysLeft,
-                interestType: fdMetadata.interestType || 'Cumulative',
-                tdsApplicable: fdMetadata.tdsApplicable !== undefined ? fdMetadata.tdsApplicable : true,
-                nomineeName: fdMetadata.nomineeName || '',
-                nomineeRelationship: fdMetadata.nomineeRelationship || '',
-              };
-            });
+      // Fast path first, then safe fallback to existing full response mode.
+      const portfolioData = (await fetchPortfolioData('lite')) ?? (await fetchPortfolioData());
+      if (!portfolioData) return;
 
-          const totalPrinc = fdHoldings.reduce((sum: number, h: FDHolding) => sum + h.principal, 0);
-          const totalVal = fdHoldings.reduce((sum: number, h: FDHolding) => sum + h.currentValue, 0);
-          const portfolioPct = (totalVal / portfolioData.metrics.netWorth) * 100;
+      // Cache for other pages
+      setCachedPortfolioData(userId, portfolioData);
+      const fdHoldings = portfolioData.holdings
+        .filter((h: any) => h.assetType === 'Fixed Deposit' || h.assetType === 'Fixed Deposits')
+        .map((h: any) => {
+          let fdMetadata: any = {};
+          if (h.notes) {
+            try {
+              fdMetadata = JSON.parse(h.notes);
+            } catch (e) {
+              console.warn('Failed to parse FD notes:', e);
+            }
+          }
+          
+          const bank = h.name || 'Unknown Bank';
+          const principal = h.investedValue;
+          const rate = fdMetadata.interest_rate || fdMetadata.fdRate || fdMetadata.rate || 6.5;
+          const startDateStr = fdMetadata.start_date || fdMetadata.fdStartDate || fdMetadata.startDate;
+          const maturityDateStr = fdMetadata.maturity_date || fdMetadata.fdMaturityDate || fdMetadata.maturityDate;
+          
+          let startDate: Date;
+          let maturityDate: Date;
+          
+          if (startDateStr && maturityDateStr) {
+            startDate = new Date(startDateStr);
+            maturityDate = new Date(maturityDateStr);
+          } else {
+            startDate = new Date();
+            startDate.setMonth(startDate.getMonth() - 6);
+            maturityDate = new Date(startDate);
+            maturityDate.setFullYear(maturityDate.getFullYear() + 1);
+          }
+          
+          const today = new Date();
+          const daysLeft = Math.max(0, Math.floor((maturityDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+          
+          let currentValue = principal;
+          if (startDateStr && maturityDateStr) {
+            const yearsRaw = Math.max(0, (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365));
+            const years = Math.min(yearsRaw, FD_MAX_TENOR_YEARS);
+            currentValue = principal * Math.pow(1 + rate / 100, years);
+          }
+          
+          return {
+            id: h.id,
+            bank,
+            fdNumber: fdMetadata.fdNumber || `FD${h.id.slice(0, 8).toUpperCase()}`,
+            principal,
+            rate,
+            startDate: startDate.toISOString(),
+            maturityDate: maturityDate.toISOString(),
+            currentValue,
+            daysLeft,
+            interestType: fdMetadata.interestType || 'Cumulative',
+            tdsApplicable: fdMetadata.tdsApplicable !== undefined ? fdMetadata.tdsApplicable : true,
+            nomineeName: fdMetadata.nomineeName || '',
+            nomineeRelationship: fdMetadata.nomineeRelationship || '',
+          };
+        });
 
-          setHoldings(fdHoldings);
-          setTotalPrincipal(totalPrinc);
-          setTotalValue(totalVal);
-          setPortfolioPercentage(portfolioPct);
-        }
-      }
+      const totalPrinc = fdHoldings.reduce((sum: number, h: FDHolding) => sum + h.principal, 0);
+      const totalVal = fdHoldings.reduce((sum: number, h: FDHolding) => sum + h.currentValue, 0);
+      const portfolioPct = (totalVal / portfolioData.metrics.netWorth) * 100;
+
+      setHoldings(fdHoldings);
+      setTotalPrincipal(totalPrinc);
+      setTotalValue(totalVal);
+      setPortfolioPercentage(portfolioPct);
     } catch (error) {
       console.error('Failed to fetch FD holdings:', error);
     } finally {
@@ -233,6 +241,17 @@ export default function FixedDepositsPage() {
       router.replace('/login?redirect=/portfolio/fixeddeposits');
     }
   }, [authStatus, router]);
+
+  // Open add modal from onboarding deep-link (?add=1)
+  useEffect(() => {
+    if (searchParams?.get('add') === '1' && user?.id) {
+      setModalMode('add');
+      setEditingId(null);
+      setIsModalOpen(true);
+      const fromOnboarding = searchParams?.get('from') === 'onboarding';
+      router.replace(`/portfolio/fixeddeposits${fromOnboarding ? '?from=onboarding' : ''}`, { scroll: false });
+    }
+  }, [searchParams, user?.id, router]);
 
   useEffect(() => {
     if (user?.id) {
@@ -502,6 +521,10 @@ export default function FixedDepositsPage() {
             : 'Your fixed deposit has been updated successfully.',
           duration: 5000,
         });
+        if (modalMode === 'add' && user?.id) {
+          const q = readQueue(user.id);
+          if (q && q.current === 'fixed_deposits') setHasAddedOneInQueue(true);
+        }
       } else {
         showToast({
           type: 'error',
@@ -776,17 +799,22 @@ export default function FixedDepositsPage() {
     );
   }
 
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
+
   return (
     <>
       <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
         <AppHeader 
           showBackButton={true}
-          backHref="/dashboard"
-          backLabel="Back to Dashboard"
+          backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
+          backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
           showDownload={true}
           downloadLabel="Download Fixed Deposits"
           onDownload={handleDownload}
         />
+        {fromOnboarding && user?.id && (
+          <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+        )}
 
         <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
           {/* Page Title with Actions */}
@@ -1120,14 +1148,21 @@ export default function FixedDepositsPage() {
       {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-[#1E293B] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="modal-shell-standard max-w-3xl w-full max-h-[90vh] overflow-y-auto md:max-h-none md:overflow-visible">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white dark:bg-[#1E293B] border-b border-[#E5E7EB] dark:border-[#334155] px-6 py-4 flex items-center justify-between">
+            <div className="modal-header-standard">
               <h2 className="text-xl font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                 {modalMode === 'add' ? 'Add New Fixed Deposit' : 'Edit Fixed Deposit'}
               </h2>
               <button
-                onClick={() => !submitting && setIsModalOpen(false)}
+                onClick={() => {
+                  if (submitting) return;
+                  if (fromOnboarding && modalMode === 'add') {
+                    router.replace('/onboarding/select?step=add-details');
+                    return;
+                  }
+                  setIsModalOpen(false);
+                }}
                 className="p-2 rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
                 disabled={submitting}
               >
@@ -1136,7 +1171,7 @@ export default function FixedDepositsPage() {
             </div>
 
             {/* Modal Body */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-5 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Bank Name */}
               <div>
                 <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
@@ -1181,7 +1216,7 @@ export default function FixedDepositsPage() {
               </div>
 
               {/* Principal and Rate */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:col-span-2">
                 <div>
                   <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                     Principal Amount <span className="text-[#DC2626] dark:text-[#EF4444]">*</span>
@@ -1228,11 +1263,11 @@ export default function FixedDepositsPage() {
               </div>
 
               {/* Duration */}
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                   Duration
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <input
                       type="number"
@@ -1293,7 +1328,7 @@ export default function FixedDepositsPage() {
               </div>
 
               {/* Start and Maturity Date */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:col-span-2">
                 <div>
                   <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                     Start Date <span className="text-[#DC2626] dark:text-[#EF4444]">*</span>
@@ -1350,7 +1385,7 @@ export default function FixedDepositsPage() {
               </div>
 
               {/* Interest Type */}
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                   Interest Type
                 </label>
@@ -1368,11 +1403,11 @@ export default function FixedDepositsPage() {
               </div>
 
               {/* Nomination Details */}
-              <div className="border-t border-[#E5E7EB] dark:border-[#334155] pt-4">
+              <div className="border-t border-[#E5E7EB] dark:border-[#334155] pt-4 md:col-span-2">
                 <h3 className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] mb-3">
                   Nomination Details <span className="text-[#6B7280] dark:text-[#94A3B8] text-xs font-normal">(Optional)</span>
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-[#0F172A] dark:text-[#F8FAFC] mb-2">
                       Nominee Name
@@ -1405,7 +1440,7 @@ export default function FixedDepositsPage() {
               </div>
 
               {/* TDS Applicable */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 md:col-span-2">
                 <input
                   type="checkbox"
                   id="tdsApplicable"
@@ -1420,18 +1455,24 @@ export default function FixedDepositsPage() {
               </div>
 
               {/* Modal Footer */}
-              <div className="flex items-center gap-3 pt-4 border-t border-[#E5E7EB] dark:border-[#334155]">
+              <div className="flex items-center gap-3 pt-4 border-t border-[#E5E7EB] dark:border-[#334155] md:col-span-2">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-4 py-2.5 rounded-lg border border-[#E5E7EB] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors font-medium"
+                  onClick={() => {
+                    if (fromOnboarding && modalMode === 'add') {
+                      router.replace('/onboarding/select?step=add-details');
+                      return;
+                    }
+                    setIsModalOpen(false);
+                  }}
+                  className="flex-1 btn-secondary-standard"
                   disabled={submitting}
                 >
-                  Cancel
+                  Back
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-[#2563EB] dark:bg-[#3B82F6] text-white hover:bg-[#1E40AF] dark:hover:bg-[#2563EB] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 btn-primary-standard"
                   disabled={submitting}
                 >
                   {submitting ? 'Saving...' : modalMode === 'add' ? 'Add FD' : 'Update FD'}

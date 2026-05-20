@@ -5,7 +5,7 @@ import type { Database } from '@/types/database';
 /**
  * Supabase Middleware Client
  * 
- * Used in middleware.ts to refresh auth tokens
+ * Used in proxy.ts (or server code) to refresh auth tokens
  * and protect routes
  */
 export async function updateSession(request: NextRequest) {

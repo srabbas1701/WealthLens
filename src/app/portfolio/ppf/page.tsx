@@ -14,7 +14,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeftIcon,
   InfoIcon,
@@ -39,6 +39,8 @@ import PPFAddModal from '@/components/PPFAddModal';
 import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
 import SimpleToast from '@/components/SimpleToast';
 import { getCachedPortfolioData, setCachedPortfolioData, isCacheStale } from '@/lib/portfolio-cache';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue } from '@/lib/onboarding-queue';
 
 interface PPFHolding {
   id: string;
@@ -64,6 +66,7 @@ interface PPFHolding {
 
 export default function PPFHoldingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
@@ -81,6 +84,7 @@ export default function PPFHoldingsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [holdingToDelete, setHoldingToDelete] = useState<PPFHolding | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
   // Calculate summary metrics
@@ -186,6 +190,16 @@ export default function PPFHoldingsPage() {
     }
   }, [authStatus, router]);
 
+  // Open add modal from onboarding deep-link (?add=1)
+  useEffect(() => {
+    if (searchParams?.get('add') === '1' && user?.id) {
+      setEditingHolding(null);
+      setShowAddModal(true);
+      const fromOnboarding = searchParams?.get('from') === 'onboarding';
+      router.replace(`/portfolio/ppf${fromOnboarding ? '?from=onboarding' : ''}`, { scroll: false });
+    }
+  }, [searchParams, user?.id, router]);
+
   useEffect(() => {
     if (user?.id) {
       // Try cache first for instant load
@@ -252,6 +266,8 @@ export default function PPFHoldingsPage() {
     setEditingHolding(null);
     if (user?.id) {
       fetchData(user.id);
+      const q = readQueue(user.id);
+      if (q && q.current === 'ppf') setHasAddedOneInQueue(true);
     }
   };
 
@@ -404,17 +420,21 @@ export default function PPFHoldingsPage() {
   }
 
   const hasData = holdings.length > 0 && totalBalance > 0;
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
 
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref="/dashboard"
-        backLabel="Back to Dashboard"
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
+        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={true}
         downloadLabel="Download PPF"
         onDownload={handleDownload}
       />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+      )}
 
       <main className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
         {/* Header */}
@@ -784,6 +804,10 @@ export default function PPFHoldingsPage() {
       <PPFAddModal
         isOpen={showAddModal}
         onClose={() => {
+          if (fromOnboarding) {
+            router.replace('/onboarding/select?step=add-details');
+            return;
+          }
           setShowAddModal(false);
           setEditingHolding(null);
         }}

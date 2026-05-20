@@ -17,7 +17,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import OnboardingQueueBanner from '@/components/OnboardingQueueBanner';
+import { readQueue } from '@/lib/onboarding-queue';
 import { useAuth } from '@/lib/auth';
 import { useCapabilities } from '@/lib/capabilities';
 import { FEATURE_ACCESS } from '@/config/feature-access';
@@ -96,11 +98,13 @@ const ASSET_CLASSES = [
 
 export default function NPSHoldingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authStatus } = useAuth();
   const { formatCurrency } = useCurrency();
   const { showToast } = useToast();
   const { hasCapability, loading: capabilitiesLoading } = useCapabilities();
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [hasAddedOneInQueue, setHasAddedOneInQueue] = useState(false);
 
   const [holdings, setHoldings] = useState<NPSHolding[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,6 +126,16 @@ export default function NPSHoldingsPage() {
       router.push('/login');
     }
   }, [authStatus, router]);
+
+  // Open add modal from onboarding deep-link (?add=1)
+  useEffect(() => {
+    if (searchParams?.get('add') === '1' && user?.id) {
+      setEditingHolding(null);
+      setIsAddModalOpen(true);
+      const fromOnboarding = searchParams?.get('from') === 'onboarding';
+      router.replace(`/portfolio/nps${fromOnboarding ? '?from=onboarding' : ''}`, { scroll: false });
+    }
+  }, [searchParams, user?.id, router]);
 
   // Fetch NPS holdings
   useEffect(() => {
@@ -500,16 +514,21 @@ export default function NPSHoldingsPage() {
     );
   }
 
+  const fromOnboarding = searchParams?.get('from') === 'onboarding';
+
   return (
     <div className="min-h-screen bg-[#F6F8FB] dark:bg-[#0F172A]">
       <AppHeader 
         showBackButton={true}
-        backHref="/dashboard"
-        backLabel="Back to Dashboard"
+        backHref={fromOnboarding ? '/onboarding/select?step=add-details' : '/dashboard'}
+        backLabel={fromOnboarding ? 'Back to Onboarding' : 'Back to Dashboard'}
         showDownload={holdings.length > 0}
         downloadLabel="Download NPS"
         onDownload={handleDownload}
       />
+      {fromOnboarding && user?.id && (
+        <OnboardingQueueBanner userId={user.id} hasAddedOne={hasAddedOneInQueue} />
+      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pt-20 sm:pt-24">
 
@@ -1112,11 +1131,21 @@ export default function NPSHoldingsPage() {
       <NPSAddModal
         isOpen={isAddModalOpen}
         onClose={() => {
+          if (fromOnboarding) {
+            router.replace('/onboarding/select?step=add-details');
+            return;
+          }
           setIsAddModalOpen(false);
           setEditingHolding(null); // Clear editing state when modal closes
         }}
         userId={user?.id || ''}
-        onSuccess={fetchNPSHoldings}
+        onSuccess={() => {
+          fetchNPSHoldings();
+          if (user?.id) {
+            const q = readQueue(user.id);
+            if (q && q.current === 'nps') setHasAddedOneInQueue(true);
+          }
+        }}
         existingHolding={editingHolding ? {
           pranNumber: editingHolding.pranNumber,
           subscriberName: editingHolding.subscriberName || '',
@@ -1155,9 +1184,9 @@ export default function NPSHoldingsPage() {
                   setIsEditModalOpen(false);
                   setEditingHolding(null);
                 }}
-                className="flex-1 px-4 py-2 text-[#6B7280] dark:text-[#94A3B8] font-medium rounded-lg hover:bg-[#F6F8FB] dark:hover:bg-[#334155] transition-colors"
+                className="flex-1 btn-secondary-standard"
               >
-                Cancel
+                Back
               </button>
               {!editingHolding.tier2 && (
                 <button
