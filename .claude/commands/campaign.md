@@ -7,7 +7,7 @@ When invoked via `/campaign`, help generate Instagram Reel content for LensOnWea
 ## Product Context
 
 - **Product:** LensOnWealth — an AI-powered personal finance platform
-- **Target audience:** Busy Indian professionals (25–45) who have money spread across multiple instruments but no clear picture of how it's all working together
+- **Target audience:** Busy Indian professionals (25–55) who have money spread across multiple instruments but no clear picture of how it's all working together
 - **Core problem solved:** People have wealth but no visibility — they don't know if their money is growing, sleeping, or quietly losing value
 - **Tone:** Calm, smart, trustworthy friend — NOT a finance bro or hard-seller
 
